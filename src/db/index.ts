@@ -1,0 +1,228 @@
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { Asset, Theme, Song, Schedule, OutputGroup, ScriptureVerse, SystemOptions } from '../types';
+import { defaultAssets, defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultScriptures } from './seedData';
+import { runDatabaseSeeder } from '../utils/seedDatabase';
+
+interface SimpleWorshipDB extends DBSchema {
+  assets: {
+    key: string;
+    value: Asset;
+    indexes: { 'by-hash': string; 'by-type': string };
+  };
+  themes: {
+    key: string;
+    value: Theme;
+    indexes: { 'by-type': string };
+  };
+  songs: {
+    key: string;
+    value: Song;
+  };
+  scriptures: {
+    key: string;
+    value: ScriptureVerse;
+    indexes: { 'by-translation': string; 'by-book': string };
+  };
+  schedules: {
+    key: string;
+    value: Schedule;
+  };
+  outputGroups: {
+    key: string;
+    value: OutputGroup;
+  };
+  settings: {
+    key: string;
+    value: any;
+  };
+}
+
+let dbPromise: Promise<IDBPDatabase<SimpleWorshipDB>> | null = null;
+
+export function getDB() {
+  if (!dbPromise) {
+    dbPromise = openDB<SimpleWorshipDB>('simple-worship-db', 2, {
+      async upgrade(db, oldVersion) {
+        if (!db.objectStoreNames.contains('assets')) {
+          const store = db.createObjectStore('assets', { keyPath: 'id' });
+          store.createIndex('by-hash', 'hash');
+          store.createIndex('by-type', 'type');
+        }
+        if (!db.objectStoreNames.contains('themes')) {
+          const store = db.createObjectStore('themes', { keyPath: 'id' });
+          store.createIndex('by-type', 'type');
+        }
+        if (!db.objectStoreNames.contains('songs')) {
+          db.createObjectStore('songs', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('scriptures')) {
+          const scriptureStore = db.createObjectStore('scriptures', { keyPath: 'id' });
+          scriptureStore.createIndex('by-translation', 'translation');
+          scriptureStore.createIndex('by-book', 'book');
+        }
+        if (!db.objectStoreNames.contains('schedules')) {
+          db.createObjectStore('schedules', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('outputGroups')) {
+          db.createObjectStore('outputGroups', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('settings')) {
+          db.createObjectStore('settings', { keyPath: 'id' });
+        }
+      },
+    }).then(async (db) => {
+      // Seed initial data if tables are empty
+      const songCount = await db.count('songs');
+      if (songCount === 0) {
+        const tx = db.transaction(['songs', 'themes', 'assets', 'outputGroups', 'schedules', 'scriptures'], 'readwrite');
+        for (const s of defaultSongs) await tx.objectStore('songs').put(s);
+        for (const t of defaultThemes) await tx.objectStore('themes').put(t);
+        for (const a of defaultAssets) await tx.objectStore('assets').put(a);
+        for (const g of defaultOutputGroups) await tx.objectStore('outputGroups').put(g);
+        for (const sc of defaultScriptures) await tx.objectStore('scriptures').put(sc);
+        await tx.objectStore('schedules').put(defaultSchedule);
+        await tx.done;
+      }
+
+      // Run full Bible and Baptist Hymnal data seeder asynchronously
+      setTimeout(() => {
+        runDatabaseSeeder(false).catch(err => console.warn('Background db seeding error:', err));
+      }, 500);
+
+      return db;
+    });
+  }
+  return dbPromise;
+}
+
+// Helper methods
+export const dbApi = {
+  // Seeding
+  async reseedDatabase(force: boolean = true, onProgress?: (msg: string) => void) {
+    return runDatabaseSeeder(force, onProgress);
+  },
+  async getSeedingStatus() {
+    const db = await getDB();
+    const songCount = await db.count('songs');
+    const scriptureCount = await db.count('scriptures');
+    const meta = await db.get('settings', 'library_seeded_v2');
+    return {
+      songCount,
+      scriptureCount,
+      isSeeded: !!meta,
+      seededMeta: meta
+    };
+  },
+  // Assets
+  async addAsset(asset: Asset) {
+    const db = await getDB();
+    await db.put('assets', asset);
+  },
+  async getAsset(id: string) {
+    const db = await getDB();
+    return db.get('assets', id);
+  },
+  async getAllAssets() {
+    const db = await getDB();
+    return db.getAll('assets');
+  },
+  async deleteAsset(id: string) {
+    const db = await getDB();
+    await db.delete('assets', id);
+  },
+
+  // Themes
+  async addTheme(theme: Theme) {
+    const db = await getDB();
+    await db.put('themes', theme);
+  },
+  async getTheme(id: string) {
+    const db = await getDB();
+    return db.get('themes', id);
+  },
+  async deleteTheme(id: string) {
+    const db = await getDB();
+    await db.delete('themes', id);
+  },
+
+  async getAllThemes() {
+    const db = await getDB();
+    return db.getAll('themes');
+  },
+
+  // Songs
+  async addSong(song: Song) {
+    const db = await getDB();
+    await db.put('songs', song);
+  },
+  async getSong(id: string) {
+    const db = await getDB();
+    return db.get('songs', id);
+  },
+  async getAllSongs() {
+    const db = await getDB();
+    return db.getAll('songs');
+  },
+  async deleteSong(id: string) {
+    const db = await getDB();
+    await db.delete('songs', id);
+  },
+  
+  // Scriptures
+  async addScripture(scripture: ScriptureVerse) {
+    const db = await getDB();
+    await db.put('scriptures', scripture);
+  },
+  async getAllScriptures() {
+    const db = await getDB();
+    return db.getAll('scriptures');
+  },
+  async searchScriptures(query: string, translation?: string) {
+    const db = await getDB();
+    const all = await db.getAll('scriptures');
+    const q = query.toLowerCase().trim();
+    return all.filter(s => {
+      const matchesTranslation = !translation || translation === 'ALL' || s.translation.toUpperCase() === translation.toUpperCase();
+      const matchesQuery = !q || s.reference.toLowerCase().includes(q) || s.text.toLowerCase().includes(q) || s.book.toLowerCase().includes(q);
+      return matchesTranslation && matchesQuery;
+    });
+  },
+
+  // Schedules
+  async addSchedule(schedule: Schedule) {
+    const db = await getDB();
+    await db.put('schedules', schedule);
+  },
+  async getSchedule(id: string) {
+    const db = await getDB();
+    return db.get('schedules', id);
+  },
+  async getAllSchedules() {
+    const db = await getDB();
+    return db.getAll('schedules');
+  },
+
+  // Output Groups
+  async getOutputGroups() {
+    const db = await getDB();
+    return db.getAll('outputGroups');
+  },
+  async deleteOutputGroup(id: string) {
+    const db = await getDB();
+    await db.delete('outputGroups', id);
+  },
+  async saveOutputGroup(group: OutputGroup) {
+    const db = await getDB();
+    await db.put('outputGroups', group);
+  },
+  async saveSystemOptions(options: SystemOptions) {
+    const db = await getDB();
+    await db.put('settings', { id: 'system_options', options });
+  },
+  async getSystemOptions() {
+    const db = await getDB();
+    const item = await db.get('settings', 'system_options');
+    return item?.options || null;
+  }
+};
+

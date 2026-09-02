@@ -1,0 +1,445 @@
+@import "tailwindcss";
+
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 18s linear infinite;
+}
+
+/* ==========================================================================
+   GLOBAL DARK THEME AUTO-HIDING SCROLLBARS (MATCHES SYSTEM THEME)
+   ========================================================================== */
+
+/* 1. Global scrollbar styling for Firefox & Standards */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.2s ease-in-out;
+}
+
+*:hover {
+  scrollbar-color: #383f50 transparent;
+}
+
+/* 2. Global WebKit / Chromium scrollbar styling (Chrome, Edge, Opera, Electron) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+/* Auto-hide: Thumb appears only when user hovers over the scrollable container */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: #383f50;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #4f586f !important;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: #f59e0b !important; /* Amber highlight on drag */
+}
+
+/* Remove default white arrow buttons on Windows scrollbars */
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+/* ==========================================================================
+   UTILITY SCROLLBAR CLASSES
+   ========================================================================== */
+
+.hide-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+
+
+/* Custom dark auto-hide scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.2s ease-in-out;
+}
+
+.custom-scrollbar:hover {
+  scrollbar-color: #383f50 transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: #383f50;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #525d74;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: #f59e0b;
+}
+
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* ==========================================================================
+   ENTERPRISE SYSTEM-WIDE UI THEME & APPEARANCE SYSTEM
+   ========================================================================== */
+
+/* 1. LIGHT MODE (CLEAN WHITE & HIGH-CONTRAST APPEARANCE) ENGINE */
+html.light, html[data-theme="light"] {
+  color-scheme: light;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light body,
+html.light #root {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* 1A. UNIVERSAL DARK HEX BACKGROUND OVERRIDES IN LIGHT MODE */
+html.light [class*="bg-[#0"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.projector-canvas):not(.projector-canvas *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#1"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.projector-canvas):not(.projector-canvas *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#2"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.projector-canvas):not(.projector-canvas *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#3"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.projector-canvas):not(.projector-canvas *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#4"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.projector-canvas):not(.projector-canvas *):not(.keep-dark):not(.keep-dark *),
+html.light .bg-gray-700,
+html.light .bg-gray-800,
+html.light .bg-gray-900,
+html.light .bg-gray-950,
+html.light .bg-slate-700,
+html.light .bg-slate-800,
+html.light .bg-slate-900,
+html.light .bg-slate-950,
+html.light .bg-zinc-700,
+html.light .bg-zinc-800,
+html.light .bg-zinc-900,
+html.light .bg-zinc-950 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* 1B. SECONDARY LIGHT SURFACE SHADING FOR CONTRAST (SIDEBARS, HEADERS, TOOLBARS, DIALOG TITLE BARS) */
+html.light [class*="bg-[#0f"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#10"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#11"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#12"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#13"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#14"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#15"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#16"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#17"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#18"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#19"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#1a"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#1b"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#1c"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *) {
+  background-color: #f1f5f9 !important;
+}
+
+/* 1C. ACTIVE & SELECTED LIST ITEMS, BUTTONS, CARDS */
+html.light [class*="bg-[#2a"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#2b"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#2c"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#2d"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#2e"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#2f"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#34"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#37"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="bg-[#38"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *) {
+  background-color: #e2e8f0 !important;
+}
+
+/* 2. UNIVERSAL DARK BORDER REPLACEMENT IN LIGHT MODE */
+html.light [class*="border-[#0"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="border-[#1"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="border-[#2"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="border-[#3"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light [class*="border-[#4"]:not([data-canvas-preview]):not([data-canvas-preview] *):not(.keep-dark):not(.keep-dark *),
+html.light .border-gray-600,
+html.light .border-gray-700,
+html.light .border-gray-800,
+html.light .border-gray-900,
+html.light .border-slate-700,
+html.light .border-slate-800 {
+  border-color: #cbd5e1 !important;
+}
+
+/* 3. UNIVERSAL HIGH-CONTRAST TEXT COLOR REPLACEMENT IN LIGHT MODE */
+html.light [class*="text-gray-100"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-gray-200"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-gray-300"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-slate-100"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-slate-200"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-slate-300"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-white"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *) {
+  color: #0f172a !important;
+}
+
+html.light [class*="text-gray-400"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-gray-500"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-slate-400"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-slate-500"]:not([data-canvas-preview] *):not(.projector-canvas *):not(.keep-dark *):not(.solid-btn *) {
+  color: #334155 !important;
+}
+
+/* 3A. ACCENT TEXT COLOR DARKENING FOR WCAG AAA CONTRAST ON LIGHT BACKGROUNDS */
+html.light [class*="text-cyan-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-cyan-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #0284c7 !important; /* Rich Sky/Cyan 600 */
+}
+
+html.light [class*="text-indigo-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-indigo-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #4338ca !important; /* Rich Indigo 700 */
+}
+
+html.light [class*="text-emerald-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-emerald-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #047857 !important; /* Rich Emerald 700 */
+}
+
+html.light [class*="text-amber-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-amber-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #b45309 !important; /* Rich Amber 700 */
+}
+
+html.light [class*="text-purple-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-purple-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #7e22ce !important; /* Rich Purple 700 */
+}
+
+html.light [class*="text-blue-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-blue-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #1d4ed8 !important; /* Rich Blue 700 */
+}
+
+html.light [class*="text-red-300"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *),
+html.light [class*="text-red-400"]:not([data-canvas-preview] *):not(.keep-dark *):not(.solid-btn *) {
+  color: #b91c1c !important; /* Rich Red 700 */
+}
+
+/* 4. HOVER STATES IN LIGHT MODE */
+html.light [class*="hover:bg-[#1"]:hover:not([data-canvas-preview] *):not(.keep-dark *),
+html.light [class*="hover:bg-[#2"]:hover:not([data-canvas-preview] *):not(.keep-dark *),
+html.light [class*="hover:bg-[#3"]:hover:not([data-canvas-preview] *):not(.keep-dark *),
+html.light [class*="hover:bg-[#4"]:hover:not([data-canvas-preview] *):not(.keep-dark *),
+html.light [class*="hover:bg-gray-700"]:hover:not([data-canvas-preview] *):not(.keep-dark *),
+html.light [class*="hover:bg-gray-800"]:hover:not([data-canvas-preview] *):not(.keep-dark *) {
+  background-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* 5. INPUT, SELECT, OPTION, TEXTAREA CONTROLS IN LIGHT MODE */
+html.light input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.light select,
+html.light option,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* 6. PROTECTED SOLID FILLED BUTTONS & BADGES IN LIGHT MODE */
+html.light .solid-btn,
+html.light .bg-cyan-500,
+html.light .bg-cyan-600,
+html.light .bg-emerald-500,
+html.light .bg-emerald-600,
+html.light .bg-amber-400,
+html.light .bg-amber-500,
+html.light .bg-blue-500,
+html.light .bg-blue-600,
+html.light .bg-indigo-600,
+html.light .bg-indigo-700,
+html.light .bg-purple-600,
+html.light .bg-red-600,
+html.light .bg-slate-800,
+html.light .bg-slate-900,
+html.light .bg-zinc-800,
+html.light .bg-zinc-900 {
+  color: #ffffff !important;
+}
+
+html.light .solid-btn *,
+html.light .bg-cyan-500 *,
+html.light .bg-cyan-600 *,
+html.light .bg-emerald-500 *,
+html.light .bg-emerald-600 *,
+html.light .bg-amber-400 *,
+html.light .bg-amber-500 *,
+html.light .bg-blue-500 *,
+html.light .bg-blue-600 *,
+html.light .bg-indigo-600 *,
+html.light .bg-indigo-700 *,
+html.light .bg-purple-600 *,
+html.light .bg-red-600 *,
+html.light .bg-slate-800 *,
+html.light .bg-slate-900 *,
+html.light .bg-zinc-800 *,
+html.light .bg-zinc-900 * {
+  color: inherit !important;
+}
+
+html.light .bg-cyan-500.text-black,
+html.light .bg-cyan-500 .text-black,
+html.light .bg-amber-400.text-black,
+html.light .bg-amber-400 .text-black,
+html.light .bg-emerald-400.text-black,
+html.light .bg-emerald-400 .text-black {
+  color: #000000 !important;
+}
+
+/* 7. SCROLLBARS IN LIGHT MODE */
+html.light *:hover::-webkit-scrollbar-thumb,
+html.light .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: #94a3b8 !important;
+}
+html.light ::-webkit-scrollbar-thumb:hover,
+html.light .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b !important;
+}
+
+/* 8. KEEP-DARK EXPLICIT OVERRIDES FOR DARK PREVIEW CARDS & SLIDE CANVASES */
+html.light .keep-dark {
+  background-color: #131418 !important;
+  border-color: #374151 !important;
+}
+html.light .keep-dark,
+html.light .keep-dark * {
+  color: #f1f5f9;
+}
+html.light .keep-dark .text-gray-400 {
+  color: #9ca3af !important;
+}
+
+/* 2. ACCENT COLOR SCHEMES */
+html.theme-emerald .text-cyan-400,
+html.theme-emerald .text-cyan-300 {
+  color: #34d399 !important;
+}
+html.theme-emerald .bg-cyan-500,
+html.theme-emerald .bg-cyan-600 {
+  background-color: #10b981 !important;
+}
+html.theme-emerald .border-cyan-500,
+html.theme-emerald .border-cyan-400 {
+  border-color: #10b981 !important;
+}
+
+html.theme-blue .text-cyan-400,
+html.theme-blue .text-cyan-300 {
+  color: #60a5fa !important;
+}
+html.theme-blue .bg-cyan-500,
+html.theme-blue .bg-cyan-600 {
+  background-color: #3b82f6 !important;
+}
+html.theme-blue .border-cyan-500,
+html.theme-blue .border-cyan-400 {
+  border-color: #3b82f6 !important;
+}
+
+html.theme-purple .text-cyan-400,
+html.theme-purple .text-cyan-300 {
+  color: #c084fc !important;
+}
+html.theme-purple .bg-cyan-500,
+html.theme-purple .bg-cyan-600 {
+  background-color: #a855f7 !important;
+}
+html.theme-purple .border-cyan-500,
+html.theme-purple .border-cyan-400 {
+  border-color: #a855f7 !important;
+}
+
+html.theme-amber .text-cyan-400,
+html.theme-amber .text-cyan-300 {
+  color: #fbbf24 !important;
+}
+html.theme-amber .bg-cyan-500,
+html.theme-amber .bg-cyan-600 {
+  background-color: #f59e0b !important;
+}
+html.theme-amber .border-cyan-500,
+html.theme-amber .border-cyan-400 {
+  border-color: #f59e0b !important;
+}
+
+/* 3. COMPACT WORKSPACE DENSITY */
+html.compact-layout {
+  font-size: 13px;
+}
+html.compact-layout button {
+  padding-top: 0.2rem !important;
+  padding-bottom: 0.2rem !important;
+}
+
+/* 4. HIGH CONTRAST BADGES & TEXT */
+html.high-contrast {
+  font-weight: 500;
+}
+html.high-contrast .border {
+  border-width: 1.5px !important;
+}
+html.high-contrast .text-gray-400 {
+  color: #cbd5e1 !important;
+}
+html.light.high-contrast .text-gray-400 {
+  color: #1e293b !important;
+}
+
+

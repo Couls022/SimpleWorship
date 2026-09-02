@@ -1,0 +1,276 @@
+import { PresentationState, Schedule, PresentationItem, Slide, Song, ScriptureVerse, SystemOptions } from '../types';
+import { defaultSongs } from '../db/seedData';
+import { formatScriptureReference, formatScriptureText } from '../utils/scriptureFormatter';
+
+export class PresentationCore {
+  static getActiveContent(schedule: Schedule | null, state: PresentationState | null | undefined) {
+    if (!schedule || !state || !state.activeItemId) return null;
+    return schedule.items.find(i => i.id === state.activeItemId);
+  }
+
+  // Generates slides for a presentation item
+  static generateSlides(
+    item: PresentationItem, 
+    availableSongs: Song[] = defaultSongs,
+    systemOptions?: SystemOptions
+  ): Slide[] {
+    if (!item) return [];
+
+    let generated: Slide[] = [];
+
+    if (item.type === 'song') {
+      // Check if inline data exists
+      if (item.data && item.data.sections && item.data.sections.length > 0) {
+        generated = item.data.sections.map((sec: any, idx: number) => ({
+          id: sec.id || `slide-${idx}`,
+          title: sec.name,
+          text: sec.text,
+          backgroundUrl: item.customBackgroundUrl,
+        }));
+      } else {
+        // Check if we can find song in library
+        const matchedSong = availableSongs.find(s => s.id === item.contentId || s.title.toLowerCase() === item.name.toLowerCase());
+        if (matchedSong) {
+          if (matchedSong.sections && matchedSong.sections.length > 0) {
+            generated = matchedSong.sections.map((sec, idx) => ({
+              id: sec.id || `s-${idx}`,
+              title: sec.name,
+              text: sec.text,
+              backgroundUrl: item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+            }));
+          } else if (matchedSong.lyrics) {
+            const blocks = matchedSong.lyrics.split(/\n\s*\n/).filter(b => b.trim().length > 0);
+            generated = blocks.map((block, idx) => {
+              const match = block.match(/^\[(.*?)\]\n?([\s\S]*)$/);
+              if (match) {
+                return {
+                  id: `s-${idx}`,
+                  title: match[1],
+                  text: match[2].trim(),
+                  backgroundUrl: item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+                };
+              }
+              return {
+                id: `s-${idx}`,
+                title: `Verse ${idx + 1}`,
+                text: block.trim(),
+                backgroundUrl: item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+              };
+            });
+          } else {
+            generated = [
+              { id: 's1', title: 'Verse 1', text: item.name, backgroundUrl: item.customBackgroundUrl }
+            ];
+          }
+        } else {
+          generated = [
+            { id: 's1', title: 'Verse 1', text: item.name, backgroundUrl: item.customBackgroundUrl }
+          ];
+        }
+      }
+    } else if (item.type === 'bible') {
+      const verses: ScriptureVerse[] = (item.data && Array.isArray(item.data.verses)) ? item.data.verses : [];
+      const scriptureOpts = systemOptions?.mainOutput?.scripture;
+
+      if (verses.length > 0) {
+        // Sort verses to ensure proper sequential ordering
+        const sortedVerses = [...verses].sort((a, b) => {
+          if (a.book !== b.book) return a.book.localeCompare(b.book);
+          if (a.chapter !== b.chapter) return a.chapter - b.chapter;
+          return a.verse - b.verse;
+        });
+
+        const breakOnNewVerse = scriptureOpts?.breakOnNewVerse ?? false;
+        const slides: Slide[] = [];
+
+        if (breakOnNewVerse) {
+          // Break on new verse: each verse on its own slide
+          sortedVerses.forEach((v, idx) => {
+            const title = formatScriptureReference({
+              book: v.book,
+              chapter: v.chapter,
+              verses: [v],
+              translation: v.translation,
+              options: scriptureOpts
+            }) || `${v.book} ${v.chapter}:${v.verse}`;
+
+            const text = formatScriptureText([{ verse: v.verse, text: v.text }], scriptureOpts);
+
+            slides.push({
+              id: `b-slide-${idx}`,
+              title,
+              text,
+              backgroundUrl: item.customBackgroundUrl,
+              verses: [{ verse: v.verse, text: v.text }],
+            });
+          });
+        } else {
+          // EasyWorship standard: comfortable slide character threshold (~260 to 300 chars)
+          // Groups short consecutive verses onto the same slide, or creates extra slide templates if text exceeds capacity
+          const automaticallyFlow = scriptureOpts?.automaticallyFlow ?? true;
+          const MAX_SLIDE_CHARS = automaticallyFlow ? 270 : Infinity;
+
+          let currentGroup: ScriptureVerse[] = [];
+          let currentLen = 0;
+
+          const flushGroup = () => {
+            if (currentGroup.length === 0) return;
+            const first = currentGroup[0];
+
+            const title = formatScriptureReference({
+              book: first.book,
+              chapter: first.chapter,
+              verses: currentGroup,
+              translation: first.translation,
+              options: scriptureOpts
+            }) || item.name || `${first.book} ${first.chapter}`;
+
+            const text = formatScriptureText(
+              currentGroup.map(v => ({ verse: v.verse, text: v.text })),
+              scriptureOpts
+            );
+
+            slides.push({
+              id: `b-slide-${slides.length}`,
+              title,
+              text,
+              backgroundUrl: item.customBackgroundUrl,
+              verses: currentGroup.map(v => ({ verse: v.verse, text: v.text })),
+            });
+
+            currentGroup = [];
+            currentLen = 0;
+          };
+
+          for (const v of sortedVerses) {
+            const verseTextLen = (v.text || '').length;
+
+            // If adding this verse would overflow the template, flush current group and create a new slide template
+            if (currentGroup.length > 0 && (currentLen + verseTextLen > MAX_SLIDE_CHARS)) {
+              flushGroup();
+            }
+
+            // If an individual verse is extremely long (> 380 chars), break it cleanly across slides
+            if (automaticallyFlow && verseTextLen > 380 && currentGroup.length === 0) {
+              const sentences = v.text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [v.text];
+              let subText = '';
+              let part = 1;
+              for (const s of sentences) {
+                if (subText.length + s.length > MAX_SLIDE_CHARS && subText.length > 0) {
+                  const title = formatScriptureReference({
+                    book: v.book,
+                    chapter: v.chapter,
+                    verses: [v],
+                    translation: v.translation,
+                    options: scriptureOpts
+                  });
+                  slides.push({
+                    id: `b-slide-${slides.length}`,
+                    title: `${title} (Part ${part})`,
+                    text: formatScriptureText([{ verse: v.verse, text: subText.trim() }], scriptureOpts),
+                    backgroundUrl: item.customBackgroundUrl,
+                    verses: [{ verse: v.verse, text: subText.trim() }],
+                  });
+                  part++;
+                  subText = s;
+                } else {
+                  subText += (subText ? ' ' : '') + s.trim();
+                }
+              }
+              if (subText.trim()) {
+                const title = formatScriptureReference({
+                  book: v.book,
+                  chapter: v.chapter,
+                  verses: [v],
+                  translation: v.translation,
+                  options: scriptureOpts
+                });
+                slides.push({
+                  id: `b-slide-${slides.length}`,
+                  title: part > 1 ? `${title} (Part ${part})` : title,
+                  text: formatScriptureText([{ verse: v.verse, text: subText.trim() }], scriptureOpts),
+                  backgroundUrl: item.customBackgroundUrl,
+                  verses: [{ verse: v.verse, text: subText.trim() }],
+                });
+              }
+              continue;
+            }
+
+            currentGroup.push(v);
+            currentLen += verseTextLen;
+          }
+
+          flushGroup();
+        }
+
+        generated = slides;
+      } else if (item.data && item.data.text) {
+        // Fallback if item only has raw text
+        const parts = item.data.text.split('\n\n').filter((p: string) => p.trim().length > 0);
+        if (parts.length > 1) {
+          generated = parts.map((part: string, i: number) => ({
+            id: `b-slide-${i}`,
+            title: `${item.name} (${i + 1}/${parts.length})`,
+            text: part.trim(),
+            backgroundUrl: item.customBackgroundUrl,
+          }));
+        } else {
+          generated = [
+            { id: 'b1', title: item.data.reference || item.name, text: item.data.text, backgroundUrl: item.customBackgroundUrl }
+          ];
+        }
+      } else {
+        generated = [
+          { id: 'b1', title: item.name, text: 'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.', backgroundUrl: item.customBackgroundUrl }
+        ];
+      }
+    } else if (item.type === 'ppt' || item.type === 'presentation') {
+      if (item.data && Array.isArray(item.data.slides)) {
+        generated = item.data.slides;
+      } else {
+        generated = [
+          { id: 'p1', title: 'Slide 1', text: item.name, backgroundUrl: item.customBackgroundUrl },
+          { id: 'p2', title: 'Slide 2', text: 'Key Scripture Points', backgroundUrl: item.customBackgroundUrl },
+          { id: 'p3', title: 'Slide 3', text: 'Closing Prayer & Blessing', backgroundUrl: item.customBackgroundUrl }
+        ];
+      }
+    } else if (item.type === 'media' || item.type === 'image' || item.type === 'video') {
+      generated = [
+        {
+          id: 'm1',
+          title: item.name,
+          text: '',
+          backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url),
+          isVideo: item.type === 'video' || (item.data && (item.data.type === 'video' || item.data?.type === 'motion'))
+        }
+      ];
+    } else if (item.type === 'announcement' || item.type === 'countdown') {
+      generated = [
+        {
+          id: 'a1',
+          title: item.name,
+          text: item.data?.text || 'Welcome to our service! Please take your seats.',
+          backgroundUrl: item.customBackgroundUrl,
+        }
+      ];
+    }
+
+    // Apply specific slide backgrounds overriding defaults
+    if (item.data && (item.data.slideBackgrounds || item.data.slideMedia) && generated.length > 0) {
+      return generated.map((slide, idx) => {
+        const slideMedia = item.data.slideMedia?.[idx];
+        const slideBg = item.data.slideBackgrounds?.[idx];
+        
+        if (slideMedia) {
+          return { ...slide, backgroundUrl: slideMedia.url, isVideo: slideMedia.isVideo };
+        }
+        if (slideBg) {
+          return { ...slide, backgroundUrl: slideBg };
+        }
+        return slide;
+      });
+    }
+
+    return generated;
+  }
+}

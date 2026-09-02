@@ -1,0 +1,402 @@
+import React, { useState, useEffect } from 'react';
+import { useStore } from '../store/useStore';
+import { useWorkspace } from '../context/WorkspaceContext';
+import { 
+  Layers, 
+  Tv, 
+  Monitor, 
+  FolderOpen, 
+  Clock, 
+  FileText,
+  Film 
+} from 'lucide-react';
+import TopToolbar from './TopToolbar';
+import LayoutManager from './workspace/LayoutManager';
+import SchedulePanel from './SchedulePanel';
+import LivePanel from './LivePanel';
+import ResourcesPanel from './ResourcesPanel';
+import MultiGroupPreviewBar from './MultiGroupPreviewBar';
+import FloatingPanel from './workspace/FloatingPanel';
+import StageMonitorContent from './workspace/StageMonitorContent';
+import QuickNotesContent from './workspace/QuickNotesContent';
+import MediaLibraryPanel from './workspace/MediaLibraryPanel';
+import SongEditorModal from './SongEditorModal';
+import AlertModal from './AlertModal';
+import OptionsDialog from './options/OptionsDialog';
+import CenterShortcutSettingsModal from './CenterShortcutSettingsModal';
+import QuickSongSearchModal from './QuickSongSearchModal';
+import TargetSelectionModal from './TargetSelectionModal';
+import SystemStatusBar from './SystemStatusBar';
+import SystemDiagnosticsModal from './SystemDiagnosticsModal';
+import NewScheduleModal from './NewScheduleModal';
+import OpenScheduleModal from './OpenScheduleModal';
+import WebBrowserModal from './WebBrowserModal';
+import RemoteControlModal from './RemoteControlModal';
+import { Song, PresentationItem } from '../types';
+import { matchesShortcut } from '../utils/keyboardShortcuts';
+
+export default function ModeratorView() {
+  const store = useStore();
+  const { loadAllData, shortcutSettings, outputGroups } = store;
+  const workspace = useWorkspace();
+  const { resetLayout } = workspace;
+
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [isSongEditorOpen, setIsSongEditorOpen] = useState(false);
+  const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
+  const [isNewScheduleOpen, setIsNewScheduleOpen] = useState(false);
+  const [isOpenScheduleOpen, setIsOpenScheduleOpen] = useState(false);
+  const [isWebBrowserOpen, setIsWebBrowserOpen] = useState(false);
+  const [isRemoteControlOpen, setIsRemoteControlOpen] = useState(false);
+  const [editingSong, setEditingSong] = useState<Song | null>(null);
+  const [editingScheduleItem, setEditingScheduleItem] = useState<PresentationItem | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadAllData();
+
+    // Listen to custom notify events
+    const handleNotification = (e: any) => {
+      if (e.detail === 'Resetting workspace layout...') {
+        resetLayout();
+      } else {
+        setNotification(e.detail);
+        setTimeout(() => setNotification(null), 3500);
+      }
+    };
+
+    window.addEventListener('simpleworship:notify', handleNotification);
+    return () => {
+      window.removeEventListener('simpleworship:notify', handleNotification);
+    };
+  }, [loadAllData, resetLayout]);
+
+  // Global Keyboard Shortcuts (Dynamic based on shortcutSettings)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInputActive = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName);
+      const mappings = shortcutSettings?.keyMappings;
+
+      // F1 or Ctrl+/ opens Center Shortcuts settings dialog from anywhere
+      if (e.key === 'F1' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
+
+      // Don't trigger standard presentation shortcuts while actively typing in text fields
+      if (isInputActive) {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement)?.blur();
+        }
+        return;
+      }
+
+      // 1. GO LIVE controls
+      if (
+        matchesShortcut(e, mappings?.goLive) ||
+        e.key === 'F5' || 
+        (e.key === 'Enter' && (e.ctrlKey || e.metaKey || shortcutSettings?.enterGoesLive))
+      ) {
+        e.preventDefault();
+        store.goLive();
+        return;
+      }
+
+      // 2. Clear Output controls
+      if (
+        matchesShortcut(e, mappings?.clearOutput) ||
+        e.key === 'F7' || 
+        (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'c' && !e.altKey && !e.ctrlKey && !e.metaKey)
+      ) {
+        e.preventDefault();
+        store.toggleClear();
+        return;
+      }
+
+      // 3. Next Live Slide controls
+      if (
+        matchesShortcut(e, mappings?.nextSlide) ||
+        (shortcutSettings?.arrowControlsLive && e.key === 'ArrowDown') ||
+        e.key === 'PageDown' ||
+        (shortcutSettings?.spacebarAdvancesLive && e.key === ' ')
+      ) {
+        e.preventDefault();
+        store.goLiveNext();
+        return;
+      }
+
+      // 4. Previous Live Slide controls
+      if (
+        matchesShortcut(e, mappings?.previousSlide) ||
+        (shortcutSettings?.arrowControlsLive && e.key === 'ArrowUp') ||
+        e.key === 'PageUp'
+      ) {
+        e.preventDefault();
+        store.goLivePrev();
+        return;
+      }
+
+      // 5. Schedule Navigation (Next / Previous Item)
+      if (
+        matchesShortcut(e, mappings?.nextItem) ||
+        (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n')
+      ) {
+        e.preventDefault();
+        store.goNextScheduleItem();
+        return;
+      }
+      if (
+        matchesShortcut(e, mappings?.previousItem) ||
+        (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'p')
+      ) {
+        e.preventDefault();
+        store.goPrevScheduleItem();
+        return;
+      }
+
+      // 6. Screen Mute Controls (Blackout / Logo)
+      if (
+        matchesShortcut(e, mappings?.blackout) ||
+        e.key === 'F6' || 
+        (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'b' && !e.altKey && !e.ctrlKey && !e.metaKey)
+      ) {
+        e.preventDefault();
+        store.toggleBlack();
+        return;
+      }
+      if (
+        matchesShortcut(e, mappings?.logo) ||
+        e.key === 'F8' || 
+        (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'l' && !e.altKey && !e.ctrlKey && !e.metaKey)
+      ) {
+        e.preventDefault();
+        store.toggleLogo();
+        return;
+      }
+
+
+      // Quick Search
+      if (e.ctrlKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsQuickSearchOpen(true);
+        return;
+      }
+      // 6. Escape Key (Restore normal presentation or close popups)
+      if (e.key === 'Escape') {
+        const activeGroup = store.activeControlGroupId ? store.groupStates[store.activeControlGroupId] : null;
+        if (activeGroup && (activeGroup.isBlack || activeGroup.isClear || activeGroup.showLogo)) {
+          if (activeGroup.isBlack) store.toggleBlack();
+          if (activeGroup.isClear) store.toggleClear();
+          if (activeGroup.showLogo) store.toggleLogo();
+        }
+        setIsShortcutsOpen(false);
+        setIsQuickSearchOpen(false);
+        setIsAlertsOpen(false);
+        setIsSettingsOpen(false);
+        return;
+      }
+
+      // 7. Numeric Direct Verse Jump (1-9)
+      if (shortcutSettings?.numericQuickJump && ['1','2','3','4','5','6','7','8','9'].includes(e.key)) {
+        const num = parseInt(e.key, 10);
+        if (store.activeControlGroupId) {
+          e.preventDefault();
+          store.setGroupState(store.activeControlGroupId, { activeSlideIndex: num - 1 });
+          window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Jumped to Slide #${num}` }));
+        }
+        return;
+      }
+
+      // 8. Ctrl+F / Cmd+F -> Focus Search Bar
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('simpleworship:focus-search', { detail: { target: 'songs' } }));
+        return;
+      }
+
+      // 9. Ctrl+N -> New Song Editor
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setEditingSong(null);
+        setIsSongEditorOpen(true);
+        return;
+      }
+
+      // 10. Ctrl+S -> Save Schedule
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Schedule saved to local database!' }));
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [store, shortcutSettings]);
+
+  return (
+    <div className="flex flex-col h-screen w-screen bg-[#141519] text-gray-200 overflow-hidden font-sans select-none relative">
+      {/* 1. Top Command & Menu Toolbar */}
+      <TopToolbar
+        onOpenAlerts={() => setIsAlertsOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenQuickSearch={() => setIsQuickSearchOpen(true)}
+        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
+        onOpenNewSchedule={() => setIsNewScheduleOpen(true)}
+        onOpenOpenSchedule={() => setIsOpenScheduleOpen(true)}
+        onOpenWebBrowser={() => setIsWebBrowserOpen(true)}
+        onOpenRemoteControl={() => setIsRemoteControlOpen(true)}
+        onOpenNewSong={() => {
+          setEditingSong(null);
+          setIsSongEditorOpen(true);
+        }}
+      />
+
+      {/* 2. Flexible Resizable Workspace Grid (Managed by LayoutManager) */}
+      <LayoutManager
+        onOpenNewSong={() => {
+          setEditingSong(null);
+          setIsSongEditorOpen(true);
+        }}
+        onEditSong={(song) => {
+          setEditingSong(song);
+          setIsSongEditorOpen(true);
+        }}
+        onEditScheduleItem={(item) => {
+          setEditingScheduleItem(item);
+        }}
+      />
+
+      {/* 3. Draggable / Floating Windows Layer */}
+      <FloatingPanel id="schedule" icon={<Layers size={13} />}>
+        <SchedulePanel 
+          onEditSlide={(item) => {
+            setEditingScheduleItem(item);
+          }}
+        />
+      </FloatingPanel>
+
+      <FloatingPanel id="live" icon={<Tv size={13} />}>
+        <div className="flex h-full w-full">
+          {outputGroups.map((group, index) => (
+            <div key={group.id} className="flex-1 border-r border-[#262832] last:border-0 h-full overflow-hidden">
+              <LivePanel groupId={group.id} />
+            </div>
+          ))}
+        </div>
+      </FloatingPanel>
+
+      <FloatingPanel id="multiGroup" icon={<Monitor size={13} />}>
+        <MultiGroupPreviewBar />
+      </FloatingPanel>
+
+      <FloatingPanel id="resources" icon={<FolderOpen size={13} />}>
+        <ResourcesPanel
+          onOpenNewSong={() => {
+            setEditingSong(null);
+            setIsSongEditorOpen(true);
+          }}
+          onEditSong={(song) => {
+            setEditingSong(song);
+            setIsSongEditorOpen(true);
+          }}
+        />
+      </FloatingPanel>
+
+      <FloatingPanel id="stageMonitor" icon={<Clock size={13} />}>
+        <StageMonitorContent />
+      </FloatingPanel>
+
+      <FloatingPanel id="quickNotes" icon={<FileText size={13} />}>
+        <QuickNotesContent />
+      </FloatingPanel>
+
+      <FloatingPanel id="mediaLibrary" icon={<Film size={13} />}>
+        <MediaLibraryPanel />
+      </FloatingPanel>
+
+      {/* 4. Popups & Modals */}
+      {isNewScheduleOpen && (
+        <NewScheduleModal onClose={() => setIsNewScheduleOpen(false)} />
+      )}
+
+      {isOpenScheduleOpen && (
+        <OpenScheduleModal onClose={() => setIsOpenScheduleOpen(false)} />
+      )}
+
+      {isWebBrowserOpen && (
+        <WebBrowserModal onClose={() => setIsWebBrowserOpen(false)} />
+      )}
+
+      {isRemoteControlOpen && (
+        <RemoteControlModal onClose={() => setIsRemoteControlOpen(false)} />
+      )}
+
+      {isQuickSearchOpen && (
+        <QuickSongSearchModal onClose={() => setIsQuickSearchOpen(false)} />
+      )}
+
+      {isShortcutsOpen && (
+        <CenterShortcutSettingsModal onClose={() => setIsShortcutsOpen(false)} />
+      )}
+
+      {isAlertsOpen && (
+        <AlertModal onClose={() => setIsAlertsOpen(false)} />
+      )}
+
+      {isSettingsOpen && (
+        <OptionsDialog onClose={() => setIsSettingsOpen(false)} />
+      )}
+
+      {isSongEditorOpen && (
+        <SongEditorModal
+          mode="library"
+          song={editingSong}
+          onClose={() => {
+            setIsSongEditorOpen(false);
+            setEditingSong(null);
+          }}
+        />
+      )}
+
+      {editingScheduleItem && (
+        <SongEditorModal
+          mode="schedule-item"
+          scheduleItem={editingScheduleItem}
+          onClose={() => {
+            setEditingScheduleItem(null);
+          }}
+          onSaveScheduleItem={(updatedFields, updateMasterToo) => {
+            store.updateScheduleItem(editingScheduleItem.id, updatedFields);
+          }}
+        />
+      )}
+
+      <TargetSelectionModal />
+
+      {/* 5. System Architecture Diagnostics Modal */}
+      {isDiagnosticsOpen && (
+        <SystemDiagnosticsModal onClose={() => setIsDiagnosticsOpen(false)} />
+      )}
+
+      {/* 6. System Status Bar at the bottom */}
+      <SystemStatusBar 
+        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+      />
+
+      {/* 7. Toast Notification */}
+      {notification && (
+        <div className="fixed bottom-12 right-6 z-50 bg-[#1c2230] border border-indigo-500/60 text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+          <span>{notification}</span>
+        </div>
+      )}
+    </div>
+  );
+}
