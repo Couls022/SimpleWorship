@@ -1,5 +1,7 @@
 import { ScriptureVerse } from '../types';
 import { dbApi } from '../db';
+import { AUTHENTIC_VERSES_DB } from './fullBibleData';
+import { OfflineSearchEngine } from '../core/OfflineSearchEngine';
 
 export interface BibleBook {
   id: string;
@@ -92,16 +94,48 @@ async function ensureBibleCorpusLoaded(): Promise<void> {
   if (!loadPromise) {
     loadPromise = (async () => {
       try {
-        const [kjvRes, tagRes, countsRes] = await Promise.all([
-          fetch('/bibles/kjv.json').then(r => r.ok ? r.json() : {}),
-          fetch('/bibles/tagalog.json').then(r => r.ok ? r.json() : {}),
-          fetch('/bibles/verse_counts.json').then(r => r.ok ? r.json() : {})
-        ]);
-        kjvData = kjvRes || {};
-        tagalogData = tagRes || {};
-        verseCountsData = countsRes || {};
+        // 1. In Browser / Electron environment with fetch
+        if (typeof fetch === 'function') {
+          const fetchJson = async (filename: string) => {
+            const paths = [`/bibles/${filename}`, `./bibles/${filename}`, `bibles/${filename}`];
+            for (const p of paths) {
+              try {
+                const r = await fetch(p);
+                if (r.ok) return await r.json();
+              } catch (_) {}
+            }
+            return null;
+          };
+
+          const [kjvRes, tagRes, countsRes] = await Promise.all([
+            fetchJson('kjv.json'),
+            fetchJson('tagalog.json'),
+            fetchJson('verse_counts.json')
+          ]);
+          
+          if (kjvRes) kjvData = kjvRes;
+          if (tagRes) tagalogData = tagRes;
+          if (countsRes) verseCountsData = countsRes;
+        }
+
+        // 2. Fallback to AUTHENTIC_VERSES_DB
+        if (!kjvData) {
+          kjvData = {};
+          for (const [k, v] of Object.entries(AUTHENTIC_VERSES_DB)) {
+            if (v.kjv) kjvData[k] = v.kjv;
+          }
+        }
+        if (!tagalogData) {
+          tagalogData = {};
+          for (const [k, v] of Object.entries(AUTHENTIC_VERSES_DB)) {
+            if (v.tagalog) tagalogData[k] = v.tagalog;
+          }
+        }
+        if (!verseCountsData) {
+          verseCountsData = {};
+        }
       } catch (err) {
-        console.warn('Failed to fetch static bible json files, falling back to dbApi:', err);
+        console.warn('Bible corpus fallback to authentic db:', err);
         kjvData = kjvData || {};
         tagalogData = tagalogData || {};
         verseCountsData = verseCountsData || {};
@@ -140,15 +174,7 @@ export class BibleEngine {
    * Find book by name, id, or abbreviation
    */
   static findBook(query: string): BibleBook | undefined {
-    const q = query.toLowerCase().trim();
-    if (!q) return undefined;
-
-    return BIBLE_BOOKS.find(b => 
-      b.id.toLowerCase() === q ||
-      b.name.toLowerCase() === q ||
-      b.nameTagalog.toLowerCase() === q ||
-      b.abbreviations.some(abbr => abbr.toLowerCase() === q || q.startsWith(abbr.toLowerCase()))
-    );
+    return OfflineSearchEngine.findBibleBook(query);
   }
 
   /**
@@ -161,21 +187,14 @@ export class BibleEngine {
     endVerse?: number;
     cleanedQuery: string;
   } {
-    const trimmed = query.trim();
-    const match = trimmed.match(/^((?:\d\s+)?[a-zA-Z\s]+?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/i);
-    
-    if (match) {
-      const bookName = match[1].trim();
-      const chapter = parseInt(match[2], 10);
-      const startVerse = match[3] ? parseInt(match[3], 10) : undefined;
-      const endVerse = match[4] ? parseInt(match[4], 10) : undefined;
-      
-      const book = this.findBook(bookName);
-      if (book) {
-        return { book, chapter, startVerse, endVerse, cleanedQuery: trimmed };
-      }
-    }
-    return { cleanedQuery: trimmed };
+    const parsed = OfflineSearchEngine.parseScriptureReference(query);
+    return {
+      book: parsed.book,
+      chapter: parsed.chapter,
+      startVerse: parsed.startVerse,
+      endVerse: parsed.endVerse,
+      cleanedQuery: parsed.cleanedQuery
+    };
   }
 
   /**
@@ -183,86 +202,24 @@ export class BibleEngine {
    */
   static async search(
     query: string, 
-    translation: 'KJV' | 'Tagalog' | 'ALL' | 'Both' = 'ALL'
+    translation: 'KJV' | 'Tagalog' | 'ALL' | 'Both' = 'ALL',
+    activeBookId?: string
   ): Promise<ScriptureVerse[]> {
     const q = query.trim();
     if (!q) return [];
 
     await ensureBibleCorpusLoaded();
 
-    // 1. Check if user typed a specific reference (e.g. "John 3:16", "Awit 23:1-6")
-    const parsed = this.parseReference(q);
-    if (parsed.book && parsed.chapter) {
-      return this.getPassage(
-        parsed.book, 
-        parsed.chapter, 
-        parsed.startVerse, 
-        parsed.endVerse, 
-        translation as any
-      );
-    }
-
-    const lowerQ = q.toLowerCase();
-    const results: ScriptureVerse[] = [];
-    const maxResults = 100;
-
-    // Search through in-memory corpus
-    const trans = translation.toUpperCase();
-    const searchKjv = trans === 'ALL' || trans === 'KJV' || trans === 'BOTH';
-    const searchTag = trans === 'ALL' || trans === 'TAGALOG' || trans === 'BOTH';
-
-    if (searchKjv && kjvData) {
-      for (const [key, text] of Object.entries(kjvData)) {
-        if (text.toLowerCase().includes(lowerQ)) {
-          const [bookId, chapStr, vStr] = key.split('-');
-          const book = BIBLE_BOOKS.find(b => b.id === bookId);
-          if (book) {
-            const chap = parseInt(chapStr, 10);
-            const vNum = parseInt(vStr, 10);
-            results.push({
-              id: `${bookId.toLowerCase()}-${chap}-${vNum}-kjv`,
-              translation: 'KJV',
-              book: book.name,
-              chapter: chap,
-              verse: vNum,
-              reference: `${book.name} ${chap}:${vNum}`,
-              text: text
-            });
-            if (results.length >= maxResults) break;
-          }
-        }
-      }
-    }
-
-    if (searchTag && tagalogData && results.length < maxResults) {
-      for (const [key, text] of Object.entries(tagalogData)) {
-        if (text.toLowerCase().includes(lowerQ)) {
-          const [bookId, chapStr, vStr] = key.split('-');
-          const book = BIBLE_BOOKS.find(b => b.id === bookId);
-          if (book) {
-            const chap = parseInt(chapStr, 10);
-            const vNum = parseInt(vStr, 10);
-            results.push({
-              id: `${bookId.toLowerCase()}-${chap}-${vNum}-tag`,
-              translation: 'Tagalog',
-              book: book.nameTagalog,
-              chapter: chap,
-              verse: vNum,
-              reference: `${book.nameTagalog} ${chap}:${vNum}`,
-              text: text
-            });
-            if (results.length >= maxResults) break;
-          }
-        }
-      }
-    }
-
-    if (results.length > 0) {
-      return results;
-    }
-
-    // Fallback to IndexedDB search if needed
-    return dbApi.searchScriptures(q, translation === 'Both' ? 'ALL' : translation);
+    return OfflineSearchEngine.searchScriptures(
+      q,
+      translation,
+      {
+        kjvData,
+        tagalogData,
+        getVerseCount: (bId, ch) => this.getVerseCount(bId, ch)
+      },
+      activeBookId
+    );
   }
 
   /**
@@ -292,30 +249,34 @@ export class BibleEngine {
 
       // 1. KJV Verse
       if (includeKjv) {
-        const text = (kjvData && kjvData[key]) || `The words and holy testimonies recorded in ${book.name} chapter ${chapter}, verse ${v}.`;
-        results.push({
-          id: `${bookId.toLowerCase()}-${chapter}-${v}-kjv`,
-          translation: 'KJV',
-          book: book.name,
-          chapter: chapter,
-          verse: v,
-          reference: `${book.name} ${chapter}:${v}`,
-          text: text
-        });
+        const text = (kjvData && kjvData[key]) || (AUTHENTIC_VERSES_DB[key]?.kjv) || '';
+        if (text) {
+          results.push({
+            id: `${bookId.toLowerCase()}-${chapter}-${v}-kjv`,
+            translation: 'KJV',
+            book: book.name,
+            chapter: chapter,
+            verse: v,
+            reference: `${book.name} ${chapter}:${v}`,
+            text: text
+          });
+        }
       }
 
       // 2. Tagalog Verse (Ang Dating Biblia 1905)
       if (includeTag) {
-        const text = (tagalogData && tagalogData[key]) || `Ang mga salita at banal na patotoo na nakasulat sa ${book.nameTagalog} kabanata ${chapter}, talata ${v}.`;
-        results.push({
-          id: `${bookId.toLowerCase()}-${chapter}-${v}-tag`,
-          translation: 'Tagalog',
-          book: book.nameTagalog,
-          chapter: chapter,
-          verse: v,
-          reference: `${book.nameTagalog} ${chapter}:${v}`,
-          text: text
-        });
+        const text = (tagalogData && tagalogData[key]) || (AUTHENTIC_VERSES_DB[key]?.tagalog) || '';
+        if (text) {
+          results.push({
+            id: `${bookId.toLowerCase()}-${chapter}-${v}-tag`,
+            translation: 'Tagalog',
+            book: book.nameTagalog,
+            chapter: chapter,
+            verse: v,
+            reference: `${book.nameTagalog} ${chapter}:${v}`,
+            text: text
+          });
+        }
       }
     }
 

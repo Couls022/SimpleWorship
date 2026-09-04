@@ -113,6 +113,25 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
     }
   };
 
+  const handleImportClick = async () => {
+    if (typeof window !== 'undefined' && window.electronAPI?.openSwsFile) {
+      try {
+        const res = await window.electronAPI.openSwsFile();
+        if (!res.canceled && res.data) {
+          const fileName = res.filePath ? res.filePath.split(/[/\\]/).pop() || 'Imported.sws' : 'Imported.sws';
+          const blob = new Blob([res.data]);
+          const file = new File([blob], fileName);
+          await processFile(file);
+          return;
+        }
+        if (res.canceled) return;
+      } catch (e) {
+        console.warn('Native open failed, falling back to input', e);
+      }
+    }
+    fileInputRef.current?.click();
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -184,7 +203,7 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
           </div>
 
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleImportClick}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#252834] hover:bg-[#303545] border border-[#373c4d] text-cyan-300 rounded-lg text-xs font-semibold transition-colors shrink-0"
             title="Import .sws schedule file from computer"
           >

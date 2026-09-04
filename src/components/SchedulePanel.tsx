@@ -29,26 +29,33 @@ import {
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { PresentationItem } from '../types';
+import { PresentationItem, Song } from '../types';
 import { PresentationCore } from '../core/PresentationCore';
 import { readSwsFile } from '../services/swsService';
 import { handleRangeSelection } from '../utils/selectionUtils';
 import { dbApi } from '../db';
+import { isValidPptxBinary } from '../utils/pptxValidator';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import BibleLibraryModule from './workspace/BibleLibraryModule';
+import SongsTab from './resources/SongsTab';
+import PresentationsTab from './resources/PresentationsTab';
+import CamerasTab from './resources/CamerasTab';
+import { Camera } from 'lucide-react';
 
 type ScheduleViewMode = 'large' | 'medium' | 'small' | 'summary';
 
 interface SchedulePanelProps {
   onEditSlide?: (item: PresentationItem) => void;
+  onOpenNewSong?: () => void;
+  onEditSong?: (song: Song) => void;
 }
 
-export default function SchedulePanel({ onEditSlide }: SchedulePanelProps) {
+export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }: SchedulePanelProps) {
   const store = useStore();
   const { panels, togglePanelDock } = useWorkspace();
   const isDocked = panels.schedule?.isDocked ?? true;
 
-  const [activeSidebarTab, setActiveSidebarTab] = useState<'schedule' | 'bible'>('schedule');
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'schedule' | 'scriptures' | 'songs' | 'presentations' | 'cameras'>('schedule');
 
   // Schedule View Mode State ('large' | 'medium' | 'small' | 'summary')
   const [viewMode, setViewMode] = useState<ScheduleViewMode>(() => {
@@ -336,6 +343,27 @@ export default function SchedulePanel({ onEditSlide }: SchedulePanelProps) {
             isExpanded: true
           };
 
+          if (newItem.type === 'presentation') {
+            if (!isValidPptxBinary(newItem.data?.fileBytes)) {
+              newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
+            }
+            if (newItem.contentId) {
+              const cid = newItem.contentId;
+              const nid = newItem.id;
+              import('../db').then(async ({ getDB }) => {
+                try {
+                  const db = await getDB();
+                  const asset = await db.get('assets', cid);
+                  if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
+                    updateScheduleItem(nid, {
+                      data: { ...(newItem.data || {}), fileBytes: asset.data.fileBytes }
+                    });
+                  }
+                } catch {}
+              });
+            }
+          }
+
           if (activeSchedule) {
             const currentItems = [...activeSchedule.items];
             const clampedPos = Math.max(0, Math.min(finalInsertIndex, currentItems.length));
@@ -440,35 +468,76 @@ export default function SchedulePanel({ onEditSlide }: SchedulePanelProps) {
       {/* Sidebar Header & Tab Switcher */}
       <div className="bg-[#282b33] border-b border-[#18191d] flex flex-col shrink-0">
         <div className="h-8 flex items-center justify-between px-2">
-          {/* Tabs: Schedule vs Bible Library */}
-          <div className="flex items-center space-x-1 bg-[#1a1c22] p-0.5 rounded border border-[#343946]">
+          {/* Tabs: Schedule, Scriptures, Songs, Presentations, Cameras - Evenly Divided (Grid 5-col) */}
+          <div className="grid grid-cols-5 gap-0.5 bg-[#171920] p-0.5 rounded border border-[#343946] flex-1 min-w-0 mr-1.5 shadow-inner">
             <button
               onClick={() => setActiveSidebarTab('schedule')}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
+              title={`Schedule (${activeSchedule ? activeSchedule.items.length : 0})`}
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'schedule'
                   ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
               }`}
             >
-              <Calendar size={11} />
-              <span>Schedule</span>
+              <Calendar size={11} className="shrink-0" />
+              <span className="truncate">Schedule</span>
               {activeSchedule && (
-                <span className="text-[9px] bg-[#2a2e3a] px-1 rounded-full text-gray-300">
+                <span className="text-[9px] bg-[#2a2e3a] px-1 rounded-full text-gray-300 shrink-0 font-mono ml-0.5">
                   {activeSchedule.items.length}
                 </span>
               )}
             </button>
 
             <button
-              onClick={() => setActiveSidebarTab('bible')}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold transition-all ${
-                activeSidebarTab === 'bible'
+              onClick={() => setActiveSidebarTab('scriptures')}
+              title="Scriptures"
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+                activeSidebarTab === 'scriptures'
                   ? 'bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
               }`}
             >
-              <BookOpen size={11} />
-              <span>Bible Library</span>
+              <BookOpen size={11} className="shrink-0" />
+              <span className="truncate">Scriptures</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSidebarTab('songs')}
+              title="Songs"
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+                activeSidebarTab === 'songs'
+                  ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+              }`}
+            >
+              <Music size={11} className="shrink-0" />
+              <span className="truncate">Songs</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSidebarTab('presentations')}
+              title="Presentations"
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+                activeSidebarTab === 'presentations'
+                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+              }`}
+            >
+              <FileText size={11} className="shrink-0" />
+              <span className="truncate">Presentations</span>
+            </button>
+
+            <button
+              onClick={() => setActiveSidebarTab('cameras')}
+              title="Cameras"
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+                activeSidebarTab === 'cameras'
+                  ? 'bg-pink-600/30 text-pink-300 border border-pink-500/40 shadow-sm'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+              }`}
+            >
+              <Camera size={11} className="shrink-0" />
+              <span className="truncate">Cameras</span>
             </button>
           </div>
 
@@ -569,9 +638,24 @@ export default function SchedulePanel({ onEditSlide }: SchedulePanelProps) {
       </div>
 
       {/* Main Tab Content */}
-      {activeSidebarTab === 'bible' ? (
+      {activeSidebarTab === 'scriptures' ? (
         <div className="flex-1 flex flex-col overflow-hidden">
           <BibleLibraryModule isSidebarMode={true} />
+        </div>
+      ) : activeSidebarTab === 'songs' ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <SongsTab 
+            onOpenNewSong={onOpenNewSong || (() => {})} 
+            onEditSong={onEditSong || (() => {})} 
+          />
+        </div>
+      ) : activeSidebarTab === 'presentations' ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <PresentationsTab />
+        </div>
+      ) : activeSidebarTab === 'cameras' ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <CamerasTab />
         </div>
       ) : (
         /* Schedule Items Tree / Drop Area */
@@ -709,7 +793,19 @@ export default function SchedulePanel({ onEditSlide }: SchedulePanelProps) {
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
-                      ) : store.themesList.find(t => t.type === (item.type === 'bible' ? 'bible' : (item.type === 'song' ? 'song' : (item.type === 'presentation' ? 'presentation' : 'announcement'))))?.styles?.backgroundImageUrl ? (
+                      ) : (item.type === 'presentation' || item.type === 'ppt') && item.data?.slides?.[0]?.backgroundUrl ? (
+                        <img
+                          src={item.data.slides[0].backgroundUrl}
+                          alt={item.name}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (item.type === 'presentation' || item.type === 'ppt') && item.data?.slides?.[0]?.backgroundColor ? (
+                        <div 
+                          className="w-full h-full"
+                          style={{ background: item.data.slides[0].backgroundColor }}
+                        />
+                      ) : store.themesList.find(t => t.type === (item.type === 'bible' ? 'bible' : (item.type === 'song' ? 'song' : (item.type === 'presentation' ? 'presentation' : 'announcement'))))?.styles?.backgroundImageUrl && item.type !== 'presentation' && item.type !== 'ppt' ? (
                         <img
                           src={store.themesList.find(t => t.type === (item.type === 'bible' ? 'bible' : (item.type === 'song' ? 'song' : (item.type === 'presentation' ? 'presentation' : 'announcement'))))?.styles?.backgroundImageUrl}
                           alt={item.name}

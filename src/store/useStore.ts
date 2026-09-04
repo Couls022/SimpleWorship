@@ -1,5 +1,22 @@
 import { create } from 'zustand';
-import { Profile, PresentationState, OutputGroup, Schedule, PresentationItem, Song, ScriptureVerse, Asset, Theme, AlertState, SystemOptions, ShortcutSettings } from '../types';
+import { 
+  Profile, 
+  PresentationState, 
+  OutputGroup, 
+  Schedule, 
+  PresentationItem, 
+  Song, 
+  ScriptureVerse, 
+  Asset, 
+  Theme, 
+  AlertState, 
+  SystemOptions, 
+  ShortcutSettings,
+  SlideAnnotationState,
+  AnnotationToolType,
+  AnnotationStroke,
+  LaserPointerState
+} from '../types';
 import { dbApi } from '../db';
 import { defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultAssets, defaultScriptures } from '../db/seedData';
 import { defaultSystemOptions } from '../db/defaultOptions';
@@ -7,7 +24,8 @@ import { DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { v4 as uuidv4 } from 'uuid';
 
-import { broadcastStateChange } from '../utils/broadcastSync';
+import { broadcastStateChange, sanitizeForSync } from '../utils/broadcastSync';
+import { DisplayManager } from '../core/DisplayManager';
 
 const defaultShortcutSettings: ShortcutSettings = {
   arrowControlsLive: true,
@@ -86,6 +104,19 @@ const defaultState: PresentationState = {
   videoVolume: 1,
   videoCurrentTime: 0,
   videoDuration: 0,
+  isLiveEnabled: false,
+};
+
+const defaultAnnotationState: SlideAnnotationState = {
+  enabled: false,
+  activeTool: 'pen',
+  activeColor: '#FF2A4D',
+  strokeSize: 6,
+  opacity: 0.9,
+  persistAcrossSlides: true,
+  strokes: [],
+  redoStack: [],
+  laserPointer: undefined,
 };
 
 interface AppState {
@@ -144,7 +175,7 @@ interface AppState {
   setPreviewItem: (itemOrId: string | null | Partial<PresentationItem>, slideIndex?: number) => void;
   setPreviewSlide: (index: number) => void;
   goLive: () => void; // Pushes preview state to live
-  goLiveItem: (itemId: string, slideIndex?: number, targetGroupId?: string) => void; // Directly sends item to live
+  goLiveItem: (itemId: string, slideIndex?: number, targetGroupId?: string, directItem?: PresentationItem) => void; // Directly sends item to live
 
   // LIVE Navigation & Controls
   goLiveNext: () => void;
@@ -154,16 +185,30 @@ interface AppState {
   toggleBlack: () => void;
   toggleClear: () => void;
   toggleLogo: () => void;
-  isMasterLive: boolean;
+  isMasterLive?: boolean; // Deprecated, keep for backwards compatibility if needed, but we don't need it.
   toggleMasterLive: () => void;
 
   // Alert / Nursery Ticker
   alert: AlertState;
   setAlert: (alert: Partial<AlertState>) => void;
 
+  // Slide Annotation State
+  annotationState: SlideAnnotationState;
+  setAnnotationTool: (tool: AnnotationToolType) => void;
+  setAnnotationColor: (color: string) => void;
+  setAnnotationSize: (size: number) => void;
+  setAnnotationOpacity: (opacity: number) => void;
+  setAnnotationPersist: (persist: boolean) => void;
+  toggleAnnotationMode: (enabled?: boolean) => void;
+  addAnnotationStroke: (stroke: AnnotationStroke) => void;
+  clearAnnotations: () => void;
+  undoAnnotation: () => void;
+  redoAnnotation: () => void;
+  updateLaserPointer: (laser: Partial<LaserPointerState> | null) => void;
+
   // Resources Data State
-  resourcesTab: 'songs' | 'scriptures' | 'media' | 'presentations' | 'themes';
-  setResourcesTab: (tab: 'songs' | 'scriptures' | 'media' | 'presentations' | 'themes') => void;
+  resourcesTab: 'songs' | 'scriptures' | 'media' | 'presentations' | 'themes' | 'cameras';
+  setResourcesTab: (tab: 'songs' | 'scriptures' | 'media' | 'presentations' | 'themes' | 'cameras') => void;
   isResourcesOpen: boolean;
   setIsResourcesOpen: (open: boolean) => void;
   toggleResources: () => void;
@@ -172,6 +217,8 @@ interface AppState {
   scripturesList: ScriptureVerse[];
   assetsList: Asset[];
   themesList: Theme[];
+  availableCameras: any[];
+  setAvailableCameras: (cameras: any[]) => void;
   
   loadAllData: () => Promise<void>;
   addSong: (song: Song) => Promise<void>;
@@ -398,6 +445,9 @@ export const useStore = create<AppState>((set, get) => ({
       const newGroups = [...state.outputGroups];
       newGroups[groupIndex] = updatedGroup;
       dbApi.saveOutputGroup(updatedGroup);
+
+      DisplayManager.syncPhysicalDisplays(newGroups, state.groupStates, state.activeControlGroupId).catch(() => {});
+
       return { outputGroups: newGroups };
     });
   },
@@ -405,27 +455,62 @@ export const useStore = create<AppState>((set, get) => ({
     const state = get();
     let current = [...state.outputGroups];
     if (current.length === count) return;
+    
+    const newGroupStates = { ...state.groupStates };
+    
     if (current.length > count) {
       const toRemove = current.slice(count);
       current = current.slice(0, count);
+      
+      // Clean up deleted panel states
+      toRemove.forEach(g => {
+        delete newGroupStates[g.id];
+      });
+      
       await Promise.all(toRemove.map(g => dbApi.deleteOutputGroup(g.id)));
     } else {
       const toAdd: any[] = [];
       for (let i = current.length; i < count; i++) {
-        toAdd.push({
-          id: `group-dynamic-${Date.now()}-${i}`,
-          name: `Display ${i + 1}`,
-          role: "confidence",
+        const id = `group-dynamic-${Date.now()}-${i}`;
+        const newGroup = {
+          id,
+          name: i === 0 ? 'Main Sanctuary' : `Display ${i + 1}`,
+          role: i === 1 ? "confidence" : "broadcast",
           displayIds: [],
           isBlack: false,
           isClear: false,
           showLogo: true
-        });
+        };
+        toAdd.push(newGroup);
+        
+        // Initialize dynamic panel's reactive state
+        newGroupStates[id] = {
+          ...defaultState,
+          isLiveEnabled: true,
+          timestamp: Date.now()
+        };
       }
       current = [...current, ...toAdd];
       await Promise.all(toAdd.map(g => dbApi.saveOutputGroup(g)));
     }
-    set({ outputGroups: current });
+    
+    // Auto-update active control group if it was removed
+    let newActive = state.activeControlGroupId;
+    if (newActive && !current.some(g => g.id === newActive)) {
+      newActive = current.length > 0 ? current[0].id : null;
+    }
+    
+    set({ 
+      outputGroups: current, 
+      groupStates: newGroupStates, 
+      activeControlGroupId: newActive 
+    });
+    
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Enterprise Output Channels synchronized to ${count} panels` 
+      })
+    );
   },
   removeOutputGroup: (id) => set((state) => {
     const newGroups = state.outputGroups.filter(g => g.id !== id);
@@ -439,7 +524,8 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   
   groupStates: {
-    'group-main': { ...defaultState, activeItemId: 'item-gen-1-7', activeSlideIndex: 0, timestamp: Date.now() },
+    'group-congregation': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-stage': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setGroupState: (groupId, newState) => {
     set((state) => {
@@ -450,7 +536,8 @@ export const useStore = create<AppState>((set, get) => ({
       };
 
       try {
-        localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(updatedGroupStates));
+        const sanitized = sanitizeForSync(updatedGroupStates);
+        localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
       } catch (e) {}
 
       broadcastStateChange({
@@ -458,14 +545,22 @@ export const useStore = create<AppState>((set, get) => ({
         data: { groupStates: updatedGroupStates }
       });
 
+      if (newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
+        DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
+      }
+
       return {
         groupStates: updatedGroupStates
       };
     });
   },
 
-  activeControlGroupId: 'group-main',
-  setActiveControlGroupId: (id) => set({ activeControlGroupId: id }),
+  activeControlGroupId: 'group-congregation',
+  setActiveControlGroupId: (id) => {
+    set({ activeControlGroupId: id });
+    const { outputGroups, groupStates } = get();
+    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, id).catch(() => {});
+  },
 
   activeSchedule: defaultSchedule,
   setActiveSchedule: (schedule) => set({ activeSchedule: schedule }),
@@ -511,7 +606,37 @@ export const useStore = create<AppState>((set, get) => ({
         ...state.activeSchedule,
         items: state.activeSchedule.items.map(i => i.id === itemId ? { ...i, ...updates } : i)
       };
+      
+      const newGroupStates = { ...state.groupStates };
+      let groupsUpdated = false;
+      
+      Object.keys(newGroupStates).forEach(groupId => {
+        if (newGroupStates[groupId].activeItemId === itemId && newGroupStates[groupId].directLiveItem) {
+          newGroupStates[groupId] = {
+            ...newGroupStates[groupId],
+            directLiveItem: {
+              ...newGroupStates[groupId].directLiveItem!,
+              ...updates,
+              data: {
+                ...(newGroupStates[groupId].directLiveItem!.data || {}),
+                ...(updates.data || {})
+              }
+            }
+          };
+          groupsUpdated = true;
+        }
+      });
+      
       dbApi.addSchedule(updatedSchedule);
+      
+      if (groupsUpdated) {
+        broadcastStateChange({
+          type: 'GROUP_STATES_UPDATE',
+          data: { groupStates: newGroupStates }
+        });
+        return { activeSchedule: updatedSchedule, groupStates: newGroupStates };
+      }
+      
       return { activeSchedule: updatedSchedule };
     });
   },
@@ -606,27 +731,47 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  goLiveItem: (itemId, slideIndex = 0, targetGroupId) => {
-    const { activeControlGroupId, setGroupState, outputGroups } = get();
+  goLiveItem: (itemId, slideIndex = 0, targetGroupId, directItem) => {
+    const { activeControlGroupId, setGroupState, outputGroups, activeSchedule, songsList } = get();
     const groupToUpdate = targetGroupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : undefined);
 
     set({ previewItemId: itemId, previewSlideIndex: slideIndex });
+
+    // Find presentation item or construct one for direct live persistence
+    let liveItem: PresentationItem | undefined = directItem || activeSchedule?.items?.find(i => i.id === itemId);
+    if (!liveItem) {
+      const song = songsList.find(s => s.id === itemId);
+      if (song) {
+        liveItem = {
+          id: song.id,
+          type: 'song',
+          name: song.title,
+          contentId: song.id,
+          notes: song.author || '',
+          isExpanded: false,
+          customBackgroundUrl: song.defaultBackgroundUrl
+        };
+      }
+    }
 
     if (groupToUpdate) {
       setGroupState(groupToUpdate, {
         activeItemId: itemId,
         activeSlideIndex: slideIndex,
+        directLiveItem: liveItem || null,
         isBlack: false,
         isClear: false,
       });
       if (groupToUpdate !== activeControlGroupId) {
         set({ activeControlGroupId: groupToUpdate });
+        DisplayManager.syncPhysicalDisplays(outputGroups, get().groupStates, groupToUpdate).catch(() => {});
       }
     } else if (outputGroups.length > 0) {
       outputGroups.forEach(g => {
         setGroupState(g.id, {
           activeItemId: itemId,
           activeSlideIndex: slideIndex,
+          directLiveItem: liveItem || null,
           isBlack: false,
           isClear: false,
         });
@@ -786,8 +931,57 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  isMasterLive: true,
-  toggleMasterLive: () => set((state) => ({ isMasterLive: !state.isMasterLive })),
+  toggleMasterLive: () => {
+    const { activeControlGroupId, outputGroups, groupStates } = get();
+    const targetId = activeControlGroupId || outputGroups[0]?.id;
+    if (!targetId) return;
+    const currentState = groupStates[targetId] || defaultState;
+    const nextLive = !currentState.isLiveEnabled;
+    const targetGroups = activeControlGroupId ? [activeControlGroupId] : outputGroups.map(g => g.id);
+    const updatedStates = { ...groupStates };
+    targetGroups.forEach(gId => {
+      const currentG = updatedStates[gId] || defaultState;
+      updatedStates[gId] = {
+        ...currentG,
+        isLiveEnabled: nextLive,
+        timestamp: Date.now(),
+      };
+    });
+
+    set({ groupStates: updatedStates });
+
+    try {
+      const sanitized = sanitizeForSync(updatedStates);
+      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
+    } catch (e) {}
+
+    broadcastStateChange({
+      type: 'GROUP_STATES_UPDATE',
+      data: { groupStates: updatedStates }
+    });
+
+    // Synchronize physical projector windows immediately
+    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId).then(result => {
+      if (result.conflicts && result.conflicts.length > 0) {
+        const sameDispConflict = result.conflicts.find(c => c.message.includes('operator console'));
+        if (sameDispConflict) {
+          window.dispatchEvent(
+            new CustomEvent('simpleworship:notify', { 
+              detail: sameDispConflict.message 
+            })
+          );
+        }
+      }
+    }).catch(err => {
+      console.error('[useStore] DisplayManager.syncPhysicalDisplays error on toggleMasterLive:', err);
+    });
+
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: nextLive ? 'Live Output Connected & Enabled!' : 'Live Output Muted.' 
+      })
+    );
+  },
 
   // Alert State
   alert: {
@@ -800,8 +994,123 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setAlert: (alertUpdate) => set((state) => ({ alert: { ...state.alert, ...alertUpdate } })),
 
+  // Slide Annotation State & Methods
+  annotationState: defaultAnnotationState,
+  
+  setAnnotationTool: (tool) => set((state) => ({
+    annotationState: { 
+      ...state.annotationState, 
+      activeTool: tool,
+      opacity: tool === 'highlighter' ? 0.4 : (tool === 'spotlight' ? 0.8 : (state.annotationState.opacity === 0.4 ? 0.9 : state.annotationState.opacity))
+    }
+  })),
+
+  setAnnotationColor: (color) => set((state) => ({
+    annotationState: { ...state.annotationState, activeColor: color }
+  })),
+
+  setAnnotationSize: (size) => set((state) => ({
+    annotationState: { ...state.annotationState, strokeSize: size }
+  })),
+
+  setAnnotationOpacity: (opacity) => set((state) => ({
+    annotationState: { ...state.annotationState, opacity }
+  })),
+
+  setAnnotationPersist: (persist) => set((state) => ({
+    annotationState: { ...state.annotationState, persistAcrossSlides: persist }
+  })),
+
+  toggleAnnotationMode: (enabled) => set((state) => {
+    const nextEnabled = enabled !== undefined ? enabled : !state.annotationState.enabled;
+    return {
+      annotationState: {
+        ...state.annotationState,
+        enabled: nextEnabled,
+        laserPointer: nextEnabled ? state.annotationState.laserPointer : undefined
+      }
+    };
+  }),
+
+  addAnnotationStroke: (stroke) => set((state) => {
+    const newStrokes = [...state.annotationState.strokes, stroke];
+    return {
+      annotationState: {
+        ...state.annotationState,
+        strokes: newStrokes,
+        redoStack: []
+      }
+    };
+  }),
+
+  clearAnnotations: () => set((state) => ({
+    annotationState: {
+      ...state.annotationState,
+      strokes: [],
+      redoStack: [],
+      laserPointer: undefined
+    }
+  })),
+
+  undoAnnotation: () => set((state) => {
+    if (state.annotationState.strokes.length === 0) return state;
+    const strokes = [...state.annotationState.strokes];
+    const popped = strokes.pop();
+    if (!popped) return state;
+    return {
+      annotationState: {
+        ...state.annotationState,
+        strokes,
+        redoStack: [...state.annotationState.redoStack, popped]
+      }
+    };
+  }),
+
+  redoAnnotation: () => set((state) => {
+    if (state.annotationState.redoStack.length === 0) return state;
+    const redoStack = [...state.annotationState.redoStack];
+    const restored = redoStack.pop();
+    if (!restored) return state;
+    return {
+      annotationState: {
+        ...state.annotationState,
+        strokes: [...state.annotationState.strokes, restored],
+        redoStack
+      }
+    };
+  }),
+
+  updateLaserPointer: (laserUpdate) => set((state) => {
+    if (!laserUpdate) {
+      return {
+        annotationState: {
+          ...state.annotationState,
+          laserPointer: undefined
+        }
+      };
+    }
+    const currentLaser = state.annotationState.laserPointer || {
+      active: true,
+      x: 0.5,
+      y: 0.5,
+      color: state.annotationState.activeColor,
+      size: state.annotationState.strokeSize * 2,
+      lastUpdated: Date.now()
+    };
+    return {
+      annotationState: {
+        ...state.annotationState,
+        laserPointer: {
+          ...currentLaser,
+          ...laserUpdate,
+          lastUpdated: Date.now()
+        }
+      }
+    };
+  }),
+
   // Resources State
-  resourcesTab: 'scriptures', // Default matching screenshot showing Scriptures tab
+  resourcesTab: 'media',
   setResourcesTab: (tab) => set({ resourcesTab: tab }),
   isResourcesOpen: true,
   setIsResourcesOpen: (open) => set({ isResourcesOpen: open }),
@@ -811,6 +1120,8 @@ export const useStore = create<AppState>((set, get) => ({
   scripturesList: defaultScriptures,
   assetsList: defaultAssets,
   themesList: defaultThemes,
+  availableCameras: [],
+  setAvailableCameras: (cameras) => set({ availableCameras: cameras }),
 
   loadAllData: async () => {
     const [songs, themes, assets, outputGroups, schedules, scriptures] = await Promise.all([
@@ -854,36 +1165,33 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ scripturesList: mergedScriptures.length > 0 ? mergedScriptures : defaultScriptures });
 
-    if (!localStorage.getItem('worship_v3_panels_migrated')) {
-      await Promise.all(outputGroups.map(g => dbApi.deleteOutputGroup(g.id)));
-      defaultOutputGroups.forEach(g => dbApi.saveOutputGroup(g));
-      get().setOutputGroups(defaultOutputGroups);
-      localStorage.setItem('worship_v3_panels_migrated', 'true');
-    } else {
-      let finalGroups = outputGroups;
-      try {
-        const savedOrder = JSON.parse(localStorage.getItem('simpleworship_output_groups_order') || '[]');
-        if (Array.isArray(savedOrder) && savedOrder.length > 0) {
-          const map = new Map(outputGroups.map(g => [g.id, g]));
-          const ordered: OutputGroup[] = [];
-          savedOrder.forEach(id => {
-            if (map.has(id)) {
-              ordered.push(map.get(id)!);
-              map.delete(id);
-            }
-          });
-          // append any remaining
-          map.forEach(g => ordered.push(g));
-          if (ordered.length > 0) {
-            finalGroups = ordered;
-          }
-        }
-      } catch (e) {}
-      get().setOutputGroups(finalGroups);
+    // Enforce exactly two default output groups with Live deactivated on every load
+    try {
+      const allExisting = await dbApi.getOutputGroups();
+      await Promise.all(allExisting.map(g => dbApi.deleteOutputGroup(g.id)));
+    } catch (e) {}
+
+    for (const g of defaultOutputGroups) {
+      await dbApi.saveOutputGroup(g);
     }
-    if (schedules.length > 0) {
-      set({ activeSchedule: schedules[0] });
-    }
+    set({ outputGroups: defaultOutputGroups });
+
+    // Always reset/initialize group states so that Live is OFF (isLiveEnabled: false)
+    const initialStates = {
+      'group-congregation': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
+      'group-stage': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
+    };
+    set({ 
+      groupStates: initialStates, 
+      activeControlGroupId: 'group-congregation' 
+    });
+
+    try {
+      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(initialStates));
+      localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(defaultOutputGroups.map(g => g.id)));
+    } catch (e) {}
+    // Note: When the system starts/boots, schedule panel remains blank (0 items) by default
+    // so operators start fresh for the service session.
   },
 
   addSong: async (song) => {

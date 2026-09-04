@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -22,7 +22,11 @@ import {
   RotateCcw,
   Repeat,
   Volume2,
-  VolumeX
+  VolumeX,
+  MonitorUp,
+  Presentation,
+  Clock,
+  Zap
 } from 'lucide-react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from './ResizeHandle';
@@ -33,12 +37,21 @@ import RouteConfigModal from './RouteConfigModal';
 import { ThemeEngine } from '../core/ThemeEngine';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
+import { DisplayManager } from '../core/DisplayManager';
+import CameraLiveRenderer from './CameraLiveRenderer';
+import { PresentationContentResolver } from '../core/PresentationContentResolver';
+import { LiveSlideCard } from './LiveSlideCard';
+import { isValidPptxBinary } from '../utils/pptxValidator';
+import { SlideTransitionManager } from '../core/SlideTransitionManager';
+import { SlideAnnotationHUD } from './SlideAnnotationHUD';
 
 interface LivePanelProps {
   groupId: string;
+  showPreviewDisplay?: boolean;
+  key?: React.Key;
 }
 
-export default function LivePanel({ groupId }: LivePanelProps) {
+export default function LivePanel({ groupId, showPreviewDisplay = true }: LivePanelProps) {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isDraggingSelf, setIsDraggingSelf] = useState(false);
   const [dropPosition, setDropPosition] = useState<'left' | 'right' | null>(null);
@@ -133,7 +146,12 @@ export default function LivePanel({ groupId }: LivePanelProps) {
   const logoTheme = themesList.find(t => t.type === 'logo' || t.id === 'theme-logo');
   const logoStyles = logoTheme?.styles || {};
 
+  const liveContentType = PresentationContentResolver.detectContentType(liveItem);
+  const mediaFormat = PresentationContentResolver.getMediaFormat(liveItem);
+  const isAudioItem = liveContentType === 'audio';
+
   const isExplicitImage = Boolean(
+    liveContentType === 'image' ||
     liveItem?.type === 'image' ||
     (liveItem?.type === 'media' && (liveItem.data?.isVideo === false || liveItem.data?.type === 'image')) ||
     (currentSlide?.isVideo === false) ||
@@ -148,9 +166,12 @@ export default function LivePanel({ groupId }: LivePanelProps) {
     ))
   );
 
-  const isVideoItem = !isExplicitImage && Boolean(
+  const isPresentation = liveContentType === 'pptx' || liveItem?.type === 'presentation' || liveItem?.type === 'ppt';
+
+  const isVideoItem = !isPresentation && !isExplicitImage && !isAudioItem && Boolean(
     (isLogoMode && logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) ||
     (!isLogoMode && (
+      liveContentType === 'video' ||
       liveItem?.type === 'video' ||
       (liveItem?.type === 'media' && (liveItem.data?.type === 'video' || liveItem.data?.type === 'motion' || liveItem.data?.isVideo === true)) ||
       currentSlide?.isVideo === true ||
@@ -161,7 +182,7 @@ export default function LivePanel({ groupId }: LivePanelProps) {
         currentSlide.backgroundUrl.toLowerCase().endsWith('.m4v') ||
         currentSlide.backgroundUrl.toLowerCase().startsWith('data:video/')
       )) ||
-      (!currentSlide?.backgroundUrl && resolvedStyles.backgroundType === 'video' && Boolean(resolvedStyles.backgroundVideoUrl) && liveItem?.type !== 'song' && liveItem?.type !== 'bible')
+      (!currentSlide?.backgroundUrl && resolvedStyles.backgroundType === 'video' && Boolean(resolvedStyles.backgroundVideoUrl) && liveItem?.type !== 'song' && liveItem?.type !== 'bible' && liveItem?.type !== 'presentation' && liveItem?.type !== 'ppt')
     ))
   );
 
@@ -234,6 +255,27 @@ export default function LivePanel({ groupId }: LivePanelProps) {
             customBackgroundUrl: payload.item.customBackgroundUrl,
             data: payload.item.data
           };
+
+          if (newItem.type === 'presentation') {
+            if (!isValidPptxBinary(newItem.data?.fileBytes)) {
+              newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
+            }
+            if (newItem.contentId) {
+              const cid = newItem.contentId;
+              const nid = newItem.id;
+              import('../db').then(async ({ getDB }) => {
+                try {
+                  const db = await getDB();
+                  const asset = await db.get('assets', cid);
+                  if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
+                    store.updateScheduleItem(nid, {
+                      data: { ...(newItem.data || {}), fileBytes: asset.data.fileBytes }
+                    });
+                  }
+                } catch {}
+              });
+            }
+          }
           if (payload.source !== 'schedule') {
             store.addScheduleItem(newItem);
           }
@@ -258,10 +300,60 @@ export default function LivePanel({ groupId }: LivePanelProps) {
 
   const handleSelectSlide = (idx: number) => {
     store.setActiveControlGroupId(groupId);
-    if (liveItem) {
-      store.goLiveItem(liveItem.id, idx, groupId);
+    if (activeControlState?.activeItemId === liveItem?.id) {
+      store.setGroupState(groupId, { activeSlideIndex: idx });
+    } else if (liveItem) {
+      store.goLiveItem(liveItem.id, idx, groupId, liveItem);
     }
   };
+
+  const handlePrevSlide = () => {
+    if (slides.length === 0) return;
+    const current = activeControlState?.activeSlideIndex || 0;
+    const prev = Math.max(0, current - 1);
+    store.setGroupState(groupId, { activeSlideIndex: prev });
+  };
+
+  const handleNextSlide = () => {
+    if (slides.length === 0) return;
+    const current = activeControlState?.activeSlideIndex || 0;
+    const next = Math.min(slides.length - 1, current + 1);
+    store.setGroupState(groupId, { activeSlideIndex: next });
+  };
+
+  // Auto-advance timer logic (synced from source PPTX transitions)
+  const [autoAdvanceTimeLeft, setAutoAdvanceTimeLeft] = useState<number | null>(null);
+  const [isAutoAdvancePaused, setIsAutoAdvancePaused] = useState(false);
+
+  useEffect(() => {
+    const advanceMs = currentSlide?.transition?.advanceAfterTimeMs;
+    const isLive = Boolean(activeControlState?.isLiveEnabled && !activeControlState?.isBlack && !activeControlState?.isClear && !activeControlState?.showLogo);
+
+    if (!advanceMs || advanceMs <= 0 || !isLive || isAutoAdvancePaused) {
+      setAutoAdvanceTimeLeft(null);
+      return;
+    }
+
+    const duration = advanceMs;
+    const startTime = Date.now();
+    setAutoAdvanceTimeLeft(Math.ceil(duration / 1000));
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, duration - elapsed);
+      setAutoAdvanceTimeLeft(Math.ceil(remaining / 1000));
+
+      if (remaining <= 0) {
+        clearInterval(interval);
+        const current = activeControlState?.activeSlideIndex || 0;
+        if (current < slides.length - 1) {
+          store.setGroupState(groupId, { activeSlideIndex: current + 1 });
+        }
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [currentSlide?.id, activeControlState?.activeSlideIndex, currentSlide?.transition?.advanceAfterTimeMs, isAutoAdvancePaused, activeControlState?.isLiveEnabled, activeControlState?.isBlack, activeControlState?.isClear, activeControlState?.showLogo, slides.length, groupId]);
 
   return (
     <section 
@@ -330,33 +422,9 @@ export default function LivePanel({ groupId }: LivePanelProps) {
             <GripVertical size={14} />
           </div>
 
-          {/* Position Index Badge */}
-          <span 
-            className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-              isTargetedGroup ? 'bg-cyan-950 text-cyan-300 border-cyan-500/50' : 'bg-[#16171d] text-cyan-400 border-[#373b47]'
-            }`}
-            title={`Panel sequence position #${groupIndex + 1} of ${outputGroups.length}`}
-          >
-            #{groupIndex + 1}
-          </span>
-
           <span className="text-xs font-bold text-gray-200 tracking-wide uppercase truncate">
             <span className={isTargetedGroup ? 'text-cyan-300 font-extrabold' : 'text-indigo-400'}>{activeGroup?.name || 'Live Panel'}</span> • Live - {liveItem?.name || 'No Content Live'}
           </span>
-
-          {isTargetedGroup ? (
-            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 tracking-wider uppercase ml-1 animate-pulse shrink-0">
-              TARGET
-            </span>
-          ) : (
-            <button 
-              onClick={(e) => { e.stopPropagation(); store.setActiveControlGroupId(groupId); }}
-              className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#1e2029] hover:bg-cyan-950 text-gray-400 hover:text-cyan-300 border border-[#343948] transition-colors ml-1 shrink-0"
-              title="Click to set this panel as active live target"
-            >
-              Select Target
-            </button>
-          )}
         </div>
 
         <div 
@@ -468,15 +536,6 @@ export default function LivePanel({ groupId }: LivePanelProps) {
             )}
           </div>
 
-          {/* Add Panel */}
-          <button
-            onClick={handleAddPanel}
-            className="p-1 rounded hover:bg-[#383d47] text-gray-400 hover:text-cyan-400 transition-colors"
-            title="Add Live Panel"
-          >
-            <Plus size={12} />
-          </button>
-
           {/* Remove Panel */}
           {outputGroups.length > 1 && (
             <button
@@ -488,17 +547,6 @@ export default function LivePanel({ groupId }: LivePanelProps) {
             </button>
           )}
 
-          {/* Dock / Undock (Float) toggle */}
-          <button
-            onClick={() => togglePanelDock('live')}
-            className={`p-1 rounded hover:bg-[#383d47] transition-colors text-[10px] ${
-              !isDocked ? 'text-cyan-400 bg-[#323744]' : 'text-gray-400 hover:text-white'
-            }`}
-            title={isDocked ? 'Float / Undock Live Panel' : 'Dock Live Panel to Grid'}
-          >
-            <Pin size={12} className={isDocked ? '' : 'rotate-45'} />
-          </button>
-
           {/* Configure Route dropdown/button */}
           <button
             onClick={() => setIsConfigOpen(true)}
@@ -509,55 +557,81 @@ export default function LivePanel({ groupId }: LivePanelProps) {
             <ChevronDown size={10} />
           </button>
 
-          {/* Go Live button */}
-          <button
-            onClick={() => {
-              const activeGroupState = store.groupStates[groupId];
-              if (activeGroupState?.activeItemId) {
-                // Keep whatever content is already inside this live output panel
-                store.setGroupState(groupId, {
-                  isBlack: false,
-                  isClear: false,
-                  showLogo: false,
-                });
-                store.setActiveControlGroupId(groupId);
-                window.dispatchEvent(
-                  new CustomEvent('simpleworship:notify', { 
-                    detail: `LIVE: Output active for ${activeGroup?.name || 'Monitor'}!` 
-                  })
-                );
-              } else {
-                // If panel is empty, only then initialize from schedule
-                const itemToGoLive = store.activeSchedule?.items.length 
-                  ? store.activeSchedule.items[0].id 
-                  : store.previewItemId;
-                
-                if (itemToGoLive) {
-                  store.goLiveItem(itemToGoLive, 0, groupId);
-                  window.dispatchEvent(
-                    new CustomEvent('simpleworship:notify', { 
-                      detail: `LIVE: Direct Output to ${activeGroup?.name || 'Monitor'}!` 
-                    })
-                  );
-                }
-              }
-            }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-[10px] font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
-            title={`Go Live: Direct output to ${activeGroup?.name || 'this display'}`}
-          >
-            <Play size={11} className="fill-white text-white" />
-            <span>GO LIVE</span>
-          </button>
+
         </div>
       </div>
 
       {isConfigOpen && <RouteConfigModal groupId={groupId} onClose={() => setIsConfigOpen(false)} />}
 
-      <div className="flex-1 overflow-hidden">
-        <PanelGroup direction="vertical" autoSaveId={`workspace-layout-v3-live-${groupId}`}>
-          {/* Top Half: Slide Thumbnails / List */}
-          <Panel id={`panel-slides-${groupId}`} order={1} defaultSize={52} minSize={25}>
-            <div className={`h-full bg-[#18191e] p-2 overflow-y-auto custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
+      {/* Content Area */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {/* Presentation Presenter Toolbar */}
+        {isPresentation && liveItem && (
+          <div className="bg-[#14151b] border-b border-[#262832] px-2.5 py-1.5 flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="p-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                <Presentation size={13} />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-gray-200 truncate">{liveItem.name || 'PowerPoint Presentation'}</div>
+                <div className="text-[10px] text-gray-400 flex items-center gap-1.5 flex-wrap">
+                  <span className="font-mono text-amber-400 font-bold">Slide {currentSlideIndex + 1}</span> of {slides.length}
+                  
+                  {/* Synced Slide Transition Info */}
+                  {currentSlide?.transition && currentSlide.transition.type !== 'none' && (
+                    <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono text-[9px] flex items-center gap-1">
+                      <Zap size={9} className="text-amber-400" />
+                      <span>{SlideTransitionManager.getTransitionLabel(currentSlide.transition.type)} ({currentSlide.transition.durationMs ?? 500}ms)</span>
+                    </span>
+                  )}
+
+                  {/* Auto-Advance Countdown Indicator */}
+                  {autoAdvanceTimeLeft !== null && (
+                    <span 
+                      onClick={() => setIsAutoAdvancePaused(!isAutoAdvancePaused)}
+                      className={`px-1.5 py-0.2 rounded font-mono text-[9px] flex items-center gap-1 cursor-pointer transition-colors ${
+                        isAutoAdvancePaused 
+                          ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40' 
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
+                      }`}
+                      title={isAutoAdvancePaused ? 'Auto-advance paused. Click to resume' : 'Auto-advance active. Click to pause'}
+                    >
+                      <Clock size={9} />
+                      <span>{isAutoAdvancePaused ? 'Paused' : `Auto: ${autoAdvanceTimeLeft}s`}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={handlePrevSlide}
+                disabled={currentSlideIndex <= 0}
+                className="px-2.5 py-1 bg-[#222530] hover:bg-[#2c3040] disabled:opacity-30 disabled:cursor-not-allowed rounded text-xs font-medium text-gray-200 flex items-center gap-1 border border-[#303546] transition-colors"
+                title="Previous Slide"
+              >
+                <ChevronLeft size={13} />
+                <span>Prev</span>
+              </button>
+
+              <button
+                onClick={handleNextSlide}
+                disabled={currentSlideIndex >= slides.length - 1}
+                className="px-2.5 py-1 bg-amber-600/30 hover:bg-amber-600/50 disabled:opacity-30 disabled:cursor-not-allowed rounded text-xs font-medium text-amber-300 flex items-center gap-1 border border-amber-500/40 transition-colors"
+                title="Next Slide"
+              >
+                <span>Next</span>
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!showPreviewDisplay ? (
+          /* Fixed Live Output Panel WITHOUT display: Full-height slides */
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <div className={`flex-1 bg-[#18191e] p-2 overflow-y-auto custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
               {slides.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
                   <Tv size={28} className="text-gray-600 mb-2 opacity-60" />
@@ -567,283 +641,101 @@ export default function LivePanel({ groupId }: LivePanelProps) {
                   </p>
                 </div>
               ) : (
-                slides.map((slide, idx) => {
-                  const isSelected = activeControlState?.activeSlideIndex === idx;
-                  const isScripture = liveItem?.type === 'bible';
-                  const isSong = liveItem?.type === 'song';
-
-                  return (
-                    <div
+                <div className="flex flex-col gap-1.5 p-1.5 w-full min-w-0">
+                  {slides.map((slide, idx) => (
+                    <LiveSlideCard
                       key={slide.id || idx}
-                      onClick={() => handleSelectSlide(idx)}
-                      className={`flex rounded-xs border cursor-pointer select-none transition-all text-left overflow-hidden ${
-                        isSelected
-                          ? 'border-blue-500 ring-2 ring-blue-500/50 bg-[#1f2838] shadow-md'
-                          : 'border-[#2d3039] bg-[#22242c] hover:border-[#404554]'
-                      }`}
-                    >
-                      {viewMode !== 'summary' && (
-                        <div className={`bg-[#16171c] border-r border-[#2d3039] flex flex-col items-center justify-start shrink-0 ${viewMode === 'large' ? 'w-12 py-3' : viewMode === 'small' ? 'w-8 py-1' : 'w-10 py-2'}`}>
-                          <span className={`${viewMode === 'large' ? 'text-xs' : 'text-[11px]'} font-mono font-bold text-gray-300`}>
-                            {idx + 1}
-                          </span>
-                          <Tv size={viewMode === 'large' ? 15 : viewMode === 'small' ? 11 : 13} className="text-gray-400 mt-1" />
-                        </div>
-                      )}
-
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <div className={`${viewMode === 'large' ? 'px-3 py-1 text-xs' : viewMode === 'small' || viewMode === 'summary' ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'} font-bold truncate border-b border-black/30 ${
-                          (() => {
-                            const t = (slide.title || liveItem?.name || '').toLowerCase();
-                            if (isScripture) return 'bg-[#5f171d] text-rose-100';
-                            if (!isSong) return 'bg-[#1e2a44] text-blue-100';
-                            
-                            if (t.includes('chorus') || t.includes('koro') || t.includes('refrain')) return 'bg-emerald-900 text-emerald-100 border-emerald-700/50';
-                            if (t.includes('bridge') || t.includes('tulay')) return 'bg-purple-900 text-purple-100 border-purple-700/50';
-                            if (t.includes('pre-chorus')) return 'bg-amber-900 text-amber-100 border-amber-700/50';
-                            if (t.includes('tag') || t.includes('ending') || t.includes('coda')) return 'bg-rose-900 text-rose-100 border-rose-700/50';
-                            if (t.includes('verse') || t.includes('talatâ') || t.match(/^v\d+$/)) return 'bg-indigo-900 text-indigo-100 border-indigo-700/50';
-                            
-                            return 'bg-[#1e2a44] text-blue-100'; // Default Blue
-                          })()
-                        }`}>
-                          {viewMode === 'summary' && (
-                            <span className="text-gray-400 font-mono mr-2">{idx + 1}</span>
-                          )}
-                          {slide.title || liveItem?.name || `Slide ${idx + 1}`}
-                        </div>
-
-                        {viewMode !== 'summary' && (
-                          <div 
-                            className={`${viewMode === 'large' ? 'p-3 text-sm min-h-[64px]' : viewMode === 'small' ? 'p-1.5 text-[10px] min-h-[32px]' : 'p-2 text-[11px] min-h-[48px]'} leading-relaxed font-sans whitespace-pre-line bg-[#1c1e24] relative overflow-hidden`}
-                          >
-                            <div 
-                              className="relative z-10"
-                              style={{
-                                textTransform: resolvedStyles.textTransform || (
-                                  isSong 
-                                    ? ((systemOptions?.mainOutput?.song?.allCapsLyrics || systemOptions?.mainOutput?.song?.songFont?.casing === 'uppercase') ? 'uppercase' : undefined)
-                                    : (isScripture && systemOptions?.mainOutput?.scripture?.scriptureFont?.casing === 'uppercase' ? 'uppercase' : undefined)
-                                ),
-                                color: resolvedStyles.fontColor || '#ffffff',
-                                textShadow: resolvedStyles.textShadow ? `${resolvedStyles.shadowOffsetX || 0}px ${resolvedStyles.shadowOffsetY || 2}px ${resolvedStyles.shadowBlur || 4}px ${resolvedStyles.shadowColor || 'rgba(0,0,0,0.85)'}` : undefined,
-                                textAlign: (resolvedStyles.textAlign as any) || 'center',
-                                fontWeight: resolvedStyles.fontWeight || (
-                                  isSong 
-                                    ? (systemOptions?.mainOutput?.song?.songFont?.bold ? '700' : '400')
-                                    : (isScripture ? (systemOptions?.mainOutput?.scripture?.scriptureFont?.bold ? '700' : '400') : '700')
-                                ),
-                                fontStyle: resolvedStyles.fontStyle || (
-                                  isSong 
-                                    ? (systemOptions?.mainOutput?.song?.songFont?.italic ? 'italic' : 'normal')
-                                    : (isScripture ? (systemOptions?.mainOutput?.scripture?.scriptureFont?.italic ? 'italic' : 'normal') : 'normal')
-                                ),
-                                fontFamily: resolvedStyles.fontFamily || (
-                                  isSong 
-                                    ? (systemOptions?.mainOutput?.song?.songFont?.family || 'Tahoma, sans-serif')
-                                    : (isScripture ? (systemOptions?.mainOutput?.scripture?.scriptureFont?.family || 'Tahoma, sans-serif') : 'Tahoma, sans-serif')
-                                ),
-                                lineHeight: resolvedStyles.lineHeight || (
-                                  isSong 
-                                    ? (systemOptions?.mainOutput?.song?.lineSpacing || 1.3)
-                                    : (isScripture ? (systemOptions?.mainOutput?.scripture?.lineSpacing || 1.35) : 1.35)
-                                ),
-                              }}
-                            >
-                              {isScripture && slide.verses && slide.verses.length > 0 ? (
-                                slide.verses.map((v: any, vIdx: number) => (
-                                  <span key={v.verse || vIdx} className="inline">
-                                    {(systemOptions?.mainOutput?.scripture?.showVerseNumbers ?? true) && (
-                                      <span 
-                                        className="font-bold inline-block mr-1.5 select-none"
-                                        style={{ 
-                                          color: systemOptions?.mainOutput?.scripture?.verseFont?.color || systemOptions?.mainOutput?.scripture?.verseColor || '#F6E05E',
-                                          fontFamily: systemOptions?.mainOutput?.scripture?.verseFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
-                                        }}
-                                      >
-                                        {formatVerseNumber(v.verse, systemOptions?.mainOutput?.scripture?.verseNumberStyle)}
-                                      </span>
-                                    )}
-                                    <span>{v.text}</span>
-                                    {vIdx < slide.verses.length - 1 && ' '}
-                                  </span>
-                                ))
-                              ) : (
-                                slide.text
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </Panel>
-
-          <ResizeHandle direction="vertical" />
-
-          {/* Bottom Half: Live Output Monitor Display Screen */}
-          <Panel id={`panel-preview-${groupId}`} order={2} defaultSize={48} minSize={25}>
-            <div className="h-full bg-[#111216] border-t border-[#262832] p-2 flex flex-col overflow-hidden relative">
-              {/* Header Bar for Live Monitor Output */}
-              <div className="text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5 px-2 py-1 bg-[#181920] rounded border border-[#252834] flex items-center justify-between shrink-0 shadow-xs">
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${
-                    activeControlState?.isBlack || activeControlState?.isClear 
-                      ? 'bg-amber-500 animate-pulse' 
-                      : (currentSlide ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-gray-500')
-                  }`} />
-                  <span className="text-gray-200 font-semibold flex items-center gap-1.5">
-                    {activeGroup?.name || 'Live Output Monitor'}
-                    {currentSlide && (
-                      <span className="text-emerald-400 text-[10px] font-mono font-normal lowercase bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded">
-                        live • slide {currentSlideIndex + 1}/{slides.length}
-                      </span>
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              {/* Video Player Controls Panel (Shown when a video is active) */}
-              {isVideoItem && (
-                <div className="mb-2 p-2 bg-[#161820] border border-[#2a2d3c] rounded-lg flex flex-col gap-1.5 shadow-lg shrink-0">
-                  {/* Top Header Row */}
-                  <div className="flex items-center justify-between text-[11px] font-bold">
-                    <div className="flex items-center gap-2 text-cyan-300 min-w-0">
-                      <Film size={13} className="text-cyan-400 animate-pulse shrink-0" />
-                      <span className="truncate">{liveItem?.name || currentSlide?.title || 'Video Content'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                        activeControlState?.isVideoPlaying ?? true
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/80'
-                          : 'bg-amber-950 text-amber-300 border border-amber-800/80'
-                      }`}>
-                        {activeControlState?.isVideoPlaying ?? true ? '► Playing' : '❚❚ Paused'}
-                      </span>
-                      <button
-                        onClick={() => setGroupState(groupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors ${
-                          activeControlState?.isVideoLooping ?? true
-                            ? 'bg-cyan-950 text-cyan-300 border-cyan-700/80 hover:bg-cyan-900'
-                            : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200'
-                        }`}
-                        title="Toggle Continuous Video Looping"
-                      >
-                        {activeControlState?.isVideoLooping ?? true ? '🔁 Loop ON' : '➡️ Loop OFF'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Seek Progress Bar */}
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
-                    <span className="w-9 text-right shrink-0">{formatVideoTime(activeControlState?.videoCurrentTime || 0)}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={activeControlState?.videoDuration || 100}
-                      step={0.1}
-                      value={activeControlState?.videoCurrentTime || 0}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setGroupState(groupId, { videoSeekTime: val, videoCurrentTime: val });
-                      }}
-                      className="flex-1 h-1.5 bg-[#262936] accent-cyan-400 rounded-lg cursor-pointer"
+                      slide={slide}
+                      idx={idx}
+                      totalSlides={slides.length}
+                      isSelected={activeControlState?.activeSlideIndex === idx}
+                      viewMode={viewMode}
+                      liveItem={liveItem}
+                      liveContentType={liveContentType}
+                      mediaFormat={mediaFormat}
+                      resolvedStyles={resolvedStyles}
+                      systemOptions={systemOptions}
+                      activeControlState={activeControlState}
+                      onSelect={handleSelectSlide}
                     />
-                    <span className="w-9 shrink-0">{formatVideoTime(activeControlState?.videoDuration || 0)}</span>
-                  </div>
-
-                  {/* Button Controls Row */}
-                  <div className="flex items-center justify-between gap-1 pt-1 border-t border-[#232634]">
-                    <div className="flex items-center gap-1.5">
-                      {/* Play / Pause Toggle */}
-                      <button
-                        onClick={() => setGroupState(groupId, { isVideoPlaying: !(activeControlState?.isVideoPlaying ?? true) })}
-                        className={`px-3 py-1 rounded text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-xs ${
-                          activeControlState?.isVideoPlaying ?? true
-                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                            : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        }`}
-                        title={activeControlState?.isVideoPlaying ?? true ? 'Pause Video' : 'Play Video'}
-                      >
-                        {activeControlState?.isVideoPlaying ?? true ? (
-                          <>
-                            <Pause size={12} className="fill-white" />
-                            <span>PAUSE</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play size={12} className="fill-white" />
-                            <span>PLAY</span>
-                          </>
-                        )}
-                      </button>
-
-                      {/* Restart Button */}
-                      <button
-                        onClick={() => setGroupState(groupId, { videoSeekTime: 0, videoCurrentTime: 0, isVideoPlaying: true })}
-                        className="px-2.5 py-1 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[11px] font-semibold flex items-center gap-1 border border-[#373b4d] transition-colors"
-                        title="Restart Video from 0:00"
-                      >
-                        <RotateCcw size={11} />
-                        <span>Restart</span>
-                      </button>
-
-                      {/* Loop Toggle Button */}
-                      <button
-                        onClick={() => setGroupState(groupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
-                        className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 border transition-colors ${
-                          activeControlState?.isVideoLooping ?? true
-                            ? 'bg-cyan-950 border-cyan-500/60 text-cyan-300 hover:bg-cyan-900'
-                            : 'bg-[#252834] border-[#373b4d] text-gray-400 hover:text-gray-200'
-                        }`}
-                        title="Toggle Continuous Video Looping"
-                      >
-                        <Repeat size={11} />
-                        <span>{activeControlState?.isVideoLooping ?? true ? 'Loop On' : 'Loop Off'}</span>
-                      </button>
-                    </div>
-
-                    {/* Volume & Mute Controls */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setGroupState(groupId, { isVideoMuted: !(activeControlState?.isVideoMuted ?? false) })}
-                        className={`p-1.5 rounded transition-colors ${
-                          activeControlState?.isVideoMuted
-                            ? 'bg-rose-950 border border-rose-700/60 text-rose-300'
-                            : 'bg-[#252834] border border-[#373b4d] text-gray-300 hover:text-white'
-                        }`}
-                        title={activeControlState?.isVideoMuted ? 'Unmute Audio' : 'Mute Audio'}
-                      >
-                        {activeControlState?.isVideoMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                      </button>
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={activeControlState?.isVideoMuted ? 0 : (activeControlState?.videoVolume ?? 1)}
-                        onChange={(e) => {
-                          const vol = parseFloat(e.target.value);
-                          setGroupState(groupId, { videoVolume: vol, isVideoMuted: vol === 0 });
-                        }}
-                        className="w-16 h-1 bg-[#262936] accent-cyan-400 rounded cursor-pointer"
-                        title="Video Volume"
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
               )}
-
-              {/* The Live Output Monitor Screen Box */}
-              <div className="flex-1 w-full min-h-0 bg-[#08090b] rounded-lg border border-[#222530] overflow-hidden relative flex items-center justify-center shadow-inner">
-                <MonitorPreviewCanvas groupId={groupId} showResolutionTag={true} />
-              </div>
             </div>
-          </Panel>
-        </PanelGroup>
+          </div>
+        ) : (
+          <PanelGroup direction="vertical" autoSaveId={`workspace-layout-v3-live-${groupId}`}>
+            {/* Top Half: Slide Thumbnails / List */}
+            <Panel id={`panel-slides-${groupId}`} order={1} defaultSize={52} minSize={25}>
+              <div className={`h-full bg-[#18191e] p-2 overflow-y-auto custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
+                {slides.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
+                    <Tv size={28} className="text-gray-600 mb-2 opacity-60" />
+                    <span className="text-xs font-semibold text-gray-400">No Content Live in this Route</span>
+                    <p className="text-[11px] text-gray-500 mt-1 max-w-xs">
+                      Double click any item from Schedule or click 'Go Live' to project to this display
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1.5 p-1.5 w-full min-w-0">
+                    {slides.map((slide, idx) => (
+                      <LiveSlideCard
+                        key={slide.id || idx}
+                        slide={slide}
+                        idx={idx}
+                        totalSlides={slides.length}
+                        isSelected={activeControlState?.activeSlideIndex === idx}
+                        viewMode={viewMode}
+                        liveItem={liveItem}
+                        liveContentType={liveContentType}
+                        mediaFormat={mediaFormat}
+                        resolvedStyles={resolvedStyles}
+                        systemOptions={systemOptions}
+                        activeControlState={activeControlState}
+                        onSelect={handleSelectSlide}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            <ResizeHandle direction="vertical" />
+
+            {/* Bottom Half: Live Output Monitor Display Screen */}
+            <Panel id={`panel-preview-${groupId}`} order={2} defaultSize={48} minSize={25}>
+              <div className="h-full bg-[#111216] border-t border-[#262832] p-2 flex flex-col overflow-hidden relative">
+                {/* Header Bar for Live Monitor Output */}
+                <div className="text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5 px-2 py-1 bg-[#181920] rounded border border-[#252834] flex items-center justify-between shrink-0 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${
+                      activeControlState?.isBlack || activeControlState?.isClear 
+                        ? 'bg-amber-500 animate-pulse' 
+                        : (currentSlide ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-gray-500')
+                    }`} />
+                    <span className="text-gray-200 font-semibold flex items-center gap-1.5">
+                      {activeGroup?.name || 'Live Output Monitor'}
+                      {currentSlide && (
+                        <span className="text-emerald-400 text-[10px] font-mono font-normal lowercase bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded">
+                          live • slide {currentSlideIndex + 1}/{slides.length}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <SlideAnnotationHUD className="static py-0.5 px-2" />
+                  </div>
+                </div>
+
+                {/* The Live Output Monitor Screen Box */}
+                <div className="flex-1 w-full min-h-0 bg-[#08090b] rounded-lg border border-[#222530] overflow-hidden relative flex items-center justify-center shadow-inner">
+                  <MonitorPreviewCanvas groupId={groupId} showResolutionTag={false} />
+                </div>
+              </div>
+            </Panel>
+          </PanelGroup>
+        )}
       </div>
     </section>
   );

@@ -1,19 +1,144 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="sw-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38BDF8" />
-      <stop offset="100%" stop-color="#2563EB" />
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.3"/>
+    <!-- Background / Lighting Filters -->
+    <filter id="sw-glow" x="-20%" y="-20%" width="140%" height="140%" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
+
+    <filter id="sw-depth" x="-20%" y="-20%" width="150%" height="150%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="-4" dy="16" stdDeviation="14" flood-color="#020817" flood-opacity="0.45" />
+      <feDropShadow dx="2" dy="6" stdDeviation="6" flood-color="#002244" flood-opacity="0.3" />
+    </filter>
+
+    <filter id="s-shadow-on-w" x="-30%" y="-30%" width="160%" height="160%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="6" dy="10" stdDeviation="8" flood-color="#020d24" flood-opacity="0.65" />
+    </filter>
+
+    <!-- Gradients for W Ribbon -->
+    <linearGradient id="w-ribbon-front" x1="260" y1="240" x2="350" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00F0FF" />
+      <stop offset="35%" stop-color="#00A6FF" />
+      <stop offset="100%" stop-color="#0052FF" />
+    </linearGradient>
+
+    <linearGradient id="w-ribbon-back" x1="290" y1="240" x2="330" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00358E" />
+      <stop offset="100%" stop-color="#001C55" />
+    </linearGradient>
+
+    <linearGradient id="w-ribbon-fold" x1="260" y1="230" x2="310" y2="280" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E5FF" />
+      <stop offset="70%" stop-color="#0077FE" />
+      <stop offset="100%" stop-color="#0040AA" />
+    </linearGradient>
+
+    <linearGradient id="w-right-wing" x1="300" y1="395" x2="480" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#004AE8" />
+      <stop offset="30%" stop-color="#0066FF" />
+      <stop offset="75%" stop-color="#00B2FE" />
+      <stop offset="100%" stop-color="#00F0FF" />
+    </linearGradient>
+
+    <linearGradient id="w-wing-highlight" x1="320" y1="360" x2="480" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0" />
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.8" />
+    </linearGradient>
+
+    <linearGradient id="w-under-s" x1="160" y1="380" x2="270" y2="240" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#002D7A" />
+      <stop offset="50%" stop-color="#0066FF" />
+      <stop offset="100%" stop-color="#00E5FF" />
+    </linearGradient>
+
+    <!-- Gradients for 3D White S -->
+    <linearGradient id="s-front-body" x1="70" y1="90" x2="270" y2="390" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="60%" stop-color="#F8FAFC" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+
+    <linearGradient id="s-side-depth" x1="50" y1="120" x2="260" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#CBD5E1" />
+      <stop offset="50%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#64748B" />
+    </linearGradient>
+
+    <linearGradient id="s-top-bevel" x1="120" y1="90" x2="300" y2="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
   </defs>
-  
-  <g transform="translate(60, 140) skewX(-15) scale(1.2)">
-    <!-- W -->
-    <path d="M 150 0 L 190 140 L 230 0 L 290 0 L 220 200 L 160 200 L 130 60 L 100 200 L 40 200 L 110 0 Z" fill="url(#sw-blue)" />
-    
-    <!-- S Ribbon overlapping W -->
-    <path d="M 160 0 L 70 0 C 30 0, 10 20, 10 50 C 10 70, 20 90, 60 90 L 110 90 C 130 90, 140 100, 140 120 C 140 140, 130 150, 110 150 L 0 150 L 0 200 L 110 200 C 160 200, 190 170, 190 130 C 190 90, 170 70, 120 70 L 70 70 C 50 70, 40 60, 40 50 C 40 40, 50 30, 70 30 L 160 30 Z" fill="#FFFFFF" filter="url(#shadow)" />
+
+  <g id="sw-3d-logo" transform="translate(10, 8) scale(0.96)">
+    <!-- W RIBBON COMPONENT -->
+    <!-- 1. W: Under-fold beneath the S (Bottom-left of W) -->
+    <path 
+      d="M 165 396 C 185 396, 230 380, 268 280 C 275 260, 283 242, 290 238 C 298 234, 308 240, 314 252 L 340 342 C 348 370, 330 396, 298 396 L 165 396 Z" 
+      fill="url(#w-under-s)" 
+    />
+
+    <!-- 2. W: Center Valley / Back Fold (Inner depth of fold) -->
+    <path 
+      d="M 290 238 C 297 232, 312 238, 319 255 L 352 360 C 356 374, 348 388, 335 392 C 322 396, 310 388, 305 372 L 274 270 C 270 256, 278 245, 290 238 Z" 
+      fill="url(#w-ribbon-back)" 
+    />
+
+    <!-- 3. W: Center Ribbon Front Loop (Cyan glowing fold) -->
+    <path 
+      d="M 264 285 C 255 310, 240 350, 205 385 C 230 385, 260 360, 282 305 C 295 272, 305 245, 318 242 C 326 240, 332 248, 335 258 L 302 365 C 298 380, 288 392, 270 394 C 285 394, 298 385, 305 370 L 338 262 C 342 250, 335 238, 322 238 C 305 238, 280 255, 264 285 Z" 
+      fill="url(#w-ribbon-fold)" 
+    />
+
+    <!-- 4. W: Dynamic Long Right Wing / Slash (Rising 3D bar) -->
+    <g filter="url(#sw-depth)">
+      <!-- Main Diagonal Ribbon -->
+      <path 
+        d="M 296 396 C 308 396, 318 390, 324 378 L 476 106 C 484 92, 478 78, 464 78 C 452 78, 442 84, 436 96 L 284 368 C 278 382, 284 396, 296 396 Z" 
+        fill="url(#w-right-wing)" 
+      />
+      <!-- Specular Spine Edge on Right Wing -->
+      <path 
+        d="M 436 96 L 476 106 C 472 98, 466 90, 458 84 C 450 78, 442 78, 436 96 Z" 
+        fill="#FFFFFF" 
+        opacity="0.9" 
+      />
+      <path 
+        d="M 438 98 L 300 372" 
+        stroke="url(#w-wing-highlight)" 
+        stroke-width="3.5" 
+        stroke-linecap="round" 
+      />
+    </g>
+
+    <!-- 3D WHITE S COMPONENT (Overlapping W with cast shadow) -->
+    <g filter="url(#s-shadow-on-w)">
+      <!-- S Bottom 3D Depth Layer (Bevel Extrusion) -->
+      <path 
+        d="M 46 398 C 40 398, 36 394, 38 386 L 168 386 C 220 386, 268 360, 268 296 C 268 244, 230 220, 180 206 C 136 194, 116 182, 116 160 C 116 138, 136 122, 168 122 C 210 122, 246 142, 264 162 L 298 122 C 268 90, 218 76, 168 76 C 104 76, 56 112, 56 172 C 56 226, 96 250, 148 264 C 196 278, 208 290, 208 310 C 208 334, 184 348, 146 348 L 46 348 L 22 398 Z" 
+        fill="url(#s-side-depth)" 
+      />
+
+      <!-- S Front Sculpted Face (Pure 3D White) -->
+      <path 
+        d="M 52 394 L 176 394 C 236 394, 274 358, 274 298 C 274 246, 234 220, 184 206 C 140 194, 122 182, 122 160 C 122 138, 140 122, 172 122 C 214 122, 250 142, 268 162 L 302 122 C 272 90, 222 76, 172 76 C 108 76, 62 112, 62 172 C 62 226, 102 250, 154 264 C 202 278, 214 290, 214 310 C 214 334, 190 348, 152 348 L 52 348 C 38 348, 28 358, 24 372 C 20 386, 32 394, 52 394 Z" 
+        fill="url(#s-front-body)" 
+      />
+
+      <!-- S Upper Specular Sheen (Curved Highlight) -->
+      <path 
+        d="M 172 82 C 218 82, 264 96, 292 124 L 284 134 C 258 108, 216 94, 172 94 C 118 94, 76 124, 74 168 C 72 136, 114 82, 172 82 Z" 
+        fill="url(#s-top-bevel)" 
+        opacity="0.95" 
+      />
+
+      <!-- S Bottom Shelf Highlight -->
+      <path 
+        d="M 52 394 L 176 394 C 228 394, 262 366, 268 318 C 262 360, 224 386, 176 386 L 52 386 C 36 386, 28 378, 24 372 C 28 386, 38 394, 52 394 Z" 
+        fill="#FFFFFF" 
+        opacity="0.6" 
+      />
+    </g>
   </g>
 </svg>

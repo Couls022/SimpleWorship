@@ -324,11 +324,29 @@ export async function downloadSwsFile(
   outputGroups?: OutputGroup[]
 ) {
   const blob = await buildEnterpriseSwsBundle(schedule, bundledSongs, bundledThemes, systemOptions, outputGroups);
+  const safeName = (filename || schedule.name || 'Sunday_Service').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const defaultName = `${safeName}.sws`;
+
+  // Native Electron desktop save dialog support
+  if (typeof window !== 'undefined' && window.electronAPI?.saveSwsFile) {
+    try {
+      const buffer = await blob.arrayBuffer();
+      const res = await window.electronAPI.saveSwsFile(defaultName, new Uint8Array(buffer));
+      if (res && (!res.canceled || res.filePath)) {
+        return;
+      }
+      if (res && res.canceled) {
+        return;
+      }
+    } catch (e) {
+      console.warn('Electron native save dialog failed, falling back to browser download', e);
+    }
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  const safeName = (filename || schedule.name || 'Sunday_Service').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  link.download = `${safeName}.sws`;
+  link.download = defaultName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -336,12 +354,12 @@ export async function downloadSwsFile(
 }
 
 /**
- * Reads a File object and extracts schedule, automatically handling:
+ * Reads a File or Blob object and extracts schedule, automatically handling:
  * 1. Zipped enterprise .sws archives (with icon.png, icon.svg, schedule.json)
  * 2. Standalone JSON .sws packages
  * 3. Legacy worship files (.json, .worship, etc.)
  */
-export async function readSwsFile(file: File): Promise<{ 
+export async function readSwsFile(file: File | Blob): Promise<{ 
   schedule: Schedule; 
   bundledSongs?: Song[]; 
   bundledThemes?: Theme[];

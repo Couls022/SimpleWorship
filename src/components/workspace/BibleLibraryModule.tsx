@@ -16,7 +16,8 @@ import {
   Columns,
   Layers,
   X,
-  ExternalLink
+  ExternalLink,
+  ListFilter
 } from 'lucide-react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from '../ResizeHandle';
@@ -24,6 +25,20 @@ import { ScriptureVerse, PresentationItem } from '../../types';
 import { BIBLE_BOOKS, BibleEngine, BibleBook } from '../../data/bibleEngine';
 import { handleRangeSelection } from '../../utils/selectionUtils';
 import { useStore } from '../../store/useStore';
+
+export interface ScriptureViewOptions {
+  density: 'compact' | 'comfortable' | 'spacious';
+  fontSize: 'small' | 'medium' | 'large';
+  showVerseNumbers: boolean;
+  showReferences: boolean;
+}
+
+const DEFAULT_SCRIPTURE_VIEW_OPTIONS: ScriptureViewOptions = {
+  density: 'comfortable',
+  fontSize: 'medium',
+  showVerseNumbers: true,
+  showReferences: true,
+};
 
 interface BibleLibraryModuleProps {
   isSidebarMode?: boolean;
@@ -33,6 +48,36 @@ interface BibleLibraryModuleProps {
 export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibraryModuleProps) {
   const store = useStore();
   const { addScheduleItem, setPreviewItem, goLiveItem } = store;
+
+  // View options state with operator preference persistence
+  const [viewOptions, setViewOptions] = useState<ScriptureViewOptions>(() => {
+    try {
+      const saved = localStorage.getItem('simpleworship_scriptures_view_options');
+      if (saved) {
+        return { ...DEFAULT_SCRIPTURE_VIEW_OPTIONS, ...JSON.parse(saved) };
+      }
+    } catch {
+      // fallback to defaults
+    }
+    return DEFAULT_SCRIPTURE_VIEW_OPTIONS;
+  });
+  const [isViewOptionsOpen, setIsViewOptionsOpen] = useState(false);
+  const viewOptionsRef = useRef<HTMLDivElement>(null);
+
+  const updateViewOption = <K extends keyof ScriptureViewOptions>(
+    key: K,
+    value: ScriptureViewOptions[K]
+  ) => {
+    setViewOptions(prev => {
+      const updated = { ...prev, [key]: value };
+      try {
+        localStorage.setItem('simpleworship_scriptures_view_options', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+  };
 
   // Selected states
   const [selectedTranslation, setSelectedTranslation] = useState<'KJV' | 'Tagalog' | 'ALL'>('KJV');
@@ -77,7 +122,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
     
     async function loadVerses() {
       if (isSearchActive) {
-        const results = await BibleEngine.search(searchQuery, selectedTranslation);
+        const results = await BibleEngine.search(searchQuery, selectedTranslation, activeBook.id);
         if (!isCancelled) {
           setCurrentVerses(results);
           setIsLoadingChapter(false);
@@ -104,6 +149,9 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
     function handleClickOutside(event: MouseEvent) {
       if (chapterDropdownRef.current && !chapterDropdownRef.current.contains(event.target as Node)) {
         setIsChapterDropdownOpen(false);
+      }
+      if (viewOptionsRef.current && !viewOptionsRef.current.contains(event.target as Node)) {
+        setIsViewOptionsOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -151,7 +199,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
-    BibleEngine.search(searchQuery, selectedTranslation).then(matched => {
+    BibleEngine.search(searchQuery, selectedTranslation, activeBook.id).then(matched => {
       if (matched && matched.length > 0) {
         const first = matched[0];
         const book = BIBLE_BOOKS.find(b => b.name === first.book || b.nameTagalog === first.book);
@@ -307,58 +355,12 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
           <div className="flex items-center gap-1.5 shrink-0">
             <BookOpen size={14} className="text-amber-400" />
             <span className="font-bold text-xs uppercase tracking-wider text-gray-200">
-              Bible Library
+              Scriptures
             </span>
-            <input type="file" accept=".json" id="bible-import" className="hidden" onChange={async (e) => {
-              if (e.target.files && e.target.files.length > 0) {
-                const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                  if (event.target?.result) {
-                    try {
-                      const json = JSON.parse(event.target.result as string);
-                      if (Array.isArray(json)) {
-                         const { dbApi } = await import('../../db');
-                         let imported = 0;
-                         for (const verse of json) {
-                           if (verse.book && verse.chapter && verse.verse && verse.text) {
-                              const newVerse = {
-                                id: `${verse.book.toLowerCase()}-${verse.chapter}-${verse.verse}-${verse.translation || 'KJV'}`,
-                                translation: verse.translation || 'KJV',
-                                book: verse.book,
-                                chapter: parseInt(verse.chapter),
-                                verse: parseInt(verse.verse),
-                                reference: `${verse.book} ${verse.chapter}:${verse.verse}`,
-                                text: verse.text
-                              };
-                              await dbApi.addScripture(newVerse);
-                              imported++;
-                           }
-                         }
-                         alert(`Imported ${imported} verses successfully!`);
-                      } else {
-                         alert("Invalid JSON format. Expected an array of verses.");
-                      }
-                    } catch(err) {
-                      console.error("Error importing bible", err);
-                      alert("Error importing bible: " + (err as any).message);
-                    }
-                  }
-                };
-                reader.readAsText(file);
-              }
-            }} />
-            <button
-              onClick={() => document.getElementById('bible-import')?.click()}
-              className="text-[10px] bg-[#3a4150] px-1.5 py-0.5 rounded text-gray-300 hover:text-white"
-              title="Import JSON Bible format"
-            >
-              Import JSON
-            </button>
           </div>
 
           {/* Single Main Bible Search Bar (in top header red box position) */}
-          <form onSubmit={handleQuickJump} className="relative flex-1 min-w-[200px]">
+          <form onSubmit={handleQuickJump} className="relative flex-1 min-w-[100px] shrink">
             <input
               type="text"
               placeholder="Search across ALL Bible books (e.g. John 3:16, grace, kapayapaan, Awit 23)..."
@@ -415,58 +417,88 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
               Both
             </button>
           </div>
-        </div>
 
-        {/* Subheader Bar: Testament Filter Tabs & Quick Reference */}
-        <div className="flex items-center justify-between gap-3 text-[10px] bg-[#171a22] px-2 py-1 rounded border border-[#282d3c]">
-          {/* Testament Filter Tabs */}
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Operator View Options Dropdown Control */}
+          <div className="relative shrink-0" ref={viewOptionsRef}>
             <button
-              onClick={() => setSelectedTestament('ALL')}
-              className={`px-2 py-0.5 rounded transition-all ${
-                selectedTestament === 'ALL'
-                  ? 'bg-[#323744] text-white font-semibold'
-                  : 'text-gray-400 hover:bg-[#252934] hover:text-gray-300'
+              type="button"
+              onClick={() => setIsViewOptionsOpen(prev => !prev)}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded border text-xs font-semibold transition-all cursor-pointer select-none ${
+                isViewOptionsOpen
+                  ? 'bg-amber-500/25 text-amber-300 border-amber-400/80 shadow-sm ring-1 ring-amber-400/30'
+                  : 'bg-[#181a20] hover:bg-[#252834] text-gray-300 hover:text-white border-[#2d313d]'
               }`}
+              title="Scriptures View Options (Density, Font Size, Visibility)"
             >
-              All (66)
+              <ListFilter size={12} className="text-amber-400 shrink-0" />
+              <span className="hidden sm:inline">View</span>
             </button>
-            <button
-              onClick={() => setSelectedTestament('OT')}
-              className={`px-2 py-0.5 rounded transition-all ${
-                selectedTestament === 'OT'
-                  ? 'bg-[#323744] text-amber-300 font-semibold'
-                  : 'text-gray-400 hover:bg-[#252934] hover:text-gray-300'
-              }`}
-            >
-              OT (39)
-            </button>
-            <button
-              onClick={() => setSelectedTestament('NT')}
-              className={`px-2 py-0.5 rounded transition-all ${
-                selectedTestament === 'NT'
-                  ? 'bg-[#323744] text-cyan-300 font-semibold'
-                  : 'text-gray-400 hover:bg-[#252934] hover:text-gray-300'
-              }`}
-            >
-              NT (27)
-            </button>
+
+            {isViewOptionsOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-60 bg-[#161821] border border-[#30384c] rounded-lg shadow-2xl p-2.5 z-50 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md text-xs text-gray-200">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-0.5">
+                  Verse Density
+                </div>
+                <div className="grid grid-cols-3 gap-1 mb-2.5">
+                  {(['compact', 'comfortable', 'spacious'] as const).map(d => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => updateViewOption('density', d)}
+                      className={`px-1.5 py-1 rounded text-[11px] font-semibold capitalize transition-colors text-center cursor-pointer ${
+                        viewOptions.density === d
+                          ? 'bg-amber-500/30 text-amber-300 font-bold border border-amber-500/50 shadow-xs'
+                          : 'bg-[#1f232d] hover:bg-[#292e3c] text-gray-300 border border-transparent'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-0.5">
+                  Text Size
+                </div>
+                <div className="grid grid-cols-3 gap-1 mb-2.5">
+                  {(['small', 'medium', 'large'] as const).map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => updateViewOption('fontSize', s)}
+                      className={`px-1.5 py-1 rounded text-[11px] font-semibold capitalize transition-colors text-center cursor-pointer ${
+                        viewOptions.fontSize === s
+                          ? 'bg-amber-500/30 text-amber-300 font-bold border border-amber-500/50 shadow-xs'
+                          : 'bg-[#1f232d] hover:bg-[#292e3c] text-gray-300 border border-transparent'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="border-t border-[#292e3d] pt-2 mb-0.5 space-y-2 px-0.5">
+                  <label className="flex items-center justify-between cursor-pointer text-[11px] text-gray-300 hover:text-white select-none">
+                    <span>Show Verse Numbers</span>
+                    <input
+                      type="checkbox"
+                      checked={viewOptions.showVerseNumbers}
+                      onChange={e => updateViewOption('showVerseNumbers', e.target.checked)}
+                      className="rounded accent-amber-500 w-3.5 h-3.5 cursor-pointer"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between cursor-pointer text-[11px] text-gray-300 hover:text-white select-none">
+                    <span>Show Verse References</span>
+                    <input
+                      type="checkbox"
+                      checked={viewOptions.showReferences}
+                      onChange={e => updateViewOption('showReferences', e.target.checked)}
+                      className="rounded accent-amber-500 w-3.5 h-3.5 cursor-pointer"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Quick Active Book & Chapter Summary */}
-          {!isSearchActive ? (
-            <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
-              <span className="text-[10px] text-gray-400 font-normal truncate flex items-center gap-1">
-                <span className="font-bold text-amber-400">{selectedTranslation === 'Tagalog' ? activeBook.nameTagalog : activeBook.name}</span>
-                <span className="text-gray-300 font-medium">Chapter {selectedChapter}</span>
-                <span className="text-gray-500">({activeBook.chapters} Chs)</span>
-              </span>
-            </div>
-          ) : (
-            <span className="text-[10px] text-amber-400 font-medium bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/40 shrink-0">
-              Global Search ({currentVerses.length} found)
-            </span>
-          )}
         </div>
       </div>
 
@@ -633,7 +665,9 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
               </div>
 
               {/* Verses Feed */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+              <div className={`flex-1 overflow-y-auto p-2 custom-scrollbar ${
+                viewOptions.density === 'compact' ? 'space-y-1' : viewOptions.density === 'spacious' ? 'space-y-2.5' : 'space-y-1.5'
+              }`}>
                 {currentVerses.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
                     <BookOpen size={32} className="text-gray-600 mb-2" />
@@ -657,7 +691,9 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
                             : [verse];
                           handleGoLiveNow(target);
                         }}
-                        className={`group relative p-2 rounded border cursor-grab active:cursor-grabbing transition-all ${
+                        className={`group relative rounded border cursor-grab active:cursor-grabbing transition-all ${
+                          viewOptions.density === 'compact' ? 'p-1.5' : viewOptions.density === 'spacious' ? 'p-3' : 'p-2'
+                        } ${
                           isSelected
                             ? 'bg-[#252c3d] border-amber-500/60 shadow-md ring-1 ring-amber-500/20'
                             : 'bg-[#1e222c] border-[#292e3c] hover:border-[#3d4559] hover:bg-[#232733]'
@@ -668,26 +704,32 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
                           {/* Drag Grip handle */}
                           <GripVertical size={13} className="text-gray-500 group-hover:text-amber-400 shrink-0 mt-0.5 transition-colors" />
 
-                          {/* Verse Number & Translation Badge */}
-                          <div className="shrink-0 flex items-center gap-1">
-                            <span className="font-bold text-amber-400 text-xs">
-                              {verse.verse}
-                            </span>
-                            <span className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
-                              isTag ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/40' : 'bg-blue-950/80 text-blue-300 border border-blue-800/40'
-                            }`}>
-                              {verse.translation}
-                            </span>
-                          </div>
+                          {/* Verse Number */}
+                          {viewOptions.showVerseNumbers && (
+                            <div className="shrink-0 flex items-center gap-1">
+                              <span className="font-bold text-amber-400 text-xs">
+                                {verse.verse}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Verse Scripture Text */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-200 leading-relaxed font-serif">
+                            <p className={`${
+                              viewOptions.fontSize === 'small' 
+                                ? 'text-[11px] leading-relaxed' 
+                                : viewOptions.fontSize === 'large' 
+                                ? 'text-sm leading-relaxed' 
+                                : 'text-xs leading-relaxed'
+                            } text-gray-200 font-serif`}>
                               {verse.text}
                             </p>
-                            <div className="mt-1 flex items-center justify-between text-[10px] text-gray-400">
-                              <span className="font-semibold text-amber-200/90">{verse.reference}</span>
-                              
+                            {viewOptions.showReferences && (
+                              <div className="mt-1 flex items-center justify-between text-[10px] text-gray-400">
+                                <span className="font-semibold text-amber-200/90">{verse.reference}</span>
+                              </div>
+                            )}
+                            <div className="mt-1 flex items-center justify-end text-[10px] text-gray-400">
                               {/* Quick row actions on hover */}
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {isSearchActive && (
@@ -751,60 +793,6 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
             </div>
           </Panel>
         </PanelGroup>
-      </div>
-
-      {/* Selected Action Dock / Drag-and-Drop Guidance */}
-      <div className="p-2 bg-[#20242e] border-t border-[#131519] shrink-0 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1 text-[11px] text-gray-300 truncate">
-          <GripVertical size={13} className="text-amber-400 shrink-0" />
-          <span className="font-medium truncate">
-            {selectedVerseIds.length > 0 ? (
-              <span className="text-amber-300 font-bold">{selectedVerseIds.length} verses selected</span>
-            ) : (
-              <span>Drag any verse into Schedule</span>
-            )}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => {
-              const target = selectedVerses.length > 0 ? selectedVerses : currentVerses.slice(0, 1);
-              if (target.length > 0) handleAddToSchedule(target);
-            }}
-            draggable={selectedVerses.length > 0}
-            onDragStart={(e) => handleDragStart(e)}
-            className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-gray-950 px-2.5 py-1 rounded text-xs font-bold transition-colors cursor-grab active:cursor-grabbing shadow"
-            title="Add selected verses to presentation schedule (or drag button directly into schedule)"
-          >
-            <Plus size={12} />
-            <span>Add to Schedule</span>
-          </button>
-
-          <button
-            onClick={() => {
-              const target = selectedVerses.length > 0 ? selectedVerses : currentVerses.slice(0, 1);
-              if (target.length > 0) handleSendToPreview(target);
-            }}
-            className="flex items-center gap-1 bg-[#2e3545] hover:bg-[#3a4358] text-cyan-300 px-2 py-1 rounded text-xs font-semibold transition-colors border border-[#414b63]"
-            title="Load directly into Preview monitor"
-          >
-            <Tv size={11} />
-            <span>Preview</span>
-          </button>
-
-          <button
-            onClick={() => {
-              const target = selectedVerses.length > 0 ? selectedVerses : currentVerses.slice(0, 1);
-              if (target.length > 0) handleGoLiveNow(target);
-            }}
-            className="flex items-center gap-1 bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded text-xs font-bold transition-colors shadow"
-            title="Broadcast Live to Congregation"
-          >
-            <Play size={11} />
-            <span>Go Live</span>
-          </button>
-        </div>
       </div>
     </div>
   );

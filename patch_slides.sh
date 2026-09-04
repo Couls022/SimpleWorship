@@ -1,1 +1,0 @@
-sed -i '/<div className="h-full bg-\[#18191e\] p-2 overflow-y-auto custom-scrollbar space-y-2">/c\            <div className={`h-full bg-[#18191e] p-2 overflow-y-auto custom-scrollbar ${viewMode === '\''large'\'' ? '\''space-y-3'\'' : viewMode === '\''small'\'' || viewMode === '\''summary'\'' ? '\''space-y-1'\'' : '\''space-y-2'\''}`}>' src/components/LivePanel.tsx

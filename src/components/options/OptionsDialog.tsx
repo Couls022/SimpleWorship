@@ -837,7 +837,7 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                               onChange={(e) => updateMainScripture({ showTranslationBadge: e.target.checked })}
                               className="rounded accent-blue-500 cursor-pointer"
                             />
-                            <span>Show Translation badge (e.g. (KJV) / (Tagalog))</span>
+                            <span>Show Translation badge (e.g. (KJV))</span>
                           </label>
                         </div>
                       </div>

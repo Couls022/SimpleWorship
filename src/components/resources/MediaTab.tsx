@@ -14,7 +14,9 @@ import {
   Tv,
   Trash2,
   Copy,
-  GripVertical
+  GripVertical,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from '../ResizeHandle';
@@ -29,6 +31,25 @@ export default function MediaTab() {
   const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'image' | 'audio' | 'video'>('all');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>(() => assetsList[0]?.id ? [assetsList[0].id] : []);
   const [anchorAssetId, setAnchorAssetId] = useState<string | null>(() => assetsList[0]?.id || null);
+
+  // View mode state with operator persistence
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    try {
+      const saved = localStorage.getItem('simpleworship_media_view_mode');
+      return (saved === 'grid' || saved === 'list') ? saved : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
+
+  const handleSetViewMode = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('simpleworship_media_view_mode', mode);
+    } catch {
+      // ignore
+    }
+  };
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -56,7 +77,10 @@ export default function MediaTab() {
     { id: 'video', label: 'Videos' },
   ];
 
-  const filteredAssets = assetsList.filter(a => {
+  const safeAssetsList = assetsList || [];
+
+  const filteredAssets = safeAssetsList.filter(a => {
+    if (!a) return false;
     if (activeMediaFilter === 'all') return true;
     if (activeMediaFilter === 'image') return a.type === 'image';
     if (activeMediaFilter === 'audio') return a.type === 'audio';
@@ -64,7 +88,7 @@ export default function MediaTab() {
     return true;
   });
 
-  const selectedAsset = assetsList.find(a => selectedAssetIds.includes(a.id)) || filteredAssets[0] || null;
+  const selectedAsset = safeAssetsList.find(a => a && selectedAssetIds.includes(a.id)) || filteredAssets[0] || null;
 
   const handleAssetClick = (e: React.MouseEvent, asset: Asset) => {
     const { selectedIds, anchorId } = handleRangeSelection(
@@ -106,34 +130,37 @@ export default function MediaTab() {
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const url = event.target?.result as string;
-      const isVideo = file.type.startsWith('video');
-      const isAudio = file.type.startsWith('audio');
-      let assetType: 'image' | 'video' | 'audio' = 'image';
-      if (isVideo) assetType = 'video';
-      else if (isAudio) assetType = 'audio';
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const url = event.target?.result as string;
+        const isVideo = file.type.startsWith('video');
+        const isAudio = file.type.startsWith('audio');
+        let assetType: 'image' | 'video' | 'audio' = 'image';
+        if (isVideo) assetType = 'video';
+        else if (isAudio) assetType = 'audio';
 
-      const newAsset: Asset = {
-        id: `asset-${Date.now()}`,
-        name: file.name.replace(/\.[^/.]+$/, ''),
-        type: assetType,
-        url: url,
-        thumbnailUrl: (isVideo || isAudio) ? undefined : url,
-        tags: ['uploaded', assetType],
+        const newAsset: Asset = {
+          id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          name: file.name.replace(/\.[^/.]+$/, ''),
+          type: assetType,
+          url: url,
+          thumbnailUrl: (isVideo || isAudio) ? undefined : url,
+          tags: ['uploaded', assetType],
+        };
+        addAsset(newAsset);
+        window.dispatchEvent(
+          new CustomEvent('simpleworship:notify', { 
+            detail: `Imported "${newAsset.name}" successfully!` 
+          })
+        );
       };
-      addAsset(newAsset);
-      window.dispatchEvent(
-        new CustomEvent('simpleworship:notify', { 
-          detail: `Imported "${newAsset.name}" successfully!` 
-        })
-      );
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
   };
 
   const handleApplyToSongs = (asset: Asset) => {
@@ -233,11 +260,42 @@ export default function MediaTab() {
         </div>
 
         <div className="flex items-center space-x-2">
-          <label className="flex items-center gap-1 bg-[#2b303d] hover:bg-[#363c4d] border border-[#3e4456] text-gray-200 px-2.5 py-0.5 rounded text-[11px] font-semibold cursor-pointer transition-colors">
+          {/* View Options Toggle (Grid / List) */}
+          <div className="flex items-center bg-[#15161b] p-0.5 rounded border border-[#2b2e38] text-[10px]">
+            <button
+              type="button"
+              onClick={() => handleSetViewMode('grid')}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                viewMode === 'grid'
+                  ? 'bg-indigo-600 text-white font-bold'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="Grid View (Thumbnails)"
+            >
+              <LayoutGrid size={11} />
+              <span className="hidden sm:inline">Grid</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetViewMode('list')}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-indigo-600 text-white font-bold'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="List View (Explorer Details)"
+            >
+              <List size={11} />
+              <span className="hidden sm:inline">List</span>
+            </button>
+          </div>
+
+          <label className="flex items-center gap-1 bg-[#2b303d] hover:bg-[#363c4d] border border-[#3e4456] text-gray-200 px-2.5 py-0.5 rounded text-[11px] font-semibold cursor-pointer transition-colors shadow-sm">
             <Upload size={12} className="text-cyan-400" />
             <span>Import Media</span>
             <input
               type="file"
+              multiple
               accept="image/*,video/*,audio/*"
               className="hidden"
               onChange={handleFileUpload}
@@ -246,209 +304,157 @@ export default function MediaTab() {
         </div>
       </div>
 
-      {/* Main Grid View */}
-      <div className="flex-1 overflow-hidden">
-        <PanelGroup direction="horizontal" autoSaveId="simpleworship-media-split-v1" className="h-full w-full">
-          {/* Left Side: Thumbnail Grid */}
-          <Panel defaultSize={72} minSize={40}>
-            <div className="h-full p-3 overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                {filteredAssets.map((asset) => {
-                  const isSelected = selectedAssetIds.includes(asset.id);
-
-                  return (
-                    <div
-                      key={asset.id}
-                      draggable={true}
-                      onDragStart={(e) => handleDragStart(e, asset)}
-                      onClick={(e) => handleAssetClick(e, asset)}
-                      onDoubleClick={() => handleAddToSchedule(asset)}
-                      onContextMenu={(e) => handleContextMenu(e, asset)}
-                      className={`group aspect-video rounded-lg border relative overflow-hidden cursor-grab active:cursor-grabbing transition-all flex flex-col justify-between p-2 ${
-                        isSelected
-                          ? 'border-cyan-400 ring-2 ring-cyan-500/40 bg-[#1e2530] shadow-lg'
-                          : 'border-[#2d3039] bg-[#1a1c22] hover:border-[#424754] hover:bg-[#23262f]'
-                      }`}
-                    >
-                      {/* Media Preview */}
-                      {asset.type === 'video' || asset.type === 'motion' ? (
-                        <video
-                          src={asset.url}
-                          muted
-                          loop
-                          autoPlay
-                          playsInline
-                          className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity"
-                        />
-                      ) : asset.type === 'audio' ? (
-                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 flex flex-col items-center justify-center p-2 text-indigo-200">
-                          <Music size={26} className="text-cyan-400 mb-1 animate-pulse" />
-                          <span className="text-[9px] font-mono text-indigo-300 tracking-wider uppercase font-semibold">Audio Track</span>
-                        </div>
-                      ) : (
-                        <div
-                          className="absolute inset-0 bg-cover bg-center opacity-70 group-hover:opacity-90 transition-opacity"
-                          style={{ backgroundImage: `url(${asset.url})` }}
-                        />
-                      )}
-
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-
-                      {/* Top Type Pill */}
-                      <div className="relative z-10 flex items-center justify-between">
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm border border-white/10 uppercase tracking-tight flex items-center gap-1">
-                          {asset.type === 'video' || asset.type === 'motion' ? (
-                            <Film size={10} className="text-cyan-400" />
-                          ) : asset.type === 'audio' ? (
-                            <Music size={10} className="text-purple-400" />
-                          ) : (
-                            <ImageIcon size={10} className="text-amber-400" />
-                          )}
-                          <span>{asset.type === 'motion' ? 'video' : asset.type}</span>
-                        </span>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteAsset(asset);
-                            }}
-                            className="p-1 rounded bg-black/60 hover:bg-rose-600 text-gray-300 hover:text-white transition-colors"
-                            title="Delete Media"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                          <span className="text-gray-400">
-                            <GripVertical size={12} />
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Bottom Title */}
-                      <div className="relative z-10">
-                        <div className="text-[11px] font-bold text-white drop-shadow truncate">
-                          {asset.name}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </Panel>
-
-          {/* Resizable Divider Handle */}
-          <ResizeHandle direction="horizontal" />
-
-          {/* Right Side: Media Inspector & Set Defaults Panel */}
-          <Panel defaultSize={28} minSize={18} maxSize={45} collapsible>
-            <div className="h-full bg-[#1b1c22] border-l border-[#15161a] p-3 flex flex-col justify-between overflow-hidden">
-              {selectedAsset ? (
-                <div className="flex flex-col h-full justify-between">
-                  <div>
-                    <h3 className="font-bold text-sm text-gray-100 mb-1 truncate">{selectedAsset.name}</h3>
-                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#272b36] text-gray-300 border border-[#373c4b]">
-                      {selectedAsset.type}
-                    </span>
-
-                    <div className="aspect-video w-full rounded-md border border-[#2e323e] my-3 overflow-hidden bg-black relative flex items-center justify-center">
-                      {selectedAsset.type === 'video' || selectedAsset.type === 'motion' ? (
-                        <video src={selectedAsset.url} autoPlay loop muted playsInline className="w-full h-full object-cover" />
-                      ) : selectedAsset.type === 'audio' ? (
-                        <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-black flex flex-col items-center justify-center p-3">
-                          <Music size={36} className="text-purple-400 mb-2 animate-pulse" />
-                          <audio src={selectedAsset.url} controls className="w-full max-w-xs h-8 mt-1" />
-                        </div>
-                      ) : (
-                        <img src={selectedAsset.url} alt={selectedAsset.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
-                      )}
-                    </div>
-
-                    <div className="text-[11px] text-gray-400 space-y-1">
-                      <div>Format: <span className="text-gray-200 font-semibold uppercase">{selectedAsset.type}</span></div>
-                      <div>Resolution: <span className="text-gray-200 font-semibold">1920x1080 (HD 16:9)</span></div>
-                    </div>
+      {/* Main View: Grid or List */}
+      <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+        {filteredAssets.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500">
+            <Film size={36} className="text-gray-600 mb-3" />
+            <p className="text-xs font-semibold text-gray-300">No media files found in this category.</p>
+            <p className="text-[11px] text-gray-500 mt-1 max-w-[220px]">Browse your local computer storage to select image, video, or audio files.</p>
+            <label className="mt-4 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-md text-xs cursor-pointer transition-colors shadow">
+              <Upload size={14} />
+              <span>Browse Computer Files...</span>
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*,audio/*"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </label>
+          </div>
+        ) : viewMode === 'list' ? (
+          <div className="border border-[#262933] rounded overflow-hidden divide-y divide-[#232630] bg-[#1a1c22]">
+            {filteredAssets.map((asset) => {
+              const isSelected = selectedAssetIds.includes(asset.id);
+              return (
+                <div
+                  key={asset.id}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, asset)}
+                  onClick={(e) => handleAssetClick(e, asset)}
+                  onDoubleClick={() => handleAddToSchedule(asset)}
+                  onContextMenu={(e) => handleContextMenu(e, asset)}
+                  className={`flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing transition-colors text-xs select-none ${
+                    isSelected
+                      ? 'bg-[#252c3d] text-white'
+                      : 'hover:bg-[#20232b] text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <GripVertical size={13} className="text-gray-600 shrink-0" />
+                    {asset.type === 'video' || asset.type === 'motion' ? (
+                      <Film size={14} className="text-cyan-400 shrink-0" />
+                    ) : asset.type === 'audio' ? (
+                      <Music size={14} className="text-purple-400 shrink-0" />
+                    ) : (
+                      <ImageIcon size={14} className="text-amber-400 shrink-0" />
+                    )}
+                    <span className="font-medium truncate">{asset.name}</span>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="space-y-1.5 border-t border-[#272a34] pt-2">
+                  <div className="flex items-center gap-3 shrink-0 text-[11px] text-gray-400">
+                    <span className="uppercase text-[10px] px-1.5 py-0.5 rounded bg-[#131418] border border-[#2b2e38] text-gray-300">
+                      {asset.type}
+                    </span>
                     <button
-                      onClick={() => handleApplyToSongs(selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#303645] border border-[#3b4356] text-cyan-300 py-1 rounded text-xs font-semibold transition-colors"
-                    >
-                      <Sparkles size={12} />
-                      <span>Set as Default for Songs</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleApplyToScriptures(selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#303645] border border-[#3b4356] text-amber-300 py-1 rounded text-xs font-semibold transition-colors"
-                    >
-                      <Sparkles size={12} />
-                      <span>Set as Default for Scriptures</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleApplyToPresentations(selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#303645] border border-[#3b4356] text-purple-300 py-1 rounded text-xs font-semibold transition-colors"
-                    >
-                      <Sparkles size={12} />
-                      <span>Set as Default for Presentations</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleApplyToAnnouncements(selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#303645] border border-[#3b4356] text-rose-300 py-1 rounded text-xs font-semibold transition-colors"
-                    >
-                      <Sparkles size={12} />
-                      <span>Set as Default for Announcements</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleApplyToLogo(selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#303645] border border-[#3b4356] text-emerald-300 py-1 rounded text-xs font-semibold transition-colors"
-                    >
-                      <Sparkles size={12} />
-                      <span>Set as Default for Logo</span>
-                    </button>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSendToLive(selectedAsset)}
-                        className="w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white py-1 rounded text-xs font-bold transition-colors"
-                      >
-                        <Play size={12} className="fill-white" />
-                        <span>Go Live</span>
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => handleAddToSchedule(selectedAsset)}
-                      draggable={true}
-                      onDragStart={(e) => handleDragStart(e, selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white py-1 rounded text-xs font-bold transition-colors shadow-sm cursor-grab active:cursor-grabbing border border-indigo-400/30"
-                      title="Add to Schedule (or drag directly into schedule)"
-                    >
-                      <Plus size={13} />
-                      <span>Add to Schedule</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteAsset(selectedAsset)}
-                      className="w-full flex items-center justify-center gap-1.5 bg-rose-950/30 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 py-1 rounded text-xs font-semibold transition-colors mt-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteAsset(asset);
+                      }}
+                      className="p-1 hover:text-rose-400 rounded hover:bg-[#2b2f3d]"
+                      title="Delete"
                     >
                       <Trash2 size={12} />
-                      <span>Delete Media from Library</span>
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-500 text-xs">
-                  Select media to inspect
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {filteredAssets.map((asset) => {
+            const isSelected = selectedAssetIds.includes(asset.id);
+
+            return (
+              <div
+                key={asset.id}
+                draggable={true}
+                onDragStart={(e) => handleDragStart(e, asset)}
+                onClick={(e) => handleAssetClick(e, asset)}
+                onDoubleClick={() => handleAddToSchedule(asset)}
+                onContextMenu={(e) => handleContextMenu(e, asset)}
+                className={`group aspect-video rounded-lg border relative overflow-hidden cursor-grab active:cursor-grabbing transition-all flex flex-col justify-between p-2 ${
+                  isSelected
+                    ? 'border-cyan-400 ring-2 ring-cyan-500/40 bg-[#1e2530] shadow-lg'
+                    : 'border-[#2d3039] bg-[#1a1c22] hover:border-[#424754] hover:bg-[#23262f]'
+                }`}
+              >
+                {/* Media Preview */}
+                {asset.type === 'video' || asset.type === 'motion' ? (
+                  <video
+                    src={asset.url}
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity"
+                  />
+                ) : asset.type === 'audio' ? (
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 flex flex-col items-center justify-center p-2 text-indigo-200">
+                    <Music size={26} className="text-cyan-400 mb-1 animate-pulse" />
+                    <span className="text-[9px] font-mono text-indigo-300 tracking-wider uppercase font-semibold">Audio Track</span>
+                  </div>
+                ) : (
+                  <div
+                    className="absolute inset-0 bg-cover bg-center opacity-70 group-hover:opacity-90 transition-opacity"
+                    style={{ backgroundImage: `url(${asset.url})` }}
+                  />
+                )}
+
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+
+                {/* Top Type Pill */}
+                <div className="relative z-10 flex items-center justify-between">
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm border border-white/10 uppercase tracking-tight flex items-center gap-1">
+                    {asset.type === 'video' || asset.type === 'motion' ? (
+                      <Film size={10} className="text-cyan-400" />
+                    ) : asset.type === 'audio' ? (
+                      <Music size={10} className="text-purple-400" />
+                    ) : (
+                      <ImageIcon size={10} className="text-amber-400" />
+                    )}
+                    <span>{asset.type === 'motion' ? 'video' : asset.type}</span>
+                  </span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteAsset(asset);
+                      }}
+                      className="p-1 rounded bg-black/60 hover:bg-rose-600 text-gray-300 hover:text-white transition-colors"
+                      title="Delete Media"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                    <span className="text-gray-400">
+                      <GripVertical size={12} />
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
-          </Panel>
-        </PanelGroup>
+
+                {/* Bottom Title */}
+                <div className="relative z-10">
+                  <div className="text-[11px] font-bold text-white drop-shadow truncate">
+                    {asset.name}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        )}
       </div>
 
       {/* Right-Click Context Menu for Media */}

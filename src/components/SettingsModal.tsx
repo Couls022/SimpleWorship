@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Monitor, Plus, Trash2, ExternalLink, Settings, Check, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { OutputGroup } from '../types';
+import { DisplayManager } from '../core/DisplayManager';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -76,26 +77,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const handleLaunchGroup = (groupId: string) => {
-    const url = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${groupId}`;
     const group = outputGroups.find(g => g.id === groupId);
     const assignedScreenLabel = group?.displayIds?.[0];
-    
-    let left = 0;
-    let top = 0;
-    let width = 1280;
-    let height = 720;
-    
-    if (assignedScreenLabel && screens.length > 0) {
-      const targetScreen = screens.find(s => s.label === assignedScreenLabel);
-      if (targetScreen) {
-        left = targetScreen.availLeft;
-        top = targetScreen.availTop;
-        width = targetScreen.availWidth;
-        height = targetScreen.availHeight;
-      }
-    }
-    
-    window.open(url, `Projector_${groupId}`, `left=${left},top=${top},width=${width},height=${height},menubar=no,toolbar=no,location=no,status=no`);
+    DisplayManager.openProjector(groupId, assignedScreenLabel);
   };
 
   return (

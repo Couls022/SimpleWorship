@@ -1,4 +1,5 @@
-import { NativeDisplayTarget, ProjectorStatus, OutputGroup } from '../types';
+import { NativeDisplayTarget, ProjectorStatus, OutputGroup, PresentationState } from '../types';
+import { resolveDisplayAssignments } from './DisplayRouter';
 
 export interface DisplayConflict {
   displayId: string;
@@ -142,67 +143,188 @@ export class DisplayManager {
       }
     }
 
-    // 2. Web browser popup fallback
+    // 2. Web Standalone Mode (No external browser popups to prevent 403 Google auth bridge errors)
     if (typeof window !== 'undefined') {
-      const existing = this.browserPopups.get(groupId);
-      if (existing && !existing.closed) {
-        existing.focus();
-        this.localStatuses[groupId] = 'CONNECTED';
-        return { success: true, status: 'CONNECTED', displayId: displayId || 'primary-display' };
-      }
-
-      const url = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${encodeURIComponent(groupId)}`;
-      const popup = window.open(
-        url,
-        `SimpleWorship_Projector_${groupId}`,
-        'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
+      const displays = this.cachedDisplays.length > 0 ? this.cachedDisplays : await this.getDisplays();
+      const operatorDisplay = displays.find(d => d.isPrimary) || displays[0];
+      const isTargetingOperator = Boolean(
+        displayId && operatorDisplay && (
+          displayId === operatorDisplay.id ||
+          displayId === operatorDisplay.name ||
+          (displayId.toLowerCase().includes('primary') && operatorDisplay.isPrimary) ||
+          (displayId.includes('1') && (operatorDisplay.name.includes('1') || operatorDisplay.id.includes('1')))
+        )
       );
 
-      if (popup) {
-        this.browserPopups.set(groupId, popup);
-        this.localStatuses[groupId] = 'CONNECTED';
-
-        const timer = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(timer);
-            this.browserPopups.delete(groupId);
-            this.localStatuses[groupId] = 'PROJECTOR CLOSED';
-            window.dispatchEvent(
-              new CustomEvent('simpleworship:projector-status', {
-                detail: { groupId, status: 'PROJECTOR CLOSED' },
-              })
-            );
-          }
-        }, 1000);
-
-        return { success: true, status: 'CONNECTED', displayId: displayId || 'primary-display' };
+      // SAME-MONITOR SAFETY BLOCK:
+      // If Projector target = Operator monitor, BLOCK launch and return Output Monitor Conflict
+      if (isTargetingOperator) {
+        const conflictMsg = 'The selected Live Output monitor is currently being used by the SimpleWorship operator console. Please choose another monitor or connect a secondary projector display before starting Live Output.';
+        window.dispatchEvent(
+          new CustomEvent('simpleworship:notify', { 
+            detail: `Output Monitor Conflict: ${conflictMsg}` 
+          })
+        );
+        return {
+          success: false,
+          status: 'DISCONNECTED',
+          conflict: 'SAME_DISPLAY_CONFLICT',
+          error: conflictMsg,
+        };
       }
+
+      this.localStatuses[groupId] = 'CONNECTED';
+      
+      // Dispatch in-app activation event so the internal Live Display canvas activates/fullscreens
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:projector-activate', {
+          detail: { groupId, displayId: displayId || 'primary-display', status: 'CONNECTED' },
+        })
+      );
+
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:projector-status', {
+          detail: { groupId, status: 'CONNECTED' },
+        })
+      );
+
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:notify', { 
+          detail: `Standalone Live Display connected for Output Route!` 
+        })
+      );
+
+      return { success: true, status: 'CONNECTED', displayId: displayId || 'primary-display' };
     }
 
-    return { success: false, status: 'DISCONNECTED', error: 'Popup blocked or unavailable' };
+    return { success: false, status: 'DISCONNECTED', error: 'Display unavailable' };
   }
 
   /**
-   * Close active projector window for a route group.
+   * Close active projector window for a route group or specific physical display.
    */
-  static async closeProjector(groupId: string): Promise<{ success: boolean; status: ProjectorStatus }> {
+  static async closeProjector(
+    target: string | { groupId?: string; displayId?: string }
+  ): Promise<{ success: boolean; status: ProjectorStatus }> {
+    const opts = typeof target === 'string' ? { groupId: target } : target;
+    const groupId = opts.groupId;
+
     if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
       try {
-        const res = await window.electronAPI.closeProjector(groupId);
-        this.localStatuses[groupId] = 'DISCONNECTED';
+        const res = await window.electronAPI.closeProjector(opts);
+        if (groupId) this.localStatuses[groupId] = 'DISCONNECTED';
         return res;
       } catch (e) {
         console.error('[DisplayManager] Close projector error:', e);
       }
     }
 
-    const popup = this.browserPopups.get(groupId);
-    if (popup && !popup.closed) {
-      popup.close();
+    if (groupId) {
+      const popup = this.browserPopups.get(groupId);
+      if (popup && !popup.closed) {
+        popup.close();
+      }
+      this.browserPopups.delete(groupId);
+      this.localStatuses[groupId] = 'DISCONNECTED';
     }
-    this.browserPopups.delete(groupId);
-    this.localStatuses[groupId] = 'DISCONNECTED';
     return { success: true, status: 'DISCONNECTED' };
+  }
+
+  /**
+   * Synchronizes physical projector windows with current LIVE route and active control states.
+   * Uses DisplayRouter to deterministically resolve winning routes per physical monitor.
+   * Ensures idempotency: existing windows are reused and not duplicated.
+   */
+  static async syncPhysicalDisplays(
+    outputGroups: OutputGroup[],
+    groupStates: Record<string, PresentationState>,
+    activeControlGroupId: string | null | undefined
+  ): Promise<{ opened: string[]; updated: string[]; closed: string[]; conflicts: DisplayConflict[] }> {
+    const displays = this.cachedDisplays.length > 0 ? this.cachedDisplays : await this.getDisplays();
+    const conflicts = this.detectConflicts(outputGroups, displays);
+
+    // Operator console display must NEVER be taken over
+    const operatorBlockedDisplayIds = new Set(
+      conflicts
+        .filter(c => c.message.includes('operator console'))
+        .map(c => c.displayId)
+    );
+
+    const nonPrimaryDisplays = displays.filter(d => !d.isPrimary);
+    const targetDisplayIds = nonPrimaryDisplays.map(d => d.id);
+
+    const assignments = resolveDisplayAssignments(
+      outputGroups,
+      groupStates,
+      activeControlGroupId,
+      targetDisplayIds.length > 0 ? targetDisplayIds : undefined
+    );
+
+    const opened: string[] = [];
+    const updated: string[] = [];
+    const closed: string[] = [];
+
+    // 1. Native Electron Shell
+    if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+      const assignmentList = Array.from(assignments.values()).map(a => ({
+        displayId: a.displayId,
+        groupId: operatorBlockedDisplayIds.has(a.displayId) ? null : a.assignedGroupId
+      }));
+
+      try {
+        if (typeof window.electronAPI.syncProjectorDisplays === 'function') {
+          await window.electronAPI.syncProjectorDisplays(assignmentList);
+        } else {
+          for (const item of assignmentList) {
+            if (item.groupId) {
+              await window.electronAPI.openProjector(item.groupId, item.displayId);
+            } else {
+              await window.electronAPI.closeProjector({ displayId: item.displayId });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[DisplayManager] syncPhysicalDisplays electron error:', err);
+      }
+    } else if (typeof window !== 'undefined') {
+      // 2. Web Standalone / Preview environment
+      assignments.forEach((assignment, displayId) => {
+        if (operatorBlockedDisplayIds.has(displayId)) return;
+
+        if (assignment.assignedGroupId) {
+          this.localStatuses[assignment.assignedGroupId] = 'CONNECTED';
+          window.dispatchEvent(
+            new CustomEvent('simpleworship:projector-route-changed', {
+              detail: { displayId, groupId: assignment.assignedGroupId }
+            })
+          );
+          opened.push(displayId);
+        } else {
+          closed.push(displayId);
+        }
+      });
+    }
+
+    return { opened, updated, closed, conflicts };
+  }
+
+  /**
+   * Listen to projector route changed events on a physical display.
+   */
+  static listenToProjectorRouteChanged(
+    callback: (data: { displayId: string; groupId: string }) => void
+  ): () => void {
+    if (typeof window !== 'undefined' && window.electronAPI?.isElectron && typeof window.electronAPI.onProjectorRouteChanged === 'function') {
+      return window.electronAPI.onProjectorRouteChanged(callback);
+    }
+
+    const listener = (event: any) => {
+      if (event.detail) {
+        callback(event.detail);
+      }
+    };
+    window.addEventListener('simpleworship:projector-route-changed', listener);
+    return () => window.removeEventListener('simpleworship:projector-route-changed', listener);
   }
 
   /**
@@ -218,6 +340,13 @@ export class DisplayManager {
       }
     }
     return { ...this.localStatuses };
+  }
+
+  /**
+   * Returns current locally tracked projector status for a group.
+   */
+  static getLocalStatus(groupId: string): ProjectorStatus {
+    return this.localStatuses[groupId] || 'DISCONNECTED';
   }
 
   /**
@@ -238,14 +367,43 @@ export class DisplayManager {
   }
 
   /**
-   * Detects shared display conflicts among configured output groups.
-   * If two routes (e.g. Main and Stage) target the exact same monitor,
-   * a conflict warning is reported.
+   * Detects shared display conflicts among configured output groups and the operator console.
+   * If an output group targets the operator monitor (Monitor 1 / Primary),
+   * or if two routes target the exact same monitor, conflict warnings are reported.
    */
   static detectConflicts(
     outputGroups: OutputGroup[],
     availableDisplays: NativeDisplayTarget[] = this.cachedDisplays
   ): DisplayConflict[] {
+    const conflicts: DisplayConflict[] = [];
+
+    // 1. Detect conflict with operator console (Monitor 1 / Primary Display)
+    const operatorDisplay = availableDisplays.find((d) => d.isPrimary) || availableDisplays[0];
+    if (operatorDisplay) {
+      for (const group of outputGroups) {
+        if (group.displayIds && group.displayIds.length > 0) {
+          for (const dispId of group.displayIds) {
+            const isOperator =
+              dispId === operatorDisplay.id ||
+              dispId === operatorDisplay.name ||
+              (dispId.toLowerCase().includes('primary') && operatorDisplay.isPrimary) ||
+              (dispId.includes('1') && (operatorDisplay.name.includes('1') || operatorDisplay.id.includes('1')));
+
+            if (isOperator) {
+              conflicts.push({
+                displayId: dispId,
+                displayName: operatorDisplay.name || dispId,
+                groupIds: [group.id],
+                groupNames: [group.name],
+                message: `Output Monitor Conflict: "${group.name}" is targeting "${operatorDisplay.name || 'Monitor 1'}" which is in use by the operator console. Projector output will be blocked to ensure operator console remains usable.`,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Detect conflicts between multiple groups targeting the same display
     const displayToGroups = new Map<string, { groupIds: string[]; groupNames: string[] }>();
 
     for (const group of outputGroups) {
@@ -260,8 +418,6 @@ export class DisplayManager {
         }
       }
     }
-
-    const conflicts: DisplayConflict[] = [];
 
     for (const [dispId, { groupIds, groupNames }] of displayToGroups.entries()) {
       if (groupIds.length > 1) {

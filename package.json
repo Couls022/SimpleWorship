@@ -2,98 +2,53 @@
   "name": "simpleworship",
   "private": true,
   "version": "1.0.0",
+  "description": "SimpleWorship Church Presentation & Multi-Display Software",
+  "author": "SimpleWorship Team",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "dev": "vite --port 3000 --host 0.0.0.0",
+    "dev:electron": "electron .",
+    "build": "vite build",
+    "build:renderer": "vite build",
+    "dist": "vite build && electron-builder --win",
+    "dist:dir": "vite build && electron-builder --dir",
+    "preview": "vite preview --port 3000 --host 0.0.0.0",
     "lint": "tsc --noEmit",
-    "test": "vitest run",
-    "electron:build": "electron-builder --win nsis --x64",
-    "electron:dev": "electron .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "build:installer": "vite build && electron-builder --win"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^5.0.4",
-    "ai": "^7.0.89",
-    "dotenv": "^17.2.3",
+    "@ai-sdk/react": "^4.0.95",
+    "ai": "^7.0.92",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "fast-xml-parser": "^5.11.1",
-    "framer-motion": "^13.1.1",
-    "i18next": "^26.4.1",
-    "idb": "^8.0.3",
-    "jspdf": "^4.2.1",
+    "i18next": "^26.4.2",
+    "idb": "^8.0.2",
     "jszip": "^3.10.1",
-    "lucide-react": "^1.39.0",
-    "motion": "^12.23.24",
+    "lucide-react": "^1.16.0",
+    "motion": "^12.4.7",
     "pptx-react-viewer": "^3.1.5",
-    "react": "^19.0.1",
-    "react-dom": "^19.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "react-i18next": "^17.0.13",
-    "react-icons": "^5.7.0",
-    "react-resizable-panels": "2.1.9",
-    "uuid": "^14.0.2",
-    "vite": "^6.2.3",
-    "zustand": "^5.0.15"
+    "react-resizable-panels": "^2.1.7",
+    "uuid": "^10.0.0",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.6",
+    "@tailwindcss/vite": "^4.0.0",
     "@types/express": "^4.17.21",
-    "@types/jest": "^30.0.0",
-    "@types/node": "^26.4.0",
-    "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
-    "jsdom": "^30.0.1",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "vitest": "^4.1.11",
-    "electron": "^30.0.0",
-    "electron-builder": "^24.13.3"
-  },
-  "main": "electron/main.cjs",
-  "build": {
-    "appId": "com.simpleworship.app",
-    "productName": "SimpleWorship",
-    "artifactName": "${productName}-Setup-${version}.${ext}",
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "public/favicon.ico",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "perMachine": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "SimpleWorship",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
-    },
-    "fileAssociations": [
-      {
-        "ext": "sws",
-        "name": "SimpleWorship Service",
-        "description": "SimpleWorship Service Package",
-        "icon": "public/favicon.ico",
-        "role": "Editor"
-      }
-    ]
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0"
   }
 }

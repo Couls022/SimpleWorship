@@ -160,7 +160,7 @@ export default function SongEditorModal({
   const [hasShadow, setHasShadow] = useState(initialTheme?.textShadow ?? true);
   const [shadowColor, setShadowColor] = useState(initialTheme?.shadowColor || 'rgba(0,0,0,0.85)');
   const [lineHeight, setLineHeight] = useState<number>(initialTheme?.lineHeight || 1.35);
-  const [textTransform, setTextTransform] = useState<'none' | 'uppercase' | 'capitalize'>(initialTheme?.textTransform || 'none');
+  const [textTransform, setTextTransform] = useState<'none' | 'uppercase' | 'lowercase' | 'capitalize'>(initialTheme?.textTransform || 'none');
 
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '4:3'>('16:9');
   const [transitionType, setTransitionType] = useState('Blend');
@@ -687,7 +687,6 @@ export default function SongEditorModal({
                   >
                     <option value="Hymns" className="bg-[#1f2229] text-gray-200">Hymns</option>
                     <option value="Special Number" className="bg-[#1f2229] text-gray-200">Special Number</option>
-                    <option value="Scripture" className="bg-[#1f2229] text-gray-200">Scripture Reading</option>
                     <option value="Presentation" className="bg-[#1f2229] text-gray-200">Presentation</option>
                   </select>
                 </div>

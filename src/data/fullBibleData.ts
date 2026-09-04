@@ -172,9 +172,20 @@ export const AUTHENTIC_VERSES_DB: Record<string, { kjv: string; tagalog: string 
  */
 export async function loadAllAuthenticBibleVerses(): Promise<ScriptureVerse[]> {
   try {
+    const fetchJson = async (filename: string) => {
+      const paths = [`/bibles/${filename}`, `./bibles/${filename}`, `bibles/${filename}`];
+      for (const p of paths) {
+        try {
+          const r = await fetch(p);
+          if (r.ok) return await r.json();
+        } catch (_) {}
+      }
+      return {};
+    };
+
     const [kjvRes, tagRes] = await Promise.all([
-      fetch('/bibles/kjv.json').then(r => r.ok ? r.json() : {}),
-      fetch('/bibles/tagalog.json').then(r => r.ok ? r.json() : {})
+      fetchJson('kjv.json'),
+      fetchJson('tagalog.json')
     ]);
 
     const verses: ScriptureVerse[] = [];

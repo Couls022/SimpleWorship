@@ -23,7 +23,7 @@ export async function runDatabaseSeeder(
 
     // Check if already seeded unless force === true
     if (!force) {
-      const isAlreadySeeded = await db.get('settings', 'library_seeded_v5');
+      const isAlreadySeeded = await db.get('settings', 'library_seeded_v6');
       if (isAlreadySeeded) {
         const songCount = await db.count('songs');
         const scCount = await db.count('scriptures');
@@ -68,8 +68,8 @@ export async function runDatabaseSeeder(
 
     // Mark as seeded
     await db.put('settings', {
-      id: 'library_seeded_v5',
-      key: 'library_seeded_v5',
+      id: 'library_seeded_v6',
+      key: 'library_seeded_v6',
       value: true,
       timestamp: Date.now(),
       songsCount: hymnalSongs.length,

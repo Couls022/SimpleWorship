@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
@@ -17,6 +18,16 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    build: {
+      target: 'esnext',
+      minify: 'esbuild' as const,
+      cssMinify: true,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 5000,
+      rollupOptions: {
+        treeshake: true,
+      },
     },
   };
 });

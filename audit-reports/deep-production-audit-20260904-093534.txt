@@ -1,0 +1,1236 @@
+EasyWorship 8 Deep Production Audit
+Generated: Fri Sep  4 09:35:34 AM UTC 2026
+Root: /app/applet
+
+============================================================
+1. DEVELOPMENT ENVIRONMENT
+============================================================
+
+>>> Node version
+COMMAND: node --version
+------------------------------------------------------------
+v22.23.2
+
+>>> NPM version
+COMMAND: npm --version
+------------------------------------------------------------
+10.9.8
+
+>>> NPX version
+COMMAND: npx --version
+------------------------------------------------------------
+10.9.8
+
+>>> Git version
+COMMAND: git --version
+------------------------------------------------------------
+git version 2.34.1
+
+============================================================
+2. PROJECT STRUCTURE
+============================================================
+
+>>> Top-level files
+COMMAND: ls -lh
+------------------------------------------------------------
+total 217K
+drwxr-xr-x 1 root root   80 Sep  4 09:35 audit-reports
+-rw-r--r-- 1 root root 147K Sep  4 07:27 bun.lock
+drwxr-xr-x 1 root root  120 Sep  4 09:34 dist
+drwxr-xr-x 1 root root  160 Sep  4 07:40 dist-electron
+drwxr-xr-x 1 root root   80 Sep  4 07:27 electron
+-rw-r--r-- 1 root root  653 Sep  4 07:27 electron-builder.yml
+-rw-r--r-- 1 root root  443 Sep  4 07:27 fix_syntax.cjs
+-rw-r--r-- 1 root root   57 Sep  4 07:27 get_view_menu.sh
+-rw-r--r-- 1 root root 1.1K Sep  4 07:27 index.html
+-rw-r--r-- 1 root root  317 Sep  4 07:27 metadata.json
+drwxr-xr-x 1 root root 8.0K Sep  4 07:30 node_modules
+-rw-r--r-- 1 root root 1.5K Sep  4 07:27 package.json
+-rw-r--r-- 1 root root 3.3K Sep  4 07:27 patch_grid_2.cjs
+-rw-r--r-- 1 root root 3.2K Sep  4 07:27 patch_grid.cjs
+-rw-r--r-- 1 root root 6.8K Sep  4 07:27 patch_live_panel_2.cjs
+-rw-r--r-- 1 root root 6.6K Sep  4 07:27 patch_live_panel.cjs
+-rw-r--r-- 1 root root  18K Sep  4 07:27 patch_livepanel_full.ts
+-rw-r--r-- 1 root root 6.6K Sep  4 07:27 patch_live_panel.js
+drwxr-xr-x 1 root root   80 Sep  4 07:27 public
+-rw-r--r-- 1 root root  772 Sep  4 07:27 puppeteer_test.cjs
+-rw-r--r-- 1 root root  756 Sep  4 07:27 puppeteer_test.js
+-rw-r--r-- 1 root root 4.7K Sep  4 07:27 run_audit.sh
+-rw-r--r-- 1 root root   65 Sep  4 07:27 run_grep_sb.sh
+-rw-r--r-- 1 root root   61 Sep  4 07:27 run_grep.sh
+-rw-r--r-- 1 root root   43 Sep  4 07:27 run_ls.sh
+drwxr-xr-x 1 root root  220 Sep  4 07:27 scripts
+-rw-r--r-- 1 root root 4.4K Sep  4 07:27 server.ts
+drwxr-xr-x 1 root root  320 Sep  4 07:27 src
+-rw-r--r-- 1 root root   75 Sep  4 07:27 test_i18n2.cjs
+-rw-r--r-- 1 root root   66 Sep  4 07:27 test_i18n.cjs
+-rw-r--r-- 1 root root   60 Sep  4 07:27 test_i18next.cjs
+-rw-r--r-- 1 root root   78 Sep  4 07:27 test_react_i18next.cjs
+drwxr-xr-x 1 root root  100 Sep  4 07:27 tests
+-rw-r--r-- 1 root root  293 Sep  4 07:27 test_useTranslation.mjs
+-rw-r--r-- 1 root root    8 Sep  4 07:27 test_wait.sh
+drwxr-xr-x 1 root root   60 Sep  4 07:27 tmp
+-rw-r--r-- 1 root root  610 Sep  4 07:27 tsconfig.json
+-rw-r--r-- 1 root root  952 Sep  4 07:27 vite.config.ts
+-rw-r--r-- 1 root root  333 Sep  4 07:27 vitest.config.ts
+
+>>> Package files
+COMMAND: find . -maxdepth 3 -name 'package*.json' -o -name '*lock*'
+------------------------------------------------------------
+./bun.lock
+./package.json
+./node_modules/lightningcss/package.json
+./node_modules/swr/package.json
+./node_modules/throttleit/package.json
+./node_modules/accepts/package.json
+./node_modules/array-flatten/package.json
+./node_modules/zod/package.json
+./node_modules/body-parser/package.json
+./node_modules/content-disposition/package.json
+./node_modules/content-type/package.json
+./node_modules/cookie/package.json
+./node_modules/cookie-signature/package.json
+./node_modules/depd/package.json
+./node_modules/debug/package.json
+./node_modules/escape-html/package.json
+./node_modules/encodeurl/package.json
+./node_modules/etag/package.json
+./node_modules/finalhandler/package.json
+./node_modules/fresh/package.json
+./node_modules/http-errors/package.json
+./node_modules/methods/package.json
+./node_modules/merge-descriptors/package.json
+./node_modules/on-finished/package.json
+./node_modules/path-to-regexp/package.json
+./node_modules/parseurl/package.json
+./node_modules/proxy-addr/package.json
+./node_modules/qs/package.json
+./node_modules/range-parser/package.json
+./node_modules/safe-buffer/package.json
+./node_modules/serve-static/package.json
+./node_modules/send/package.json
+./node_modules/setprototypeof/package.json
+./node_modules/statuses/package.json
+./node_modules/utils-merge/package.json
+./node_modules/type-is/package.json
+./node_modules/vary/package.json
+./node_modules/lie/package.json
+./node_modules/readable-stream/package.json
+./node_modules/pako/package.json
+./node_modules/setimmediate/package.json
+./node_modules/tslib/package.json
+./node_modules/framer-motion/package.json
+./node_modules/y-websocket/package.json
+./node_modules/y-webrtc/package.json
+./node_modules/clsx/package.json
+./node_modules/yjs/package.json
+./node_modules/dompurify/package.json
+./node_modules/postcss/package.json
+./node_modules/picomatch/package.json
+./node_modules/pptx-viewer-mcp/package.json
+./node_modules/tinyglobby/package.json
+./node_modules/fast-xml-parser/package.json
+./node_modules/scheduler/package.json
+./node_modules/html-parse-stringify/package.json
+./node_modules/use-sync-external-store/package.json
+./node_modules/tailwind-merge/package.json
+./node_modules/jiti/package.json
+./node_modules/magic-string/package.json
+./node_modules/enhanced-resolve/package.json
+./node_modules/source-map-js/package.json
+./node_modules/convert-source-map/package.json
+./node_modules/gensync/package.json
+./node_modules/chalk/package.json
+./node_modules/esbuild/package.json
+./node_modules/fdir/package.json
+./node_modules/yargs/package.json
+./node_modules/json5/package.json
+./node_modules/graceful-fs/package.json
+./node_modules/progress/package.json
+./node_modules/dmg-builder/package.json
+./node_modules/env-paths/package.json
+./node_modules/ajv/package.json
+./node_modules/asn1js/package.json
+./node_modules/async-exit-hook/package.json
+./node_modules/chromium-pickle-js/package.json
+./node_modules/dotenv-expand/package.json
+./node_modules/ejs/package.json
+./node_modules/html2canvas-pro/package.json
+./node_modules/hosted-git-info/package.json
+./node_modules/electron-publish/package.json
+./node_modules/minimatch/package.json
+./node_modules/isbinaryfile/package.json
+./node_modules/sumchecker/package.json
+./node_modules/sumchecker/yarn.lock
+./node_modules/proper-lockfile
+./node_modules/proper-lockfile/package.json
+./node_modules/semver/package.json
+./node_modules/resedit/package.json
+./node_modules/tiny-async-pool/package.json
+./node_modules/unzipper/package.json
+./node_modules/which/package.json
+./node_modules/undici/package.json
+./node_modules/cross-spawn/package.json
+./node_modules/temp-file/package.json
+./node_modules/http-proxy-agent/package.json
+./node_modules/sanitize-filename/package.json
+./node_modules/https-proxy-agent/package.json
+./node_modules/stat-mode/package.json
+./node_modules/ansi-styles/package.json
+./node_modules/sax/package.json
+./node_modules/source-map-support/package.json
+./node_modules/electron-builder-squirrel-windows/package.json
+./node_modules/fs-extra/package.json
+./node_modules/escalade/package.json
+./node_modules/get-caller-file/package.json
+./node_modules/cliui/package.json
+./node_modules/universalify/package.json
+./node_modules/tar/package.json
+./node_modules/yargs-parser/package.json
+./node_modules/string-width/package.json
+./node_modules/nanoid/package.json
+./node_modules/supports-color/package.json
+./node_modules/jsonfile/package.json
+./node_modules/jspdf/package.json
+./node_modules/plist/package.json
+./node_modules/picocolors/package.json
+./node_modules/y18n/package.json
+./node_modules/pkce-challenge/package.json
+./node_modules/json-schema/package.json
+./node_modules/eventsource-parser/package.json
+./node_modules/dequal/package.json
+./node_modules/mime-types/package.json
+./node_modules/negotiator/package.json
+./node_modules/bytes/package.json
+./node_modules/raw-body/package.json
+./node_modules/unpipe/package.json
+./node_modules/ms/package.json
+./node_modules/inherits/package.json
+./node_modules/toidentifier/package.json
+./node_modules/destroy/package.json
+./node_modules/forwarded/package.json
+./node_modules/ee-first/package.json
+./node_modules/ipaddr.js/package.json
+./node_modules/js-yaml/package.json
+./node_modules/side-channel/package.json
+./node_modules/mime/package.json
+./node_modules/core-util-is/package.json
+./node_modules/immediate/package.json
+./node_modules/process-nextick-args/package.json
+./node_modules/string_decoder/package.json
+./node_modules/util-deprecate/package.json
+./node_modules/es-define-property/package.json
+./node_modules/isarray/package.json
+./node_modules/ws/package.json
+./node_modules/motion-utils/package.json
+./node_modules/lib0/package.json
+./node_modules/lib0/deno.lock
+./node_modules/simple-peer/package.json
+./node_modules/css-line-break/package.json
+./node_modules/y-protocols/package.json
+./node_modules/text-segmentation/package.json
+./node_modules/fast-xml-builder/package.json
+./node_modules/iconv-lite/package.json
+./node_modules/strnum/package.json
+./node_modules/xml-naming/package.json
+./node_modules/rollup/package.json
+./node_modules/canvg/package.json
+./node_modules/motion-dom/package.json
+./node_modules/react-icons/package.json
+./node_modules/is-unsafe/package.json
+./node_modules/path-expression-matcher/package.json
+./node_modules/fflate/package.json
+./node_modules/tapable/package.json
+./node_modules/html2canvas/package.json
+./node_modules/js-tokens/package.json
+./node_modules/jsesc/package.json
+./node_modules/browserslist/package.json
+./node_modules/lru-cache/package.json
+./node_modules/commander/package.json
+./node_modules/glob/package.json
+./node_modules/minimist/package.json
+./node_modules/global-agent/package.json
+./node_modules/promise-retry/package.json
+./node_modules/got/package.json
+./node_modules/compare-version/package.json
+./node_modules/node-abi/package.json
+./node_modules/pptx-viewer-core/package.json
+./node_modules/node-api-version/package.json
+./node_modules/tmp-promise/package.json
+./node_modules/core-js/package.json
+./node_modules/lodash/package.json
+./node_modules/webcrypto-core/package.json
+./node_modules/read-binary-file-arch/package.json
+./node_modules/fast-uri/package.json
+./node_modules/node-gyp/package.json
+./node_modules/json-schema-traverse/package.json
+./node_modules/require-from-string/package.json
+./node_modules/fast-deep-equal/package.json
+./node_modules/dir-compare/package.json
+./node_modules/pvutils/package.json
+./node_modules/aws4/package.json
+./node_modules/pvtsutils/package.json
+./node_modules/form-data/package.json
+./node_modules/brace-expansion/package.json
+./node_modules/jake/package.json
+./node_modules/bytestreamjs/package.json
+./node_modules/argparse/package.json
+./node_modules/base64-js/package.json
+./node_modules/xmlbuilder/package.json
+./node_modules/signal-exit/package.json
+./node_modules/retry/package.json
+./node_modules/pe-library/package.json
+./node_modules/chownr/package.json
+./node_modules/minizlib/package.json
+./node_modules/duplexer2/package.json
+./node_modules/minipass/package.json
+./node_modules/yallist/package.json
+./node_modules/node-int64/package.json
+./node_modules/bluebird/package.json
+./node_modules/isexe/package.json
+./node_modules/shebang-command/package.json
+./node_modules/path-key/package.json
+./node_modules/agent-base/package.json
+./node_modules/truncate-utf8-bytes/package.json
+./node_modules/buffer-from/package.json
+./node_modules/has-flag/package.json
+./node_modules/color-convert/package.json
+./node_modules/strip-ansi/package.json
+./node_modules/wrap-ansi/package.json
+./node_modules/emoji-regex/package.json
+./node_modules/source-map/package.json
+./node_modules/is-fullwidth-code-point/package.json
+./node_modules/mime-db/package.json
+./node_modules/ci-info/package.json
+./node_modules/media-typer/package.json
+./node_modules/isomorphic.js/package.json
+./node_modules/side-channel-list/package.json
+./node_modules/err-code/package.json
+./node_modules/es-errors/package.json
+./node_modules/queue-microtask/package.json
+./node_modules/randombytes/package.json
+./node_modules/detect-libc/package.json
+./node_modules/utrie/package.json
+./node_modules/side-channel-map/package.json
+./node_modules/ajv-formats/package.json
+./node_modules/safer-buffer/package.json
+./node_modules/eventsource/package.json
+./node_modules/cors/package.json
+./node_modules/express-rate-limit/package.json
+./node_modules/jose/package.json
+./node_modules/get-browser-rtc/package.json
+./node_modules/json-schema-typed/package.json
+./node_modules/zod-to-json-schema/package.json
+./node_modules/emf-converter/package.json
+./node_modules/anynum/package.json
+./node_modules/mtx-decompressor/package.json
+./node_modules/regenerator-runtime/package.json
+./node_modules/utif/package.json
+./node_modules/raf/package.json
+./node_modules/rgbcolor/package.json
+./node_modules/stackblur-canvas/package.json
+./node_modules/iobuffer/package.json
+./node_modules/hono/package.json
+./node_modules/svg-pathdata/package.json
+./node_modules/baseline-browser-mapping/package.json
+./node_modules/electron-to-chromium/package.json
+./node_modules/node-releases/package.json
+./node_modules/fs.realpath/package.json
+./node_modules/once/package.json
+./node_modules/inflight/package.json
+./node_modules/boolean/package.json
+./node_modules/require-directory/package.json
+./node_modules/es6-error/package.json
+./node_modules/lightningcss-linux-x64-gnu/package.json
+./node_modules/serialize-error/package.json
+./node_modules/matcher/package.json
+./node_modules/path-is-absolute/package.json
+./node_modules/cacheable-lookup/package.json
+./node_modules/caniuse-lite/package.json
+./node_modules/decompress-response/package.json
+./node_modules/lowercase-keys/package.json
+./node_modules/p-cancelable/package.json
+./node_modules/cacheable-request/package.json
+./node_modules/responselike/package.json
+./node_modules/nopt/package.json
+./node_modules/exponential-backoff/package.json
+./node_modules/tmp/package.json
+./node_modules/roarr/package.json
+./node_modules/async/package.json
+./node_modules/filelist/package.json
+./node_modules/asynckit/package.json
+./node_modules/http2-wrapper/package.json
+./node_modules/combined-stream/package.json
+./node_modules/combined-stream/yarn.lock
+./node_modules/hasown/package.json
+./node_modules/es-set-tostringtag/package.json
+./node_modules/balanced-match/package.json
+./node_modules/temp/package.json
+./node_modules/utf8-byte-length/package.json
+./node_modules/shebang-regex/package.json
+./node_modules/color-name/package.json
+./node_modules/ansi-regex/package.json
+./node_modules/get-intrinsic/package.json
+./node_modules/ieee754/package.json
+./node_modules/call-bound/package.json
+./node_modules/base64-arraybuffer/package.json
+./node_modules/object-assign/package.json
+./node_modules/performance-now/package.json
+./node_modules/ip-address/package.json
+./node_modules/wrappy/package.json
+./node_modules/router/package.json
+./node_modules/concat-map/package.json
+./node_modules/escape-string-regexp/package.json
+./node_modules/globalthis/package.json
+./node_modules/proc-log/package.json
+./node_modules/semver-compare/package.json
+./node_modules/detect-node/package.json
+./node_modules/json-stringify-safe/package.json
+./node_modules/sprintf-js/package.json
+./node_modules/type-fest/package.json
+./node_modules/defer-to-connect/package.json
+./node_modules/update-browserslist-db/package.json
+./node_modules/clone-response/package.json
+./node_modules/normalize-url/package.json
+./node_modules/fast-png/package.json
+./node_modules/get-stream/package.json
+./node_modules/keyv/package.json
+./node_modules/http-cache-semantics/package.json
+./node_modules/mimic-response/package.json
+./node_modules/resolve-alpn/package.json
+./node_modules/quick-lru/package.json
+./node_modules/abbrev/package.json
+./node_modules/delayed-stream/package.json
+./node_modules/yocto-queue/package.json
+./node_modules/cross-dirname/package.json
+./node_modules/function-bind/package.json
+./node_modules/has-tostringtag/package.json
+./node_modules/mkdirp/package.json
+./node_modules/call-bind-apply-helpers/package.json
+./node_modules/rimraf/package.json
+./node_modules/es-object-atoms/package.json
+./node_modules/get-proto/package.json
+./node_modules/gopd/package.json
+./node_modules/has-symbols/package.json
+./node_modules/is-promise/package.json
+./node_modules/math-intrinsics/package.json
+./node_modules/define-properties/package.json
+./node_modules/pump/package.json
+./node_modules/json-buffer/package.json
+./node_modules/dunder-proto/package.json
+./node_modules/define-data-property/package.json
+./node_modules/has-property-descriptors/package.json
+./node_modules/object-keys/package.json
+./node_modules/end-of-stream/package.json
+./node_modules/object-inspect/package-support.json
+./node_modules/object-inspect/package.json
+./node_modules/buffer/package.json
+./node_modules/electron-winstaller/package.json
+./node_modules/at-least-node/package.json
+./node_modules/postject/package.json
+./node_modules/lightningcss-linux-x64-musl/package.json
+./node_modules/pkijs/package.json
+./node_modules/p-limit/package.json
+./node_modules/lazy-val/package.json
+./node_modules/three/package.json
+./node_modules/side-channel-weakmap/package.json
+./node_modules/uuid/package.json
+./node_modules/builder-util-runtime/package.json
+./node_modules/undici-types/package.json
+./node_modules/react-i18next/package.json
+./node_modules/react-dom/package.json
+./node_modules/react/package.json
+./node_modules/builder-util/package.json
+./node_modules/zustand/package.json
+./node_modules/react-refresh/package.json
+./node_modules/csstype/package.json
+./node_modules/simple-update-notifier/package.json
+./node_modules/app-builder-lib/package.json
+./node_modules/i18next/package.json
+./node_modules/express/package.json
+./node_modules/pptx-react-viewer/package.json
+./node_modules/dotenv/package.json
+./node_modules/motion/package.json
+./node_modules/ai/package.json
+./node_modules/electron/package.json
+./node_modules/electron-builder/package.json
+./node_modules/lucide-react/package.json
+./node_modules/tailwindcss/package.json
+./node_modules/react-resizable-panels/package.json
+./node_modules/jszip/package.json
+./node_modules/vite/package.json
+./node_modules/idb/package.json
+./node_modules/typescript/package.json
+
+============================================================
+3. PACKAGE.JSON
+============================================================
+
+>>> package.json
+COMMAND: cat package.json
+------------------------------------------------------------
+{
+  "name": "simpleworship",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SimpleWorship Church Presentation & Multi-Display Software",
+  "author": "SimpleWorship Team",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --port 3000 --host 0.0.0.0",
+    "dev:electron": "electron .",
+    "build": "vite build",
+    "build:renderer": "vite build",
+    "dist": "vite build && electron-builder --win",
+    "dist:dir": "vite build && electron-builder --dir",
+    "preview": "vite preview --port 3000 --host 0.0.0.0",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^4.0.95",
+    "ai": "^7.0.92",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "i18next": "^26.4.2",
+    "idb": "^8.0.2",
+    "jszip": "^3.10.1",
+    "lucide-react": "^1.16.0",
+    "motion": "^12.4.7",
+    "pptx-react-viewer": "^3.1.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^17.0.13",
+    "react-resizable-panels": "^2.1.7",
+    "uuid": "^10.0.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^4.0.0",
+    "typescript": "~5.7.2",
+    "vite": "^6.2.0"
+  }
+}
+
+============================================================
+4. DEPENDENCY HEALTH
+============================================================
+
+>>> NPM dependency tree
+COMMAND: npm ls --depth=0
+------------------------------------------------------------
+simpleworship@1.0.0 /app/applet
+├── @ai-sdk/react@4.0.95
+├── @tailwindcss/vite@4.3.3
+├── @types/express@4.17.25
+├── @types/node@22.20.1
+├── @types/react-dom@19.2.7
+├── @types/react@19.2.18
+├── @types/uuid@10.0.0
+├── @vitejs/plugin-react@4.7.0
+├── ai@7.0.92
+├── dotenv@16.6.1
+├── electron-builder@26.15.3
+├── electron@44.2.0
+├── express@4.22.2
+├── i18next@26.4.2
+├── idb@8.0.3
+├── jszip@3.10.1
+├── lucide-react@1.40.0
+├── motion@12.43.0
+├── pptx-react-viewer@3.5.3
+├── react-dom@19.2.8
+├── react-i18next@17.0.13
+├── react-resizable-panels@2.1.9
+├── react@19.2.8
+├── tailwindcss@4.3.3
+├── typescript@5.7.3
+├── uuid@10.0.0
+├── vite@6.4.3
+└── zustand@5.0.15
+
+
+>>> NPM audit
+COMMAND: npm audit || true
+------------------------------------------------------------
+npm error code ENOLOCK
+npm error audit This command requires an existing lockfile.
+npm error audit Try creating one first with: npm i --package-lock-only
+npm error audit Original error: loadVirtual requires existing shrinkwrap file
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-09-04T09_35_35_958Z-debug-0.log
+
+>>> Outdated packages
+COMMAND: npm outdated || true
+------------------------------------------------------------
+Package                 Current   Wanted  Latest  Location                             Depended by
+@types/express          4.17.25  4.17.25   5.0.6  node_modules/@types/express          applet
+@types/node             22.20.1  22.20.1  26.4.1  node_modules/@types/node             applet
+@vitejs/plugin-react      4.7.0    4.7.0   6.1.1  node_modules/@vitejs/plugin-react    applet
+dotenv                   16.6.1   16.6.1  17.4.2  node_modules/dotenv                  applet
+express                  4.22.2   4.22.2   5.2.1  node_modules/express                 applet
+motion                  12.43.0  12.43.0  13.2.0  node_modules/motion                  applet
+pptx-react-viewer         3.5.3    3.5.4   3.5.4  node_modules/pptx-react-viewer       applet
+react-resizable-panels    2.1.9    2.1.9  4.12.3  node_modules/react-resizable-panels  applet
+typescript                5.7.3    5.7.3   7.0.2  node_modules/typescript              applet
+uuid                     10.0.0   10.0.0  14.0.2  node_modules/uuid                    applet
+vite                      6.4.3    6.4.3   8.2.2  node_modules/vite                    applet
+
+============================================================
+5. TYPESCRIPT / JAVASCRIPT HEALTH
+============================================================
+
+>>> TypeScript config
+COMMAND: cat tsconfig.json
+------------------------------------------------------------
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["node_modules", "dist", "electron", "release"]
+}
+
+>>> TypeScript check
+COMMAND: npx tsc --noEmit
+------------------------------------------------------------
+
+============================================================
+6. CODE QUALITY
+============================================================
+
+>>> NPM scripts
+COMMAND: cat package.json | grep -A 10 '"scripts"'
+------------------------------------------------------------
+  "scripts": {
+    "dev": "vite --port 3000 --host 0.0.0.0",
+    "dev:electron": "electron .",
+    "build": "vite build",
+    "build:renderer": "vite build",
+    "dist": "vite build && electron-builder --win",
+    "dist:dir": "vite build && electron-builder --dir",
+    "preview": "vite preview --port 3000 --host 0.0.0.0",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+
+>>> ESLint
+COMMAND: npm run lint || true
+------------------------------------------------------------
+
+> simpleworship@1.0.0 lint
+> tsc --noEmit
+
+
+============================================================
+7. TESTING
+============================================================
+
+>>> Test script
+COMMAND: npm run test || true
+------------------------------------------------------------
+npm error Missing script: "test"
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-09-04T09_36_03_484Z-debug-0.log
+
+============================================================
+8. APPLICATION BUILD
+============================================================
+
+>>> Production build
+COMMAND: npm run build || true
+------------------------------------------------------------
+
+> simpleworship@1.0.0 build
+> vite build
+
+vite v6.4.3 building for production...
+transforming...
+node_modules/zod/v4/core/util.js (330:0): A comment
+
+"// Wrapped in a `@__PURE__` IIFE: esbuild never tree-shakes a top-level initializer that contains a member access on `Number`, so the bare object literal survived into every bundle."
+
+in "node_modules/zod/v4/core/util.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+node_modules/zod/v4/core/regexes.js (70:0): A comment
+
+"/** Anchors a pattern source. The interpolation lives here rather than at the call site because
+ * esbuild will not drop a `@__PURE__` call whose own argument interpolates a variable, but it
+ * will drop `anchor(dateSource)`. Keeping it inline pinned `date` into every bundle. */"
+
+in "node_modules/zod/v4/core/regexes.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
+✓ 2617 modules transformed.
+rendering chunks...
+[plugin vite:reporter] 
+(!) /app/applet/src/db/index.ts is dynamically imported by /app/applet/src/components/LivePanel.tsx, /app/applet/src/components/OpenScheduleModal.tsx, /app/applet/src/components/SchedulePanel.tsx but also statically imported by /app/applet/src/App.tsx, /app/applet/src/components/OpenScheduleModal.tsx, /app/applet/src/components/SchedulePanel.tsx, /app/applet/src/components/SystemDiagnosticsModal.tsx, /app/applet/src/components/TopToolbar.tsx, /app/applet/src/components/options/OptionsDialog.tsx, /app/applet/src/components/presentation-editor/ImagePickerModal.tsx, /app/applet/src/core/PresentationContentResolver.ts, /app/applet/src/db/assets.ts, /app/applet/src/db/backup.ts, /app/applet/src/db/presentations.ts, /app/applet/src/store/useStore.ts, /app/applet/src/utils/seedDatabase.ts, dynamic import will not move module into another chunk.
+
+dist/index.html                                           1.21 kB
+dist/assets/index-CiwntnPS.css                          298.78 kB
+dist/assets/PieChart3DScene-INBL4F5Z-B4VAfp3V.js          0.46 kB
+dist/assets/Area3DChartScene-EYNCHRB3-DhGjAp_2.js         0.46 kB
+dist/assets/Bar3DChartScene-6HQ6QWNB-BZt7SRkH.js          0.46 kB
+dist/assets/Line3DChartScene-QYBKXNOD-Dbc6iXHs.js         0.46 kB
+dist/assets/SurfaceChart3DScene-EV6DBPJS-C-qkM_on.js      0.46 kB
+dist/assets/Model3DScene-YTLWTG52-rCSYy90C.js             0.54 kB
+dist/assets/chunk-FXGO5KLU-eTUquisP.js                    3.76 kB
+dist/assets/y-websocket-HUEA7LH7-Db7kzLTi.js              5.25 kB
+dist/assets/SmartArt3DScene-XCFVGCXE-dSoPFUYU.js          5.54 kB
+dist/assets/OrbitControls-ZTGHPI5G-CeORDiPO.js           19.81 kB
+dist/assets/AiChatPanel-L2HGGEND-BYNJpa19.js             22.45 kB
+dist/assets/index-D0Iqkeuy.js                            32.60 kB
+dist/assets/GLTFLoader-374ZNTXW-CBulDUIr.js              45.62 kB
+dist/assets/UTIF-BiftDpnL.js                             85.47 kB
+dist/assets/UTIF-LAD5QYGQ-BlxHEwtL.js                    85.74 kB
+dist/assets/yjs-4ED7E5CZ-DlcOVC0s.js                     95.47 kB
+dist/assets/y-webrtc-7DLWG3LJ-bCKpuAl_.js               108.58 kB
+dist/assets/html2canvas-pro.esm-e3oTQVbh.js             251.92 kB
+dist/assets/index-BqrVP2_1.js                           404.80 kB
+dist/assets/three.module-AC7ESV4W-23P9pxKP.js           734.23 kB
+dist/assets/index-lUhEU4ZP.js                         8,034.84 kB
+
+(!) Some chunks are larger than 5000 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 34.19s
+
+============================================================
+9. WINDOWS PACKAGING / INSTALLER
+============================================================
+
+>>> Installer scripts
+COMMAND: npm run build:installer || echo 'No build:installer script'
+------------------------------------------------------------
+npm error Missing script: "build:installer"
+npm error
+npm error To see a list of scripts, run:
+npm error   npm run
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-09-04T09_36_38_690Z-debug-0.log
+No build:installer script
+
+>>> Electron Builder version
+COMMAND: npx electron-builder --version || echo 'Not installed'
+------------------------------------------------------------
+26.15.3
+
+============================================================
+10. ELECTRON CONFIGURATION
+============================================================
+
+>>> Electron Configs
+COMMAND: for f in electron-builder.yml electron-builder.json forge.config.js vite.config.ts; do if [ -f $f ]; then echo 'FOUND: ' $f; cat $f; fi; done
+------------------------------------------------------------
+FOUND:  electron-builder.yml
+appId: com.simpleworship.app
+productName: SimpleWorship
+directories:
+  output: dist-electron
+  buildResources: build
+files:
+  - dist/**/*
+  - electron/**/*
+extraMetadata:
+  main: electron/main.cjs
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+  icon: public/branding/logo/SimpleWorship.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: SimpleWorship
+fileAssociations:
+  - ext: sws
+    name: SimpleWorship Service
+    description: SimpleWorship Service Package
+    role: Editor
+FOUND:  vite.config.ts
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import {defineConfig} from 'vite';
+
+export default defineConfig(() => {
+  return {
+    base: './',
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
+      },
+    },
+    server: {
+      // HMR is disabled in AI Studio via DISABLE_HMR env var.
+      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      hmr: process.env.DISABLE_HMR !== 'true',
+      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+    build: {
+      target: 'esnext',
+      minify: 'esbuild' as const,
+      cssMinify: true,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 5000,
+      rollupOptions: {
+        treeshake: true,
+      },
+    },
+  };
+});
+
+============================================================
+11. SOURCE CODE INVENTORY
+============================================================
+
+>>> TS/JS files count
+COMMAND: find . -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' | wc -l
+------------------------------------------------------------
+17360
+
+>>> Largest source files
+COMMAND: find src electron -type f -exec ls -sh {} + | sort -rh | head -n 20
+------------------------------------------------------------
+118K src/components/options/OptionsDialog.tsx
+ 83K src/components/PresentationEditorModal.tsx
+ 71K src/components/resources/ThemesTab.tsx
+ 66K src/components/SongEditorModal.tsx
+ 63K src/data/baptistHymnal.ts
+ 60K src/components/TopToolbar.tsx
+ 51K src/components/presentation-editor/SlideCanvas.tsx
+ 51K src/components/MonitorPreviewCanvas.tsx
+ 48K src/components/SchedulePanel.tsx
+ 46K src/store/useStore.ts
+ 44K src/components/ProjectorView.tsx
+ 39K src/data/fullBibleData.ts
+ 37K src/components/workspace/BibleLibraryModule.tsx
+ 34K src/components/resources/SongsTab.tsx
+ 33K src/components/LivePanel.tsx
+ 29K src/components/CenterShortcutSettingsModal.tsx
+ 28K src/components/SystemDiagnosticsModal.tsx
+ 28K src/components/MediaLibraryModal.tsx
+ 26K src/utils/pptxParser.ts
+ 26K src/core/OfflineSearchEngine.ts
+
+============================================================
+12. UNFINISHED CODE / TECHNICAL DEBT
+============================================================
+
+>>> TODO/FIXME/HACK scan
+COMMAND: grep -rnE 'TODO|FIXME|HACK|XXX|TEMP|WORKAROUND|NOT_IMPLEMENTED|throw new Error' src/ electron/ | head -n 50
+------------------------------------------------------------
+src/components/SongEditorModal.tsx:921:        {/* TEMPLATE PRESETS PANEL */}
+src/components/resources/SongsTab.tsx:180:          throw new Error("Invalid format: expected an array of songs.");
+src/components/resources/SongsTab.tsx:186:          throw new Error("No valid songs found in the file.");
+src/components/presentation-editor/TemplateGalleryModal.tsx:39:export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
+src/components/presentation-editor/TemplateGalleryModal.tsx:757:  const filtered = TEMPLATE_DEFINITIONS.filter(
+src/components/PresentationEditorModal.tsx:64:import { TemplateGalleryModal, TEMPLATE_DEFINITIONS } from './presentation-editor/TemplateGalleryModal';
+src/components/PresentationEditorModal.tsx:349:      const starterTemplate = TEMPLATE_DEFINITIONS[0].slide;
+src/components/PresentationEditorModal.tsx:1966:      {/* TEMPLATE GALLERY MODAL */}
+src/db/backup.ts:83:          throw new Error('Invalid backup file format');
+src/core/CameraManager.ts:82:      throw new Error("navigator.mediaDevices is not available");
+src/core/SwsManager.ts:83:    if (!manifestFile) throw new Error('Invalid .sws file: Missing manifest.json');
+src/core/SwsManager.ts:89:      throw new Error(`Unsupported .sws version: ${manifest.formatVersion}. Please update SimpleWorship.`);
+src/core/SwsManager.ts:125:    if (!serviceFile) throw new Error('Invalid .sws file: Missing service.json');
+src/utils/pptxParser.ts:149:    throw new Error('Invalid PPTX binary: file is empty or truncated.');
+src/utils/pptxParser.ts:317:    throw new Error('No slides found in PPTX archive.');
+src/services/swsService.ts:181:    throw new Error('Unsupported SimpleWorship file structure');
+src/services/swsService.ts:183:    throw new Error(`Corrupted or invalid .sws file: ${err.message}`);
+src/context/WorkspaceContext.tsx:779:    throw new Error('useWorkspaceLayout must be used within a WorkspaceProvider');
+
+============================================================
+13. DEBUG CODE
+============================================================
+
+>>> console.log scan
+COMMAND: grep -rnE 'console\.log|console\.debug|debugger;' src/ electron/ | head -n 50
+------------------------------------------------------------
+src/components/MediaLibraryModal.tsx:151:      audio.play().catch(err => console.log("Audio play error:", err));
+
+============================================================
+14. SECURITY / SECRET SCAN
+============================================================
+
+>>> Environment files
+COMMAND: find . -maxdepth 2 -name '.env*' -o -name '*.pem' -o -name '*.key'
+------------------------------------------------------------
+./.env.example
+
+>>> Potential secrets
+COMMAND: grep -rnE 'API_KEY|SECRET|PASSWORD|TOKEN|PRIVATE_KEY' src/ electron/ package.json | head -n 30
+------------------------------------------------------------
+
+============================================================
+15. DATABASE / LOCAL STORAGE
+============================================================
+
+>>> Database references
+COMMAND: grep -rnE 'sqlite|SQLite|better-sqlite|sqlcipher|database|indexedDB|localStorage|electron-store' src/ electron/ | head -n 50
+------------------------------------------------------------
+src/components/options/OptionsDialog.tsx:71:    setSeedingProgress('Initializing database seeder...');
+src/components/options/OptionsDialog.tsx:1856:                          localStorage.removeItem('workspace-layout-v1-main');
+src/components/options/OptionsDialog.tsx:1857:                          localStorage.removeItem('workspace-layout-v1-top');
+src/components/options/OptionsDialog.tsx:1858:                          localStorage.removeItem('workspace-layout-v1-bottom');
+src/components/options/OptionsDialog.tsx:1859:                          localStorage.removeItem('workspace-layout-v1-preview');
+src/components/options/OptionsDialog.tsx:1860:                          localStorage.removeItem('workspace-layout-v1-live');
+src/components/options/OptionsDialog.tsx:1861:                          localStorage.removeItem('workspace-layout-v1-resources-tree');
+src/components/options/OptionsDialog.tsx:1862:                          localStorage.removeItem('workspace-layout-v1-songs-tree');
+src/components/options/OptionsDialog.tsx:1863:                          localStorage.removeItem('workspace-layout-v1-scriptures-tree');
+src/components/ModeratorView.tsx:312:        window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Schedule saved to local database!' }));
+src/components/resources/MediaTab.tsx:38:      const saved = localStorage.getItem('simpleworship_media_view_mode');
+src/components/resources/MediaTab.tsx:48:      localStorage.setItem('simpleworship_media_view_mode', mode);
+src/components/SchedulePanel.tsx:63:      return (localStorage.getItem('simpleworship_schedule_view_mode') as ScheduleViewMode) || 'medium';
+src/components/SchedulePanel.tsx:82:      localStorage.setItem('simpleworship_schedule_view_mode', mode);
+src/components/workspace/BibleLibraryModule.tsx:55:      const saved = localStorage.getItem('simpleworship_scriptures_view_options');
+src/components/workspace/BibleLibraryModule.tsx:74:        localStorage.setItem('simpleworship_scriptures_view_options', JSON.stringify(updated));
+src/components/workspace/QuickNotesContent.tsx:8:    return localStorage.getItem(NOTES_STORAGE_KEY) || '1. Welcome & Announcements (Pastor)\n2. Praise & Worship (Set 1)\n3. Scripture Reading - Psalm 23\n4. Sermon Message\n5. Closing Benediction';
+src/components/workspace/QuickNotesContent.tsx:14:    localStorage.setItem(NOTES_STORAGE_KEY, notes);
+src/components/workspace/QuickNotesContent.tsx:24:    localStorage.setItem(NOTES_STORAGE_KEY, notes);
+src/components/OpenScheduleModal.tsx:162:              <p className="text-xs text-gray-400">Manage, preview, or import worship schedules from database & disk</p>
+src/components/OpenScheduleModal.tsx:319:            {schedules.length} saved {schedules.length === 1 ? 'schedule' : 'schedules'} in offline database
+src/components/ProjectorView.tsx:104:  // Resolves race conditions and localStorage limitations by independently fetching 
+src/components/CenterShortcutSettingsModal.tsx:137:    { key: 'Ctrl + S', action: 'Save Schedule', desc: 'Save current order of service to local database', category: 'System', badge: 'Shortcut' },
+src/components/SystemDiagnosticsModal.tsx:97:      setActionMessage('Full database backup exported successfully!');
+src/components/SystemDiagnosticsModal.tsx:118:        setActionMessage('Backup restored and reloaded successfully into database!');
+src/components/LivePanel.tsx:63:      return (localStorage.getItem('simpleworship_live_view_mode') as ViewMode) || 'medium';
+src/components/LivePanel.tsx:73:      localStorage.setItem('simpleworship_live_view_mode', mode);
+src/components/WebBrowserModal.tsx:12:  { name: 'Hymnary.org', url: 'https://hymnary.org', desc: 'Comprehensive hymn text & history database' },
+src/components/WebBrowserModal.tsx:13:  { name: 'PraiseCharts', url: 'https://www.praisecharts.com', desc: 'Sheet music, lyrics, & arrangement database' },
+src/db/assets.ts:16: * Checks if an asset with the given hash already exists in the database.
+src/utils/seedDatabase.ts:86:    console.error('Failed to seed database:', error);
+src/utils/broadcastSync.ts:96:  // 2. Safe setItem to localStorage for cross-window StorageEvent listeners
+src/utils/broadcastSync.ts:99:    localStorage.setItem('simpleworship_live_sync_event', jsonString);
+src/utils/broadcastSync.ts:104:        localStorage.removeItem('simpleworship_live_sync_event');
+src/utils/broadcastSync.ts:111:        localStorage.setItem('simpleworship_live_sync_event', JSON.stringify(minimalSignal));
+src/store/useStore.ts:44:    const saved = localStorage.getItem('simpleworship_profiles_v1');
+src/store/useStore.ts:54:    const saved = localStorage.getItem('simpleworship_active_profile_v1');
+src/store/useStore.ts:62:    const saved = localStorage.getItem('simpleworship_shortcuts_v1');
+src/store/useStore.ts:82:    const saved = localStorage.getItem('simpleworship_system_options_v1');
+src/store/useStore.ts:238:    localStorage.setItem('simpleworship_profiles_v1', JSON.stringify(next));
+src/store/useStore.ts:243:    localStorage.setItem('simpleworship_profiles_v1', JSON.stringify(next));
+src/store/useStore.ts:249:    localStorage.setItem('simpleworship_profiles_v1', JSON.stringify(next));
+src/store/useStore.ts:250:    localStorage.setItem('simpleworship_active_profile_v1', nextActive);
+src/store/useStore.ts:254:    localStorage.setItem('simpleworship_active_profile_v1', id);
+src/store/useStore.ts:263:        localStorage.setItem('simpleworship_shortcuts_v1', JSON.stringify(next));
+src/store/useStore.ts:272:      localStorage.removeItem('simpleworship_shortcuts_v1');
+src/store/useStore.ts:282:        localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(next));
+src/store/useStore.ts:339:      localStorage.removeItem('simpleworship_system_options_v1');
+src/store/useStore.ts:392:        localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(newGroups.map(g => g.id)));
+src/store/useStore.ts:421:        localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(newGroups.map(g => g.id)));
+
+============================================================
+16. MEDIA / LIVE OUTPUT ARCHITECTURE
+============================================================
+
+>>> Video/media/display references
+COMMAND: grep -rnE 'video|audio|media|HTMLVideoElement|HTMLAudioElement|BrowserWindow|screen|display|fullscreen' src/ electron/ | head -n 50
+------------------------------------------------------------
+src/components/options/ScriptureLivePreview.tsx:190:            {ratioBadge} Widescreen ({width} × {height})
+src/components/options/SongLivePreview.tsx:258:  const showCopyrightOption = songOptions?.displayCopyrightInfo ?? true;
+src/components/options/SongLivePreview.tsx:289:            {ratioBadge} Widescreen ({width} × {height})
+src/components/options/FontInspectorPopup.tsx:98:        {/* Header Tabs (Font, Outline, Shadow, Margins, Format) matching screenshot */}
+src/components/options/OptionsDialog.tsx:606:                          checked={localOptions.mainOutput.song.displayCopyrightInfo}
+src/components/options/OptionsDialog.tsx:607:                          onChange={(e) => updateMainSong({ displayCopyrightInfo: e.target.checked })}
+src/components/options/OptionsDialog.tsx:613:                      {localOptions.mainOutput.song.displayCopyrightInfo && (
+src/components/options/OptionsDialog.tsx:631:                    {localOptions.mainOutput.song.displayCopyrightInfo && (
+src/components/options/OptionsDialog.tsx:691:                  {/* 4. Live Interactive Song Slide Preview (16:9 Widescreen & Output Resolution Based) */}
+src/components/options/OptionsDialog.tsx:957:                  {/* 5. Live Interactive Preview of Scripture Configuration (16:9 Widescreen & Output Resolution Based) */}
+src/components/options/OptionsDialog.tsx:1094:                  {/* Alert Subtabs: Nursery Alert vs Message Alert matching EasyWorship screenshot */}
+src/components/options/OptionsDialog.tsx:1711:                  {/* Slide Labels Table matching EasyWorship screenshot */}
+src/components/options/OptionsDialog.tsx:1799:                      <span>Show Live screen on startup</span>
+src/components/options/OptionsDialog.tsx:1964:                          <div className="text-[10px] text-gray-400 mt-0.5">Crisp light canvas. Best for day services & illuminated media booths.</div>
+src/components/options/OptionsDialog.tsx:2044:                          <div className="text-[11px] text-gray-400">Tightens toolbar and panel padding for maximum control screen density</div>
+src/components/ModeratorView.tsx:86:  // we immediately fetch it from IndexedDB and update the schedule item.
+src/components/ModeratorView.tsx:442:      <FloatingPanel id="mediaLibrary" icon={<Film size={13} />}>
+src/components/SongEditorModal.tsx:119:  // Active Ribbon Tool ('format' | 'template' | 'media' | 'animate' | null)
+src/components/SongEditorModal.tsx:737:              onClick={() => setActiveRibbonTool(activeRibbonTool === 'media' ? null : 'media')}
+src/components/SongEditorModal.tsx:739:                activeRibbonTool === 'media' ? 'bg-[#373c4d] text-cyan-300 font-bold' : 'hover:bg-[#2c303c] text-gray-300 hover:text-white'
+src/components/SongEditorModal.tsx:969:        {activeRibbonTool === 'media' && (
+src/components/SongEditorModal.tsx:1218:                  aspectRatio === '16:9' ? 'aspect-video w-full max-w-4xl' : 'aspect-4/3 w-full max-w-3xl'
+src/components/ResourcesPanel.tsx:37:    { id: 'media', label: 'Media', icon: <Film size={13} className="text-emerald-400" /> },
+src/components/resources/CamerasTab.tsx:94:                Connect a USB webcam or start DroidCam to broadcast live video.
+src/components/resources/CamerasTab.tsx:119:                  <div className="w-full aspect-video bg-black relative">
+src/components/resources/ThemesTab.tsx:57:  { name: 'Cosmic Nebula Space Loop', url: 'https://assets.mixkit.co/videos/preview/mixkit-nebula-clouds-and-bright-stars-in-space-41979-large.mp4' },
+src/components/resources/ThemesTab.tsx:58:  { name: 'Golden Light Particles Loop', url: 'https://assets.mixkit.co/videos/preview/mixkit-light-particles-in-motion-41870-large.mp4' },
+src/components/resources/ThemesTab.tsx:321:  const isVideo = resolvedStyles.backgroundType === 'video' && resolvedStyles.backgroundVideoUrl;
+src/components/resources/ThemesTab.tsx:533:                        { id: 'video', label: 'Motion Loop', icon: Film },
+src/components/resources/ThemesTab.tsx:650:                  {styles.backgroundType === 'video' && (
+src/components/resources/ThemesTab.tsx:1298:                    aspectRatio === '16:9' ? 'aspect-video' : aspectRatio === '4:3' ? 'aspect-4/3' : 'aspect-21/9'
+src/components/resources/ThemesTab.tsx:1306:                    <video
+src/components/resources/MediaTab.tsx:31:  const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'image' | 'audio' | 'video'>('all');
+src/components/resources/MediaTab.tsx:38:      const saved = localStorage.getItem('simpleworship_media_view_mode');
+src/components/resources/MediaTab.tsx:48:      localStorage.setItem('simpleworship_media_view_mode', mode);
+src/components/resources/MediaTab.tsx:76:    { id: 'audio', label: 'Audio' },
+src/components/resources/MediaTab.tsx:77:    { id: 'video', label: 'Videos' },
+src/components/resources/MediaTab.tsx:86:    if (activeMediaFilter === 'audio') return a.type === 'audio';
+src/components/resources/MediaTab.tsx:87:    if (activeMediaFilter === 'video') return a.type === 'video' || a.type === 'motion';
+src/components/resources/MediaTab.tsx:140:        const isVideo = file.type.startsWith('video');
+src/components/resources/MediaTab.tsx:141:        const isAudio = file.type.startsWith('audio');
+src/components/resources/MediaTab.tsx:142:        let assetType: 'image' | 'video' | 'audio' = 'image';
+src/components/resources/MediaTab.tsx:143:        if (isVideo) assetType = 'video';
+src/components/resources/MediaTab.tsx:144:        else if (isAudio) assetType = 'audio';
+src/components/resources/MediaTab.tsx:167:    setDefaultBackground(asset.url, 'songs', asset.type === 'video');
+src/components/resources/MediaTab.tsx:172:    setDefaultBackground(asset.url, 'scriptures', asset.type === 'video');
+src/components/resources/MediaTab.tsx:177:    setDefaultBackground(asset.url, 'presentations', asset.type === 'video');
+src/components/resources/MediaTab.tsx:182:    setDefaultBackground(asset.url, 'announcements', asset.type === 'video');
+src/components/resources/MediaTab.tsx:187:    setDefaultBackground(asset.url, 'logo', asset.type === 'video');
+src/components/resources/MediaTab.tsx:193:      type: 'media',
+
+============================================================
+17. ELECTRON IPC / SECURITY
+============================================================
+
+>>> IPC references
+COMMAND: grep -rnE 'ipcMain|ipcRenderer|contextBridge|preload|nodeIntegration|contextIsolation|webSecurity|sandbox' src/ electron/
+------------------------------------------------------------
+src/components/TopToolbar.tsx:183:      // Browser sandbox may restrict window.close
+src/components/WebBrowserModal.tsx:142:            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+src/data/bibleEngine.ts:157:  static async preload(): Promise<void> {
+electron/preload.cjs:1:const { contextBridge, ipcRenderer } = require('electron');
+electron/preload.cjs:3:contextBridge.exposeInMainWorld('electronAPI', {
+electron/preload.cjs:5:  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+electron/preload.cjs:6:  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize'),
+electron/preload.cjs:7:  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized'),
+electron/preload.cjs:8:  closeWindow: () => ipcRenderer.invoke('window:close'),
+electron/preload.cjs:11:    ipcRenderer.on('window:state-changed', handler);
+electron/preload.cjs:12:    return () => ipcRenderer.removeListener('window:state-changed', handler);
+electron/preload.cjs:14:  getDisplays: () => ipcRenderer.invoke('display:get-all'),
+electron/preload.cjs:17:    ipcRenderer.on('displays:changed', handler);
+electron/preload.cjs:18:    return () => ipcRenderer.removeListener('displays:changed', handler);
+electron/preload.cjs:22:    ipcRenderer.on('display:changed', handler);
+electron/preload.cjs:23:    return () => ipcRenderer.removeListener('display:changed', handler);
+electron/preload.cjs:27:      return ipcRenderer.invoke('projector:open', groupIdOrOpts);
+electron/preload.cjs:29:    return ipcRenderer.invoke('projector:open', { groupId: groupIdOrOpts, displayId: maybeDisplayId });
+electron/preload.cjs:33:      return ipcRenderer.invoke('projector:close', groupIdOrOpts);
+electron/preload.cjs:35:    return ipcRenderer.invoke('projector:close', { groupId: groupIdOrOpts });
+electron/preload.cjs:37:  getProjectorStatuses: () => ipcRenderer.invoke('projector:get-statuses'),
+electron/preload.cjs:38:  getProjectorStatus: (groupId) => ipcRenderer.invoke('projector:get-status', { groupId }),
+electron/preload.cjs:41:    ipcRenderer.on('projector:status-changed', handler);
+electron/preload.cjs:42:    return () => ipcRenderer.removeListener('projector:status-changed', handler);
+electron/preload.cjs:46:    ipcRenderer.on('projector:route-changed', handler);
+electron/preload.cjs:47:    return () => ipcRenderer.removeListener('projector:route-changed', handler);
+electron/preload.cjs:51:    ipcRenderer.on('projector:error', handler);
+electron/preload.cjs:52:    return () => ipcRenderer.removeListener('projector:error', handler);
+electron/preload.cjs:54:  syncProjectorDisplays: (assignments) => ipcRenderer.invoke('projector:sync-displays', { assignments }),
+electron/preload.cjs:55:  saveSwsFile: (defaultName, data) => ipcRenderer.invoke('file:save-sws', { defaultName, data }),
+electron/preload.cjs:56:  openSwsFile: () => ipcRenderer.invoke('file:open-sws'),
+electron/preload.cjs:57:  readSwsFromPath: (filePath) => ipcRenderer.invoke('file:read-sws-path', filePath),
+electron/preload.cjs:60:    ipcRenderer.on('file:opened-via-association', handler);
+electron/preload.cjs:61:    return () => ipcRenderer.removeListener('file:opened-via-association', handler);
+electron/main.cjs:1:const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session } = require('electron');
+electron/main.cjs:56:      preload: path.join(__dirname, 'preload.cjs'),
+electron/main.cjs:57:      contextIsolation: true,
+electron/main.cjs:58:      nodeIntegration: false,
+electron/main.cjs:59:      sandbox: true
+electron/main.cjs:114:ipcMain.handle('window:minimize', () => {
+electron/main.cjs:122:ipcMain.handle('window:toggle-maximize', () => {
+electron/main.cjs:135:ipcMain.handle('window:is-maximized', () => {
+electron/main.cjs:142:ipcMain.handle('window:close', () => {
+electron/main.cjs:176:ipcMain.handle('display:get-all', () => {
+electron/main.cjs:247:ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
+electron/main.cjs:321:      preload: path.join(__dirname, 'preload.cjs'),
+electron/main.cjs:322:      contextIsolation: true,
+electron/main.cjs:323:      nodeIntegration: false,
+electron/main.cjs:324:      sandbox: true
+electron/main.cjs:372:ipcMain.handle('projector:close', (event, { groupId, displayId }) => {
+electron/main.cjs:402:ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
+electron/main.cjs:453:          preload: path.join(__dirname, 'preload.cjs'),
+electron/main.cjs:454:          contextIsolation: true,
+electron/main.cjs:455:          nodeIntegration: false,
+electron/main.cjs:456:          sandbox: true
+electron/main.cjs:507:ipcMain.handle('projector:get-statuses', () => {
+electron/main.cjs:519:ipcMain.handle('projector:get-status', (event, { groupId, displayId }) => {
+electron/main.cjs:534:ipcMain.handle('file:save-sws', async (event, { defaultName, data }) => {
+electron/main.cjs:548:ipcMain.handle('file:open-sws', async () => {
+electron/main.cjs:561:ipcMain.handle('file:read-sws-path', async (event, filePath) => {
+
+============================================================
+18. ERROR HANDLING
+============================================================
+
+>>> try/catch scan
+COMMAND: grep -rnE 'catch\s*\(' src/ electron/ | head -n 20
+------------------------------------------------------------
+src/components/ModeratorView.tsx:106:        } catch (error) {
+src/components/resources/CamerasTab.tsx:25:    } catch (err) {
+src/components/resources/SongsTab.tsx:158:    } catch (err) {
+src/components/resources/SongsTab.tsx:208:      } catch (err) {
+src/components/resources/SongsTab.tsx:236:    } catch (err) {
+src/components/resources/PresentationsTab.tsx:60:        } catch (e) {
+src/components/resources/PresentationsTab.tsx:85:    } catch (err) {
+src/components/SchedulePanel.tsx:83:    } catch (e) {
+src/components/SchedulePanel.tsx:270:              await dbApi.addSong(song).catch(() => {});
+src/components/SchedulePanel.tsx:275:              await dbApi.addTheme(thm).catch(() => {});
+src/components/SchedulePanel.tsx:287:        } catch (err: any) {
+src/components/SchedulePanel.tsx:384:      } catch (err) {
+src/components/SchedulePanel.tsx:954:                            } catch (err) {}
+src/components/MonitorPreviewCanvas.tsx:362:      videoEl.play().catch(() => {});
+src/components/MonitorPreviewCanvas.tsx:400:      audioEl.play().catch(() => {});
+src/components/workspace/BibleLibraryModule.tsx:75:      } catch (e) {
+src/components/workspace/FixedLiveDisplay.tsx:180:      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+src/components/workspace/FixedLiveDisplay.tsx:182:      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+src/components/OpenScheduleModal.tsx:34:    } catch (e) {
+src/components/OpenScheduleModal.tsx:43:    await dbApi.addSchedule(schedule).catch(() => {});
+
+============================================================
+19. FILESYSTEM / PATH PORTABILITY
+============================================================
+
+>>> Absolute Windows paths
+COMMAND: grep -rnE '[A-Za-z]:\\|C:\\|D:\\' src/ electron/
+------------------------------------------------------------
+src/components/presentation-editor/TemplateGalleryModal.tsx:687:          text: 'SERVING OUR NEIGHBORS\n\nEvery weekend our teams distribute food packages and provide care support to families in need.\n\nGet Involved:\n• Volunteer on Saturdays\n• Donate food supplies\n• Join the prayer network',
+src/components/PresentationEditorModal.tsx:874:      text: 'TITHES & OFFERINGS\n\nScan QR Code or Visit:\nsimpleworship.church/give\n\n"God loves a cheerful giver" — 2 Cor 9:7',
+src/db/seedData.ts:134:        text: 'When He comes, our glorious King,\nAll His ransomed home to bring,\nThen anew this song we\'ll sing:\nHallelujah! What a Savior!'
+src/db/seedData.ts:228:        text: 'Then sings my soul, my Savior God, to Thee:\nHow great Thou art, how great Thou art!\nThen sings my soul, my Savior God, to Thee:\nHow great Thou art, how great Thou art!'
+src/data/baptistHymnal.ts:195:        text: 'Crown Him with many crowns,\nThe Lamb upon His throne;\nHark! how the heavenly anthem drowns\nAll music but its own:\nAwake, my soul, and sing\nOf Him who died for thee,\nAnd hail Him as thy matchless King\nThrough all eternity.'
+src/data/baptistHymnal.ts:200:        text: 'Crown Him the Lord of love;\nBehold His hands and side,\nRich wounds, yet visible above,\nIn beauty glorified:\nNo angel in the sky\nCan fully bear that sight,\nBut downward bends each burning eye\nAt mysteries so bright.'
+src/data/baptistHymnal.ts:572:        text: 'A mighty fortress is our God,\nA bulwark never failing;\nOur helper He, amid the flood\nOf mortal ills prevailing:\nFor still our ancient foe\nDoth seek to work us woe;\nHis craft and power are great,\nAnd, armed with cruel hate,\nOn earth is not his equal.'
+src/data/baptistHymnal.ts:577:        text: 'Did we in our own strength confide,\nOur striving would be losing;\nWere not the right Man on our side,\nThe Man of God\'s own choosing:\nDost ask who that may be?\nChrist Jesus, it is He;\nLord Sabaoth, His Name,\nFrom age to age the same,\nAnd He must win the battle.'
+src/data/baptistHymnal.ts:582:        text: 'And though this world, with devils filled,\nShould threaten to undo us,\nWe will not fear, for God hath willed\nHis truth to triumph through us:\nThe Prince of Darkness grim,\nWe tremble not for him;\nHis rage we can endure,\nFor lo, his doom is sure,\nOne little word shall fell him.'
+src/data/baptistHymnal.ts:587:        text: 'That word above all earthly powers,\nNo thanks to them, abideth;\nThe Spirit and the gifts are ours\nThrough Him Who with us sideth:\nLet goods and kindred go,\nThis mortal life also;\nThe body they may kill:\nGod\'s truth abideth still,\nHis kingdom is forever.'
+src/data/baptistHymnal.ts:678:        text: 'Then sings my soul, my Savior God, to Thee:\nHow great Thou art, how great Thou art!\nThen sings my soul, my Savior God, to Thee:\nHow great Thou art, how great Thou art!'
+src/data/baptistHymnal.ts:806:        text: 'Stand up, stand up for Jesus, ye soldiers of the cross;\nLift high His royal banner, it must not suffer loss:\nFrom victory unto victory His army shall He lead,\nTill every foe is vanquished, and Christ is Lord indeed.'
+src/data/baptistHymnal.ts:811:        text: 'Stand up, stand up for Jesus, the trumpet call obey;\nForth to the mighty conflict, in this His glorious day:\nYe that are men now serve Him against unnumbered foes;\nLet courage rise with danger, and strength to strength oppose.'
+src/data/baptistHymnal.ts:816:        text: 'Stand up, stand up for Jesus, stand in His strength alone;\nThe arm of flesh will fail you, ye dare not trust your own:\nPut on the Gospel armor, each piece put on with prayer;\nWhere duty calls, or danger, be never wanting there.'
+src/data/baptistHymnal.ts:821:        text: 'Stand up, stand up for Jesus, the strife will not be long;\nThis day the noise of battle, the next the victor\'s song:\nTo him that overcometh a crown of life shall be;\nHe with the King of Glory shall reign eternally.'
+src/data/baptistHymnal.ts:949:        text: 'His Word shall not fail you, He promised;\nBelieve Him, and all will be well:\nThen go to a world that is dying,\nHis perfect salvation to tell!'
+src/data/baptistHymnal.ts:1104:        text: 'How sweet to hold a newborn baby,\nAnd feel the pride and the joy he gives;\nBut greater still the calm assurance:\nThis child can face uncertain days because He Lives!'
+src/data/baptistHymnal.ts:1323:        text: 'He left His Father\'s throne above—\nSo free, so infinite His grace—\nEmptied Himself of all but love,\nAnd bled for Adam\'s helpless race:\n\'Tis mercy all, immense and free;\nFor, O my God, it found out me!'
+src/core/DisplayRouter.ts:158:    ? 'file:///' + cleanBase.replace(/^file:\/\//, '').replace(/^\/+/, '')
+
+============================================================
+20. ASSETS
+============================================================
+
+>>> Assets inventory
+COMMAND: find public -type f -exec ls -lh {} +
+------------------------------------------------------------
+-rw-r--r-- 1 root root 4.7M Sep  4 07:27 public/bibles/kjv.json
+-rw-r--r-- 1 root root 5.1M Sep  4 07:27 public/bibles/tagalog.json
+-rw-r--r-- 1 root root  14K Sep  4 07:27 public/bibles/verse_counts.json
+-rw-r--r-- 1 root root 1.3K Sep  4 07:27 public/branding/logo/SimpleWorship-full.svg
+-rw-r--r-- 1 root root 6.6K Sep  4 07:27 public/branding/logo/SimpleWorship.ico
+-rw-r--r-- 1 root root 3.6K Sep  4 07:27 public/branding/logo/SimpleWorship-icon.png
+-rw-r--r-- 1 root root 6.7K Sep  4 07:27 public/branding/logo/SimpleWorship-icon.svg
+-rw-r--r-- 1 root root 1.3K Sep  4 07:27 public/branding/logo/SimpleWorship-SW-dark.svg
+-rw-r--r-- 1 root root 3.1K Sep  4 07:27 public/branding/logo/SimpleWorship-SW-primary.svg
+-rw-r--r-- 1 root root 3.4K Sep  4 07:27 public/branding/logo/SimpleWorship-SW-white.svg
+
+============================================================
+21. GIT STATE
+============================================================
+
+>>> Git status
+COMMAND: git status --short || echo 'Not a git repository'
+------------------------------------------------------------
+fatal: not a git repository (or any of the parent directories): .git
+Not a git repository
+
+============================================================
+22. BUILD ARTIFACTS
+============================================================
+
+>>> Dist folder
+COMMAND: ls -lh dist release build 2>/dev/null || echo 'No build output yet'
+------------------------------------------------------------
+dist:
+total 1.5K
+drwxr-xr-x 1 root root  480 Sep  4 09:36 assets
+drwxr-xr-x 1 root root  100 Sep  4 09:36 bibles
+drwxr-xr-x 1 root root   60 Sep  4 09:36 branding
+-rw-r--r-- 1 root root 1.2K Sep  4 09:36 index.html
+No build output yet
+
+============================================================
+23. INSTALLER ARTIFACTS
+============================================================
+
+>>> EXE files
+COMMAND: find . -name '*.exe' -o -name '*.msi'
+------------------------------------------------------------
+./dist-electron/SimpleWorship Setup 1.0.0.exe
+./node_modules/@electron/windows-sign/vendor/signtool.exe
+./node_modules/electron-winstaller/vendor/7z-arm64.exe
+./node_modules/electron-winstaller/vendor/7z-x64.exe
+./node_modules/electron-winstaller/vendor/candle.exe
+./node_modules/electron-winstaller/vendor/light.exe
+./node_modules/electron-winstaller/vendor/nuget.exe
+./node_modules/electron-winstaller/vendor/rcedit.exe
+./node_modules/electron-winstaller/vendor/Setup.exe
+./node_modules/electron-winstaller/vendor/signtool.exe
+./node_modules/electron-winstaller/vendor/Squirrel-Mono.exe
+./node_modules/electron-winstaller/vendor/Squirrel.exe
+./node_modules/electron-winstaller/vendor/StubExecutable.exe
+./node_modules/electron-winstaller/vendor/SyncReleases.exe
+./node_modules/electron-winstaller/vendor/WriteZipToSetup.exe
+
+============================================================
+24. WINDOWS DEPLOYMENT READINESS
+============================================================
+
+>>> Electron dependencies
+COMMAND: npm ls electron electron-builder electron-forge || true
+------------------------------------------------------------
+simpleworship@1.0.0 /app/applet
+├── electron-builder@26.15.3
+└── electron@44.2.0
+
+
+============================================================
+29. AUTOMATED FINAL STATUS
+============================================================
+
+>>> Automated Checks
+COMMAND: 
+[ -f package.json ] && echo 'package.json: PASS' || echo 'package.json: FAIL'
+[ -d node_modules ] && echo 'node_modules: PASS' || echo 'node_modules: FAIL'
+[ -f tsconfig.json ] && echo 'tsconfig: PASS' || echo 'tsconfig: WARN'
+[ -d .git ] && echo 'git: PASS' || echo 'git: WARN'
+ls electron-builder* forge.config* >/dev/null 2>&1 && echo 'installer config: PASS' || echo 'installer config: WARN'
+
+------------------------------------------------------------
+package.json: PASS
+node_modules: PASS
+tsconfig: PASS
+git: WARN
+installer config: WARN

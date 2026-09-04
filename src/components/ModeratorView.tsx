@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { PresentationContentResolver } from '../core/PresentationContentResolver';
+import { isValidPptxBinary } from '../utils/pptxValidator';
 import { 
   Layers, 
   Tv, 
@@ -20,6 +22,7 @@ import FloatingPanel from './workspace/FloatingPanel';
 import StageMonitorContent from './workspace/StageMonitorContent';
 import QuickNotesContent from './workspace/QuickNotesContent';
 import MediaLibraryPanel from './workspace/MediaLibraryPanel';
+import MediaLibraryModal from './MediaLibraryModal';
 import SongEditorModal from './SongEditorModal';
 import AlertModal from './AlertModal';
 import OptionsDialog from './options/OptionsDialog';
@@ -32,7 +35,8 @@ import NewScheduleModal from './NewScheduleModal';
 import OpenScheduleModal from './OpenScheduleModal';
 import WebBrowserModal from './WebBrowserModal';
 import RemoteControlModal from './RemoteControlModal';
-import { Song, PresentationItem } from '../types';
+import { Song, PresentationItem, Asset } from '../types';
+import { PresentationEditorModal } from './PresentationEditorModal';
 import { matchesShortcut } from '../utils/keyboardShortcuts';
 
 export default function ModeratorView() {
@@ -50,10 +54,61 @@ export default function ModeratorView() {
   const [isNewScheduleOpen, setIsNewScheduleOpen] = useState(false);
   const [isOpenScheduleOpen, setIsOpenScheduleOpen] = useState(false);
   const [isWebBrowserOpen, setIsWebBrowserOpen] = useState(false);
+  const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [isRemoteControlOpen, setIsRemoteControlOpen] = useState(false);
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [editingScheduleItem, setEditingScheduleItem] = useState<PresentationItem | null>(null);
+  const [isPresentationEditorOpen, setIsPresentationEditorOpen] = useState(false);
+  const [editingPresentationAsset, setEditingPresentationAsset] = useState<Asset | null>(null);
+  const [editingSchedulePresentationItem, setEditingSchedulePresentationItem] = useState<PresentationItem | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Global listener for opening presentation editor
+  useEffect(() => {
+    const handleOpenPresentationEditor = (e: CustomEvent) => {
+      if (e.detail?.presentation) {
+        setEditingPresentationAsset(e.detail.presentation);
+      } else {
+        setEditingPresentationAsset(null);
+      }
+      setEditingSchedulePresentationItem(null);
+      setIsPresentationEditorOpen(true);
+    };
+
+    window.addEventListener('simpleworship:open-presentation-editor' as any, handleOpenPresentationEditor);
+    return () => {
+      window.removeEventListener('simpleworship:open-presentation-editor' as any, handleOpenPresentationEditor);
+    };
+  }, []);
+
+  // Proactive Caching Mechanism for PPTX Binary Data
+  // When a PPTX presentation is added to the schedule without its binary fileBytes,
+  // we immediately fetch it from IndexedDB and update the schedule item.
+  // This drastically reduces latency when the item later goes live.
+  useEffect(() => {
+    const items = store.activeSchedule?.items || [];
+    items.forEach(async (item) => {
+      if (
+        item.type === 'presentation' && 
+        item.contentId && 
+        !isValidPptxBinary(item.data?.fileBytes)
+      ) {
+        try {
+          const hydratedItem = await PresentationContentResolver.hydrateItemBinaryIfNeeded(item);
+          if (hydratedItem && isValidPptxBinary(hydratedItem.data?.fileBytes)) {
+            store.updateScheduleItem(item.id, {
+              data: {
+                ...item.data,
+                fileBytes: hydratedItem.data.fileBytes
+              }
+            });
+          }
+        } catch (error) {
+          console.error('[ProactiveCache] Failed to proactively cache PPTX binary for item:', item.id, error);
+        }
+      }
+    });
+  }, [store.activeSchedule?.items]);
 
   useEffect(() => {
     loadAllData();
@@ -179,6 +234,31 @@ export default function ModeratorView() {
       }
 
 
+      // Slide Annotation Shortcuts
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        store.toggleAnnotationMode();
+        return;
+      }
+
+      if (store.annotationState?.enabled) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          store.undoAnnotation();
+          return;
+        }
+        if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
+          e.preventDefault();
+          store.redoAnnotation();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+          e.preventDefault();
+          store.clearAnnotations();
+          return;
+        }
+      }
+
       // Quick Search
       if (e.ctrlKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -239,7 +319,7 @@ export default function ModeratorView() {
   }, [store, shortcutSettings]);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#141519] text-gray-200 overflow-hidden font-sans select-none relative">
+    <div className="enterprise-workspace bg-[#141519] text-gray-200 overflow-hidden font-sans select-none relative">
       {/* 1. Top Command & Menu Toolbar */}
       <TopToolbar
         onOpenAlerts={() => setIsAlertsOpen(true)}
@@ -250,6 +330,7 @@ export default function ModeratorView() {
         onOpenNewSchedule={() => setIsNewScheduleOpen(true)}
         onOpenOpenSchedule={() => setIsOpenScheduleOpen(true)}
         onOpenWebBrowser={() => setIsWebBrowserOpen(true)}
+        onOpenMediaLibrary={() => setIsMediaLibraryOpen(true)}
         onOpenRemoteControl={() => setIsRemoteControlOpen(true)}
         onOpenNewSong={() => {
           setEditingSong(null);
@@ -268,7 +349,22 @@ export default function ModeratorView() {
           setIsSongEditorOpen(true);
         }}
         onEditScheduleItem={(item) => {
-          setEditingScheduleItem(item);
+          if (item.type === 'presentation' || item.type === 'ppt') {
+            const presAsset: Asset = {
+              id: item.contentId || item.id,
+              name: item.name,
+              type: 'document',
+              hash: '',
+              url: '',
+              data: item.data || {},
+              createdAt: Date.now()
+            };
+            setEditingPresentationAsset(presAsset);
+            setEditingSchedulePresentationItem(item);
+            setIsPresentationEditorOpen(true);
+          } else {
+            setEditingScheduleItem(item);
+          }
         }}
       />
 
@@ -276,18 +372,45 @@ export default function ModeratorView() {
       <FloatingPanel id="schedule" icon={<Layers size={13} />}>
         <SchedulePanel 
           onEditSlide={(item) => {
-            setEditingScheduleItem(item);
+            if (item.type === 'presentation' || item.type === 'ppt') {
+              const presAsset: Asset = {
+                id: item.contentId || item.id,
+                name: item.name,
+                type: 'document',
+                hash: '',
+                url: '',
+                data: item.data || {},
+                createdAt: Date.now()
+              };
+              setEditingPresentationAsset(presAsset);
+              setEditingSchedulePresentationItem(item);
+              setIsPresentationEditorOpen(true);
+            } else {
+              setEditingScheduleItem(item);
+            }
+          }}
+          onOpenNewSong={() => {
+            setEditingSong(null);
+            setIsSongEditorOpen(true);
+          }}
+          onEditSong={(song) => {
+            setEditingSong(song);
+            setIsSongEditorOpen(true);
           }}
         />
       </FloatingPanel>
 
       <FloatingPanel id="live" icon={<Tv size={13} />}>
         <div className="flex h-full w-full">
-          {outputGroups.map((group, index) => (
-            <div key={group.id} className="flex-1 border-r border-[#262832] last:border-0 h-full overflow-hidden">
-              <LivePanel groupId={group.id} />
+          {store.activeControlGroupId || outputGroups[0]?.id ? (
+            <div className="flex-1 h-full overflow-hidden">
+              <LivePanel groupId={store.activeControlGroupId || outputGroups[0].id} />
             </div>
-          ))}
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-gray-500 text-xs">
+              No active output target selected
+            </div>
+          )}
         </div>
       </FloatingPanel>
 
@@ -333,6 +456,10 @@ export default function ModeratorView() {
         <WebBrowserModal onClose={() => setIsWebBrowserOpen(false)} />
       )}
 
+      {isMediaLibraryOpen && (
+        <MediaLibraryModal onClose={() => setIsMediaLibraryOpen(false)} />
+      )}
+
       {isRemoteControlOpen && (
         <RemoteControlModal onClose={() => setIsRemoteControlOpen(false)} />
       )}
@@ -364,6 +491,26 @@ export default function ModeratorView() {
         />
       )}
 
+      {isPresentationEditorOpen && (
+        <PresentationEditorModal
+          presentation={editingPresentationAsset}
+          onClose={() => {
+            setIsPresentationEditorOpen(false);
+            setEditingPresentationAsset(null);
+            setEditingSchedulePresentationItem(null);
+          }}
+          onSaved={(savedAsset) => {
+            store.loadAllData();
+            if (editingSchedulePresentationItem) {
+              store.updateScheduleItem(editingSchedulePresentationItem.id, {
+                name: savedAsset.name,
+                data: savedAsset.data
+              });
+            }
+          }}
+        />
+      )}
+
       {editingScheduleItem && (
         <SongEditorModal
           mode="schedule-item"
@@ -383,12 +530,6 @@ export default function ModeratorView() {
       {isDiagnosticsOpen && (
         <SystemDiagnosticsModal onClose={() => setIsDiagnosticsOpen(false)} />
       )}
-
-      {/* 6. System Status Bar at the bottom */}
-      <SystemStatusBar 
-        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)}
-        onOpenShortcuts={() => setIsShortcutsOpen(true)}
-      />
 
       {/* 7. Toast Notification */}
       {notification && (

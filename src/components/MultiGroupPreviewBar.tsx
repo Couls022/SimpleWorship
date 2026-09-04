@@ -4,6 +4,7 @@ import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
+import { DisplayManager } from '../core/DisplayManager';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
 
 export default function MultiGroupPreviewBar() {
@@ -29,8 +30,9 @@ export default function MultiGroupPreviewBar() {
 
   const handleLaunchProjector = (groupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${groupId}`;
-    window.open(url, `Projector_${groupId}`, 'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no');
+    const group = outputGroups.find(g => g.id === groupId);
+    const displayId = group?.displayIds?.[0];
+    DisplayManager.openProjector(groupId, displayId);
   };
 
   return (
@@ -266,7 +268,7 @@ export default function MultiGroupPreviewBar() {
                   groupId={group.id} 
                   customGroup={group} 
                   customState={groupState} 
-                  showResolutionTag={true} 
+                  showResolutionTag={false} 
                   className="h-full w-full"
                 />
               </div>

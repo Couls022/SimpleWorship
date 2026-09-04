@@ -1,22 +1,16 @@
 import React from 'react';
 import { 
-  Music, 
-  BookOpen, 
   Film, 
   FileText, 
-  Palette, 
   ChevronDown, 
   ChevronUp,
-  FolderOpen,
   Pin
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
-import SongsTab from './resources/SongsTab';
-import ScripturesTab from './resources/ScripturesTab';
 import MediaTab from './resources/MediaTab';
 import PresentationsTab from './resources/PresentationsTab';
-import ThemesTab from './resources/ThemesTab';
+import CamerasTab from './resources/CamerasTab';
 import { Song } from '../types';
 
 interface ResourcesPanelProps {
@@ -40,11 +34,9 @@ export default function ResourcesPanel({
   const { resourcesTab, setResourcesTab, isResourcesOpen, toggleResources } = store;
 
   const tabs = [
-    { id: 'songs', label: 'Songs', icon: <Music size={13} className="text-cyan-400" /> },
-    { id: 'scriptures', label: 'Scriptures', icon: <BookOpen size={13} className="text-amber-400" /> },
     { id: 'media', label: 'Media', icon: <Film size={13} className="text-emerald-400" /> },
     { id: 'presentations', label: 'Presentations', icon: <FileText size={13} className="text-blue-400" /> },
-    { id: 'themes', label: 'Themes', icon: <Palette size={13} className="text-purple-400" /> },
+    { id: 'cameras', label: 'Cameras', icon: <Film size={13} className="text-pink-400" /> },
   ];
 
   const handleTabClick = (tabId: any) => {
@@ -81,7 +73,7 @@ export default function ResourcesPanel({
     <div className="bg-[#1c1e24] border-t border-[#15161a] flex flex-col w-full h-full min-h-0 overflow-hidden">
       {/* Resources Tab Header Bar */}
       <div className="h-8 bg-[#22252c] border-b border-[#18191e] flex items-center justify-between px-3 shrink-0 select-none">
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 flex-1 min-w-0 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
             const isActive = resourcesTab === tab.id;
 
@@ -128,11 +120,13 @@ export default function ResourcesPanel({
       {/* Active Tab Body */}
       {isResourcesOpen && (
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-[#141519]">
-          {resourcesTab === 'songs' && <SongsTab onOpenNewSong={onOpenNewSong} onEditSong={onEditSong} />}
-          {resourcesTab === 'scriptures' && <ScripturesTab />}
-          {resourcesTab === 'media' && <MediaTab />}
-          {resourcesTab === 'presentations' && <PresentationsTab />}
-          {resourcesTab === 'themes' && <ThemesTab />}
+          {resourcesTab === 'presentations' ? (
+            <PresentationsTab />
+          ) : resourcesTab === 'cameras' ? (
+            <CamerasTab />
+          ) : (
+            <MediaTab />
+          )}
         </div>
       )}
     </div>

@@ -32,7 +32,10 @@ import {
   Printer,
   Info,
   Package,
-  BookOpen
+  BookOpen,
+  Film,
+  Trash2,
+  Pen
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -52,6 +55,7 @@ interface TopToolbarProps {
   onOpenNewSchedule?: () => void;
   onOpenOpenSchedule?: () => void;
   onOpenWebBrowser?: () => void;
+  onOpenMediaLibrary?: () => void;
   onOpenRemoteControl?: () => void;
   onOpenQuickSearch: () => void;
   onOpenDiagnostics?: () => void;
@@ -65,6 +69,7 @@ export default function TopToolbar({
   onOpenNewSchedule, 
   onOpenOpenSchedule,
   onOpenWebBrowser,
+  onOpenMediaLibrary,
   onOpenRemoteControl,
   onOpenQuickSearch, 
   onOpenDiagnostics,
@@ -81,7 +86,6 @@ export default function TopToolbar({
     toggleBlack, 
     toggleClear, 
     toggleLogo, 
-    isMasterLive, 
     toggleMasterLive,
     alert: alertState
   } = store;
@@ -369,8 +373,8 @@ export default function TopToolbar({
   return (
     <header className="bg-gradient-to-b from-[#383c44] via-[#2a2d34] to-[#22242a] border-b border-[#151619] select-none text-gray-200" ref={menuRef}>
       {/* 1. Window Title Bar (SimpleWorship - Clean Modern Branding) */}
-      <div className="flex items-center justify-between px-3 py-1 text-xs border-b border-[#18191c] bg-[#1a1c22] text-gray-300">
-        <div className="flex items-center gap-2">
+      <div className="app-drag-region flex items-center justify-between px-3 py-1 text-xs border-b border-[#18191c] bg-[#1a1c22] text-gray-300 select-none">
+        <div className="app-no-drag flex items-center gap-2">
           {/* SimpleWorship Modern Vector Logo */}
           <SimpleWorshipLogo size={18} showText={false} />
           <span className="font-semibold text-xs tracking-tight text-white flex items-center gap-1.5">
@@ -382,7 +386,7 @@ export default function TopToolbar({
         </div>
 
         {/* Window controls */}
-        <div className="flex items-center h-full -mr-3 -my-1">
+        <div className="app-no-drag flex items-center h-full -mr-3 -my-1">
           <button 
             id="btn-window-minimize"
             onClick={handleMinimizeWindow}
@@ -481,7 +485,11 @@ export default function TopToolbar({
                         <span>Scripture...</span>
                       </button>
                       <button 
-                        onClick={() => { store.setResourcesTab('presentations'); setActiveMenu(null); }}
+                        onClick={() => { 
+                          store.setResourcesTab('presentations'); 
+                          window.dispatchEvent(new CustomEvent('simpleworship:open-presentation-editor'));
+                          setActiveMenu(null); 
+                        }}
                         className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5"
                       >
                         <Layout size={12} className="text-purple-400" />
@@ -702,8 +710,8 @@ export default function TopToolbar({
                 </button>
                 <div className="border-t border-[#313540] my-1"></div>
                 <button onClick={() => { toggleMasterLive(); setActiveMenu(null); }} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-bold">
-                  <span>Show Master Live Output</span>
-                  {isMasterLive && <Check size={13} className="text-cyan-400" />}
+                  <span>Show Target Live Output</span>
+                  {activeControlState?.isLiveEnabled && <Check size={13} className="text-cyan-400" />}
                 </button>
               </div>
             )}
@@ -758,7 +766,7 @@ export default function TopToolbar({
                 <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Live Output Panels
                 </div>
-                {[1, 2, 3, 4, 5].map((num) => (
+                {[1, 2].map((num) => (
                   <button
                     key={`panel-count-${num}`}
                     onClick={() => { store.setLivePanelCount(num); setActiveMenu(null); }}
@@ -777,17 +785,37 @@ export default function TopToolbar({
                 {workspace.presets.map((preset) => {
                   const isSelected = workspace.activePresetId === preset.id;
                   return (
-                    <button
+                    <div 
                       key={preset.id}
-                      onClick={() => {
-                        workspace.applyPreset(preset.id);
-                        setActiveMenu(null);
-                      }}
-                      className="w-full flex items-center justify-between px-3 py-1 hover:bg-[#323744] hover:text-white text-left"
+                      className="w-full flex items-center justify-between px-3 py-1 hover:bg-[#323744] text-left group/preset"
                     >
-                      <span className="truncate">{preset.name}</span>
-                      {isSelected && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
-                    </button>
+                      <button
+                        onClick={() => {
+                          workspace.applyPreset(preset.id);
+                          setActiveMenu(null);
+                        }}
+                        className="flex-1 text-left truncate text-gray-200 hover:text-white"
+                      >
+                        {preset.name}
+                      </button>
+                      <div className="flex items-center gap-1 shrink-0 ml-1">
+                        {isSelected && <Check size={12} className="text-cyan-400" />}
+                        {!preset.isBuiltIn && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Are you sure you want to delete custom preset "${preset.name}"?`)) {
+                                workspace.deleteCustomPreset(preset.id);
+                              }
+                            }}
+                            className="text-gray-500 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover/preset:opacity-100 transition-opacity"
+                            title="Delete Custom Preset"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
 
@@ -814,11 +842,7 @@ export default function TopToolbar({
                   [
                     { id: 'schedule', label: 'Schedule Panel' },
                     { id: 'live', label: 'Live Output Panel' },
-                    { id: 'multiGroup', label: 'Multi-Group Displays' },
-                    { id: 'resources', label: 'Resources Drawer' },
-                    { id: 'stageMonitor', label: 'Confidence / Stage Monitor' },
-                    { id: 'quickNotes', label: 'Quick Notes & Cues' },
-                    { id: 'mediaLibrary', label: 'Media Library' }
+                    { id: 'multiGroup', label: 'Multi-Group Displays' }
                   ] as const
                 ).map(({ id, label }) => {
                   const p = workspace.panels[id];
@@ -943,18 +967,16 @@ export default function TopToolbar({
           <div className="relative flex items-center rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] transition-all group">
             <button
               onClick={onOpenNewSchedule}
-              className="flex flex-col items-center justify-center px-2 py-1 text-gray-300 hover:text-white cursor-pointer active:scale-95 transition-transform"
-              title="Create New Worship Schedule (Ctrl+N)"
+              className="flex items-center gap-1.5 justify-center p-1.5 text-gray-300 hover:text-white cursor-pointer active:scale-95 transition-transform"
+              title="New Schedule / Song / Slide (Ctrl+N)"
             >
-              <div className="w-7 h-7 flex items-center justify-center relative mb-0.5">
-                <div className="w-6 h-6 rounded bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-xs">
-                  <Play size={10} className="fill-cyan-400 text-cyan-400 ml-0.5" />
-                </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-[9px] border border-[#222]">
+              <div className="w-6 h-6 rounded bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-xs relative shrink-0">
+                <Play size={10} className="fill-cyan-400 text-cyan-400 ml-0.5" />
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-[8px] border border-[#222]">
                   +
                 </div>
               </div>
-              <span className="text-[10px] font-medium tracking-tight">New</span>
+              <span className="text-[10px] font-bold tracking-wide uppercase select-none">New</span>
             </button>
             <button 
               onClick={(e) => {
@@ -962,7 +984,7 @@ export default function TopToolbar({
                 setIsNewDropdownOpen(!isNewDropdownOpen);
                 setIsOpenDropdownOpen(false);
               }}
-              className="h-full px-1.5 text-gray-400 hover:text-white cursor-pointer hover:bg-white/10 rounded-r-md transition-colors"
+              className="h-full px-1 py-2 text-gray-400 hover:text-white cursor-pointer hover:bg-white/10 rounded-r-md transition-colors"
               title="New Item Menu Options"
             >
               <ChevronDown size={11} />
@@ -1000,11 +1022,14 @@ export default function TopToolbar({
                   <span>New Scripture Passage...</span>
                 </button>
                 <button
-                  onClick={() => store.setResourcesTab('presentations')}
+                  onClick={() => {
+                    store.setResourcesTab('presentations');
+                    window.dispatchEvent(new CustomEvent('simpleworship:open-presentation-editor'));
+                  }}
                   className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left"
                 >
                   <Layout size={13} className="text-purple-400" />
-                  <span>New Presentation Slide...</span>
+                  <span>New Presentation Deck...</span>
                 </button>
                 <button
                   onClick={() => store.setResourcesTab('themes')}
@@ -1021,15 +1046,13 @@ export default function TopToolbar({
           <div className="relative flex items-center rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] transition-all group">
             <button
               onClick={onOpenOpenSchedule}
-              className="flex flex-col items-center justify-center px-2 py-1 text-gray-300 hover:text-white cursor-pointer active:scale-95 transition-transform"
+              className="flex items-center gap-1.5 justify-center p-1.5 text-gray-300 hover:text-white cursor-pointer active:scale-95 transition-transform"
               title="Open Saved Schedule .sws (Ctrl+O)"
             >
-              <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-                <div className="w-6 h-6 rounded bg-cyan-600/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-xs">
-                  <FolderOpen size={14} />
-                </div>
+              <div className="w-6 h-6 rounded bg-cyan-600/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-xs shrink-0">
+                <FolderOpen size={14} />
               </div>
-              <span className="text-[10px] font-medium tracking-tight">Open</span>
+              <span className="text-[10px] font-bold tracking-wide uppercase select-none">Open</span>
             </button>
             <button 
               onClick={(e) => {
@@ -1038,7 +1061,7 @@ export default function TopToolbar({
                 setIsOpenDropdownOpen(!isOpenDropdownOpen);
                 setIsNewDropdownOpen(false);
               }}
-              className="h-full px-1.5 text-gray-400 hover:text-white cursor-pointer hover:bg-white/10 rounded-r-md transition-colors"
+              className="h-full px-1 py-2 text-gray-400 hover:text-white cursor-pointer hover:bg-white/10 rounded-r-md transition-colors"
               title="Open Schedule Options & Recents"
             >
               <ChevronDown size={11} />
@@ -1098,112 +1121,61 @@ export default function TopToolbar({
           {/* SAVE BUTTON */}
           <button
             onClick={handleSaveSchedule}
-            className="flex flex-col items-center justify-center px-2.5 py-1 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
             title="Save Schedule to DB & Download .sws (Ctrl+S)"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className="w-6 h-6 rounded bg-blue-700/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shadow-xs">
-                <Save size={14} />
-              </div>
+            <div className="w-6 h-6 rounded bg-blue-700/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shadow-xs shrink-0">
+              <Save size={14} />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Save</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Save</span>
           </button>
 
-          <div className="w-px h-8 bg-[#3d424e] mx-1"></div>
+          <div className="w-px h-6 bg-[#3d424e] mx-1"></div>
 
-          {/* WEB BUTTON */}
+          {/* MEDIA BUTTON - Opens centered Media Library overlay modal */}
           <button
-            onClick={onOpenWebBrowser}
-            className="flex flex-col items-center justify-center px-2.5 py-1 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
-            title="Enterprise Web Stream & Media Integration Browser"
+            onClick={() => {
+              if (onOpenMediaLibrary) onOpenMediaLibrary();
+            }}
+            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            title="Media Library (Backgrounds, Audio, Video Loops)"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className="w-6 h-6 rounded-full bg-emerald-600/30 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shadow-xs">
-                <Globe size={14} />
-              </div>
+            <div className="w-6 h-6 rounded-full bg-emerald-600/30 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shadow-xs shrink-0">
+              <Film size={14} />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Web</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Media</span>
           </button>
 
           {/* QUICK SEARCH BUTTON */}
           <button
             onClick={onOpenQuickSearch}
-            className="flex flex-col items-center justify-center px-2.5 py-1 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
             title="Quick Search Songs (Ctrl+K)"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300 shadow-xs">
-                <Search size={14} />
-              </div>
+            <div className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300 shadow-xs shrink-0">
+              <Search size={14} />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Search</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Search</span>
           </button>
 
           {/* REMOTE BUTTON */}
           <button
             onClick={onOpenRemoteControl}
-            className="flex flex-col items-center justify-center px-2.5 py-1 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
             title="Mobile Smartphone & Tablet Remote Control Hub"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className="w-6 h-6 rounded bg-purple-700/30 border border-purple-400/40 flex items-center justify-center text-purple-300 shadow-xs">
-                <Radio size={14} />
-              </div>
+            <div className="w-6 h-6 rounded bg-purple-700/30 border border-purple-400/40 flex items-center justify-center text-purple-300 shadow-xs shrink-0">
+              <Radio size={14} />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Remote</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Remote</span>
           </button>
         </div>
 
-        {/* Center: Center Settings & Shortcut Keys Access */}
-        <div className="flex items-center space-x-1.5 bg-[#1a1c22] px-2 py-1 rounded-lg border border-[#373c4c] shadow-inner">
-          <button
-            type="button"
-            onClick={onOpenShortcuts}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-[11px] font-bold transition-all shadow cursor-pointer active:scale-95"
-            title="Center Shortcut Keys & Output Navigation Settings (F1)"
-          >
-            <Keyboard size={13} />
-            <span>Shortcuts (F1)</span>
-          </button>
 
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#252834] hover:bg-[#323646] text-gray-300 hover:text-white text-[11px] font-semibold transition-colors cursor-pointer border border-[#3b4154]"
-            title="System Options & Settings (F2)"
-          >
-            <Settings size={13} />
-            <span>Options</span>
-          </button>
-
-          {onOpenDiagnostics && (
-            <button
-              type="button"
-              onClick={onOpenDiagnostics}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#1d2738] hover:bg-[#28364f] text-cyan-300 hover:text-cyan-100 text-[11px] font-bold transition-colors cursor-pointer border border-cyan-800/60 shadow-xs"
-              title="System Backbone & Diagnostics Hub"
-            >
-              <ShieldCheck size={13} className="text-cyan-400" />
-              <span>System Hub</span>
-            </button>
-          )}
-        </div>
 
         {/* Right Side: Presentation Master Controls (Go Live, Alerts, Logo, Black, Clear, Master Live) */}
         <div className="flex items-center space-x-1 shrink-0">
-          {/* GO LIVE BUTTON */}
-          <button
-            onClick={goLive}
-            className="flex flex-col items-center justify-center px-3.5 py-1 rounded-md bg-gradient-to-b from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 text-white font-bold border border-emerald-400/50 shadow-[0_2px_8px_rgba(16,185,129,0.3)] active:scale-95 transition-all"
-            title="Send Preview Content to Live (F5 or Enter)"
-          >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className="w-6 h-5.5 rounded bg-black/40 border border-white/30 flex items-center justify-center">
-                <Play size={12} className="fill-white text-white ml-0.5" />
-              </div>
-            </div>
-            <span className="text-[9px] tracking-wider uppercase font-black">Go Live</span>
-          </button>
+
 
           {/* ALERTS BUTTON WITH DROPDOWN */}
           <div className={`flex items-center rounded-md border transition-all ${
@@ -1213,21 +1185,20 @@ export default function TopToolbar({
           }`}>
             <button
               onClick={onOpenAlerts}
-              className="flex flex-col items-center justify-center px-2 py-1"
+              className="flex items-center gap-1.5 justify-center p-1.5"
               title="Nursery & Message Alert Banner"
             >
-              <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-                <div className={`w-6 h-6 rounded flex items-center justify-center border ${
-                  alertState?.active ? 'bg-cyan-500 text-black border-cyan-300' : 'bg-cyan-700/30 text-cyan-300 border-cyan-500/40'
-                }`}>
-                  <Bell size={13} />
-                </div>
+              <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
+                alertState?.active ? 'bg-cyan-500 text-black border-cyan-300' : 'bg-cyan-700/30 text-cyan-300 border-cyan-500/40'
+              }`}>
+                <Bell size={13} />
               </div>
-              <span className="text-[10px] font-medium tracking-tight">Alerts</span>
+              <span className="text-[10px] font-bold tracking-wide uppercase select-none">Alerts</span>
             </button>
             <button 
               onClick={onOpenAlerts}
-              className="h-full px-1 text-gray-400 hover:text-white"
+              className="h-full px-1 py-2 text-gray-400 hover:text-white"
+              title="Alert Options"
             >
               <ChevronDown size={11} />
             </button>
@@ -1236,86 +1207,98 @@ export default function TopToolbar({
           {/* LOGO */}
           <button
             onClick={toggleLogo}
-            className={`flex flex-col items-center justify-center px-2.5 py-1 rounded-md border transition-all ${
+            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.showLogo
                 ? 'bg-blue-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                 : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
             }`}
             title="Display Logo Overlay (F8 or L)"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className={`w-6 h-5.5 rounded flex items-center justify-center border ${
-                activeControlState?.showLogo ? 'bg-cyan-500 text-black border-cyan-300' : 'bg-white/10 text-white border-white/20'
-              }`}>
-                <ImageIcon size={12} />
-              </div>
+            <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
+              activeControlState?.showLogo ? 'bg-cyan-500 text-black border-cyan-300' : 'bg-white/10 text-white border-white/20'
+            }`}>
+              <ImageIcon size={12} />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Logo</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Logo</span>
           </button>
 
           {/* BLACK */}
           <button
             onClick={toggleBlack}
-            className={`flex flex-col items-center justify-center px-2.5 py-1 rounded-md border transition-all ${
+            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isBlack
                 ? 'bg-rose-600/30 text-rose-300 border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
                 : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
             }`}
             title="Blackout Live Screen (F6 or B)"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className={`w-6 h-5.5 rounded flex items-center justify-center border ${
-                activeControlState?.isBlack ? 'bg-rose-600 text-white border-rose-400' : 'bg-black text-white border-white/30'
-              }`}>
-                <Square size={10} className="fill-black text-black" />
-              </div>
+            <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
+              activeControlState?.isBlack ? 'bg-rose-600 text-white border-rose-400' : 'bg-black text-white border-white/30'
+            }`}>
+              <Square size={10} className="fill-black text-black" />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Black</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Black</span>
           </button>
 
           {/* CLEAR */}
           <button
             onClick={toggleClear}
-            className={`flex flex-col items-center justify-center px-2.5 py-1 rounded-md border transition-all ${
+            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isClear
                 ? 'bg-amber-500/30 text-amber-300 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
                 : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
             }`}
             title="Clear Text on Live Output (F7 or C)"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              <div className={`w-6 h-5.5 rounded flex items-center justify-center border ${
-                activeControlState?.isClear ? 'bg-amber-500 text-black border-amber-400' : 'bg-white/10 text-white border-white/20'
-              }`}>
-                <EyeOff size={12} />
-              </div>
+            <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
+              activeControlState?.isClear ? 'bg-amber-500 text-black border-amber-400' : 'bg-white/10 text-white border-white/20'
+            }`}>
+              <EyeOff size={12} />
             </div>
-            <span className="text-[10px] font-medium tracking-tight">Clear</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Clear</span>
+          </button>
+
+          {/* DRAW / ANNOTATION */}
+          <button
+            onClick={() => store.toggleAnnotationMode()}
+            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
+              store.annotationState?.enabled
+                ? 'bg-amber-500/30 text-amber-300 border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)]'
+                : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
+            }`}
+            title="Live Slide Drawing & Highlighter Tool (Ctrl+Shift+A)"
+          >
+            <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
+              store.annotationState?.enabled ? 'bg-amber-500 text-black border-amber-300' : 'bg-white/10 text-white border-white/20'
+            }`}>
+              <Pen size={12} />
+            </div>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Draw</span>
           </button>
 
           {/* MASTER LIVE COLOR BARS SWITCH */}
           <button
             onClick={toggleMasterLive}
-            className={`flex flex-col items-center justify-center px-2 py-1 rounded-md border transition-all ${
-              isMasterLive
+            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
+              activeControlState?.isLiveEnabled
                 ? 'bg-gradient-to-b from-blue-700/60 to-blue-900/60 text-blue-200 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.35)]'
                 : 'bg-[#20232a] text-gray-500 border-[#373a43]'
             }`}
-            title="Master Live Output Enable / Disable"
+            title="Target Live Output Enable / Disable"
           >
-            <div className="w-7 h-7 flex items-center justify-center mb-0.5">
-              {/* TV Test Pattern Color Bars Graphic */}
-              <div className="w-6 h-5 rounded overflow-hidden flex border border-white/40 shadow-xs">
-                <div className="h-full w-1 bg-white"></div>
-                <div className="h-full w-1 bg-yellow-400"></div>
-                <div className="h-full w-1 bg-cyan-400"></div>
-                <div className="h-full w-1 bg-emerald-500"></div>
-                <div className="h-full w-1 bg-fuchsia-500"></div>
-                <div className="h-full w-1 bg-rose-600"></div>
-                <div className="h-full w-1 bg-blue-700"></div>
-              </div>
+            {/* TV Test Pattern Color Bars Graphic */}
+            <div className="w-6 h-6 rounded overflow-hidden flex border border-white/40 shadow-xs shrink-0">
+              <div className="h-full w-[3.4px] bg-white"></div>
+              <div className="h-full w-[3.4px] bg-yellow-400"></div>
+              <div className="h-full w-[3.4px] bg-cyan-400"></div>
+              <div className="h-full w-[3.4px] bg-emerald-500"></div>
+              <div className="h-full w-[3.4px] bg-fuchsia-500"></div>
+              <div className="h-full w-[3.4px] bg-rose-600"></div>
+              <div className="h-full w-[3.4px] bg-blue-700"></div>
             </div>
-            <span className="text-[9px] font-black tracking-tight uppercase">Live</span>
+            <span className={`text-[10px] font-bold tracking-wide uppercase select-none pr-1 ${activeControlState?.isLiveEnabled ? 'text-cyan-300 font-extrabold animate-pulse' : 'text-gray-400'}`}>
+              {activeControlState?.isLiveEnabled ? 'Live On' : 'Live'}
+            </span>
           </button>
         </div>
       </div>

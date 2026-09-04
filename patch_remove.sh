@@ -1,1 +1,0 @@
-sed -i '/const handleLaunchProjector = async (gId: string) => {/,/window.open(url, `Projector_${gId}`, `left=${left},top=${top},width=${width},height=${height},menubar=no,toolbar=no,location=no,status=no`);\n  };/d' src/components/LivePanel.tsx

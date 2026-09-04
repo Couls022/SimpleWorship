@@ -3,9 +3,40 @@ import { defaultSongs } from '../db/seedData';
 import { formatScriptureReference, formatScriptureText } from '../utils/scriptureFormatter';
 
 export class PresentationCore {
-  static getActiveContent(schedule: Schedule | null, state: PresentationState | null | undefined) {
-    if (!schedule || !state || !state.activeItemId) return null;
-    return schedule.items.find(i => i.id === state.activeItemId);
+  static getActiveContent(
+    schedule: Schedule | null, 
+    state: PresentationState | null | undefined,
+    directItemFallback?: PresentationItem | null
+  ): PresentationItem | null {
+    if (!state || !state.activeItemId) return null;
+
+    // 1. Direct explicit live item attached to presentation state (persists across navigation)
+    if (state.directLiveItem && (state.directLiveItem.id === state.activeItemId || !state.activeScheduleId)) {
+      return state.directLiveItem;
+    }
+
+    // 2. Direct fallback item supplied as parameter
+    if (directItemFallback && (directItemFallback.id === state.activeItemId || !state.activeScheduleId)) {
+      return directItemFallback;
+    }
+
+    // 3. Search in schedule items
+    if (schedule && schedule.items && schedule.items.length > 0) {
+      const found = schedule.items.find(i => i.id === state.activeItemId);
+      if (found) return found;
+    }
+
+    // 4. If not found in active schedule (e.g. user navigated to Scriptures, Songs, or another schedule),
+    // retain the directLiveItem so projector output NEVER drops to blank/standby!
+    if (state.directLiveItem) {
+      return state.directLiveItem;
+    }
+
+    if (directItemFallback) {
+      return directItemFallback;
+    }
+
+    return null;
   }
 
   // Generates slides for a presentation item
@@ -221,12 +252,32 @@ export class PresentationCore {
         }
       } else {
         generated = [
-          { id: 'b1', title: item.name, text: 'For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.', backgroundUrl: item.customBackgroundUrl }
+          { id: 'b1', title: item.name, text: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.', backgroundUrl: item.customBackgroundUrl }
         ];
       }
     } else if (item.type === 'ppt' || item.type === 'presentation') {
-      if (item.data && Array.isArray(item.data.slides)) {
-        generated = item.data.slides;
+      if (item.data && Array.isArray(item.data.slides) && item.data.slides.length > 0) {
+        generated = item.data.slides.map((s: any, idx: number) => ({
+          id: s.id || `p-slide-${idx}`,
+          title: s.title || `Slide ${idx + 1}`,
+          text: s.text || '',
+          subtitle: s.subtitle,
+          bullets: Array.isArray(s.bullets) && s.bullets.length > 0 ? s.bullets : (s.text ? s.text.split('\n').filter((l: string) => l.trim().length > 0) : undefined),
+          backgroundUrl: s.backgroundUrl || item.customBackgroundUrl,
+          backgroundColor: s.backgroundColor,
+          fontColor: s.fontColor,
+          fontFamily: s.fontFamily,
+          fontSize: s.fontSize,
+          textAlign: s.textAlign,
+          titleColor: s.titleColor,
+          titleFontFamily: s.titleFontFamily,
+          titleFontSize: s.titleFontSize,
+          accentColor: s.accentColor,
+          headerBarColor: s.headerBarColor,
+          isTitleSlide: s.isTitleSlide,
+          elements: s.elements,
+          transition: s.transition,
+        }));
       } else {
         generated = [
           { id: 'p1', title: 'Slide 1', text: item.name, backgroundUrl: item.customBackgroundUrl },
@@ -234,6 +285,16 @@ export class PresentationCore {
           { id: 'p3', title: 'Slide 3', text: 'Closing Prayer & Blessing', backgroundUrl: item.customBackgroundUrl }
         ];
       }
+    } else if (item.type === 'audio' || (item.type === 'media' && item.data?.type === 'audio')) {
+      generated = [
+        {
+          id: 'a1',
+          title: item.name || 'Audio Track',
+          text: '',
+          backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url) || '',
+          isAudio: true,
+        }
+      ];
     } else if (item.type === 'media' || item.type === 'image' || item.type === 'video') {
       generated = [
         {
@@ -244,6 +305,15 @@ export class PresentationCore {
           isVideo: item.type === 'video' || (item.data && (item.data.type === 'video' || item.data?.type === 'motion'))
         }
       ];
+    } else if (item.type === 'camera') {
+      generated = [
+        {
+          id: 'c1',
+          title: item.name || 'Camera Live',
+          text: '',
+          backgroundUrl: '',
+        }
+      ];
     } else if (item.type === 'announcement' || item.type === 'countdown') {
       generated = [
         {
@@ -251,6 +321,18 @@ export class PresentationCore {
           title: item.name,
           text: item.data?.text || 'Welcome to our service! Please take your seats.',
           backgroundUrl: item.customBackgroundUrl,
+        }
+      ];
+    }
+
+    // Fallback: If an item exists but no slides were generated, produce a slide so it never appears blank
+    if (generated.length === 0 && item) {
+      generated = [
+        {
+          id: `item-slide-1`,
+          title: item.name || 'Live Content',
+          text: (item.data && typeof item.data.text === 'string') ? item.data.text : '',
+          backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url) || '',
         }
       ];
     }

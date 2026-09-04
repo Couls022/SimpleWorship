@@ -249,7 +249,14 @@ export interface Theme {
   styles: ThemeStyles;
 }
 
-export type ContentType = 'song' | 'bible' | 'ppt' | 'presentation' | 'media' | 'image' | 'video' | 'announcement' | 'countdown';
+export type ContentType = 'song' | 'bible' | 'ppt' | 'presentation' | 'media' | 'image' | 'video' | 'audio' | 'announcement' | 'countdown' | 'camera';
+
+export interface CameraMetadata {
+  deviceId: string;
+  deviceLabel: string;
+  resolution?: { width: number; height: number };
+  frameRate?: number;
+}
 
 export interface SongSection {
   id: string;
@@ -285,16 +292,204 @@ export interface ScriptureVerse {
   text: string;
 }
 
+export interface SlideElement {
+  id?: string;
+  type: 'text' | 'shape' | 'image' | 'badge';
+  text?: string;
+  leftPercent?: number;
+  topPercent?: number;
+  widthPercent?: number;
+  heightPercent?: number;
+  backgroundColor?: string;
+  borderColor?: string;
+  borderRadius?: number;
+  fontColor?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  imageUrl?: string;
+}
+
+export type ObjectType = 
+  | 'text' 
+  | 'image' 
+  | 'shape' 
+  | 'line' 
+  | 'video' 
+  | 'audio' 
+  | 'scripture' 
+  | 'song' 
+  | 'camera' 
+  | 'placeholder';
+
+export type ShapeType = 
+  | 'rectangle' 
+  | 'rounded-rectangle' 
+  | 'ellipse' 
+  | 'circle' 
+  | 'triangle' 
+  | 'diamond' 
+  | 'arrow' 
+  | 'arrow-right'
+  | 'line' 
+  | 'chevron' 
+  | 'star' 
+  | 'callout' 
+  | 'plus' 
+  | 'hexagon' 
+  | 'pentagon';
+
+export type AnimationCategory = 'entrance' | 'emphasis' | 'exit' | 'motion';
+
+export type AnimationType = 
+  | 'fade-in' 
+  | 'appear' 
+  | 'fly-in' 
+  | 'float-in' 
+  | 'zoom-in' 
+  | 'wipe-in' 
+  | 'slide-in'
+  | 'pulse' 
+  | 'grow-shrink' 
+  | 'spin' 
+  | 'teeter' 
+  | 'transparency'
+  | 'fade-out' 
+  | 'fly-out' 
+  | 'float-out' 
+  | 'zoom-out' 
+  | 'wipe-out' 
+  | 'slide-out';
+
+export interface ObjectAnimation {
+  id: string;
+  type: AnimationType;
+  category: AnimationCategory;
+  durationMs: number;
+  delayMs: number;
+  order: number;
+  trigger: 'onClick' | 'withPrevious' | 'afterPrevious';
+  direction?: 'left' | 'right' | 'up' | 'down' | 'in' | 'out';
+}
+
+export interface ObjectStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  fontColor?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  textDecoration?: 'none' | 'underline' | 'line-through';
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  alignVertical?: 'top' | 'middle' | 'bottom';
+  lineSpacing?: number;
+  letterSpacing?: number;
+  padding?: number;
+  backgroundColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  opacity?: number;
+  shadowEnabled?: boolean;
+  shadowColor?: string;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  crop?: { x: number; y: number; width: number; height: number };
+}
+
+export interface SlideObject {
+  id: string;
+  type: ObjectType;
+  x: number; // 0 to 1920
+  y: number; // 0 to 1080
+  width: number;
+  height: number;
+  rotation?: number; // 0-360
+  zIndex?: number;
+  opacity?: number;
+  visible?: boolean;
+  locked?: boolean;
+  groupId?: string;
+  text?: string;
+  imageUrl?: string;
+  mediaUrl?: string;
+  shapeType?: ShapeType;
+  style?: ObjectStyle;
+  animations?: ObjectAnimation[];
+  placeholderLabel?: string;
+}
+
+export type SlideTransitionType = 
+  | 'none'
+  | 'cut'
+  | 'fade'
+  | 'fade-through-black'
+  | 'smooth-fade'
+  | 'push-left'
+  | 'push-right'
+  | 'push-up'
+  | 'push-down'
+  | 'wipe-left'
+  | 'wipe-right'
+  | 'wipe-up'
+  | 'wipe-down'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'split-horizontal'
+  | 'split-vertical'
+  | 'dissolve'
+  | 'flip-left'
+  | 'flip-right'
+  | 'cube-left'
+  | 'cube-right'
+  | 'gallery'
+  | 'morph';
+
+export interface SlideTransition {
+  type: SlideTransitionType;
+  durationMs: number;
+  easing?: 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'linear';
+  direction?: 'left' | 'right' | 'up' | 'down' | 'in' | 'out';
+  advanceOnClick?: boolean;
+  advanceAfterTimeMs?: number;
+}
+
 export interface Slide {
   id: string;
   title?: string;
+  subtitle?: string;
   text: string;
+  bullets?: string[];
   notes?: string;
   backgroundUrl?: string;
+  backgroundColor?: string;
+  backgroundType?: 'color' | 'image' | 'gradient' | 'transparent';
+  backgroundGradient?: string;
+  fontColor?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  titleColor?: string;
+  titleFontFamily?: string;
+  titleFontSize?: number;
+  accentColor?: string;
+  headerBarColor?: string;
+  isTitleSlide?: boolean;
+  elements?: SlideElement[];
+  objects?: SlideObject[];
   isVideo?: boolean;
+  isAudio?: boolean;
   themeId?: string;
   themeOverride?: ThemeStyles;
   verses?: Array<{ verse: number, text: string }>;
+  transition?: SlideTransition;
+  aspectRatio?: number;
+  aspectRatioLabel?: string;
+  overlayDimmer?: number;
+  autoAdvanceSeconds?: number;
+  widthEmu?: number;
+  heightEmu?: number;
 }
 
 export interface PresentationItem {
@@ -352,6 +547,45 @@ export interface AlertState {
   showNursery?: boolean;
 }
 
+export type AnnotationToolType = 'pen' | 'highlighter' | 'laser' | 'rectangle' | 'arrow' | 'spotlight' | 'eraser';
+
+export interface AnnotationPoint {
+  x: number; // Normalized 0..1 relative to stage width
+  y: number; // Normalized 0..1 relative to stage height
+}
+
+export interface AnnotationStroke {
+  id: string;
+  tool: 'pen' | 'highlighter' | 'rectangle' | 'arrow' | 'spotlight';
+  color: string;
+  size: number; // Stroke width in stage scale pixels
+  opacity: number; // 0..1
+  points: AnnotationPoint[];
+  filled?: boolean;
+  createdAt: number;
+}
+
+export interface LaserPointerState {
+  active: boolean;
+  x: number; // Normalized 0..1
+  y: number; // Normalized 0..1
+  color: string;
+  size: number;
+  lastUpdated: number;
+}
+
+export interface SlideAnnotationState {
+  enabled: boolean;
+  activeTool: AnnotationToolType;
+  activeColor: string;
+  strokeSize: number;
+  opacity: number;
+  persistAcrossSlides: boolean;
+  strokes: AnnotationStroke[];
+  redoStack: AnnotationStroke[];
+  laserPointer?: LaserPointerState;
+}
+
 export interface PresentationState {
   activeScheduleId: string | null;
   activeItemId: string | null;
@@ -368,6 +602,9 @@ export interface PresentationState {
   videoCurrentTime?: number;
   videoDuration?: number;
   videoSeekTime?: number;
+  isLiveEnabled: boolean;
+  directLiveItem?: PresentationItem | null;
+  displayId?: string;
 }
 
 // Workspace & Panel Management Types
@@ -453,6 +690,7 @@ export type ProjectorStatus = 'CONNECTED' | 'DISCONNECTED' | 'MINIMIZED' | 'FULL
 
 export interface NativeDisplayTarget {
   id: string;
+  displayId?: string;
   label?: string;
   name?: string;
   isPrimary?: boolean;
@@ -476,10 +714,18 @@ declare global {
       onDisplaysChanged?: (callback: (displays: NativeDisplayTarget[]) => void) => () => void;
       onDisplayChanged?: (callback: (info: any) => void) => () => void;
       openProjector?: (groupId: string, displayId?: string) => Promise<{ success: boolean; status: ProjectorStatus; displayId?: string; conflict?: string | null; error?: string }>;
-      closeProjector?: (groupId: string) => Promise<{ success: boolean; status: ProjectorStatus }>;
+      closeProjector?: (target: string | { groupId?: string; displayId?: string }) => Promise<{ success: boolean; status: ProjectorStatus }>;
       getProjectorStatus?: (groupId: string) => Promise<{ status: ProjectorStatus }>;
       getProjectorStatuses?: () => Promise<Record<string, ProjectorStatus>>;
       onProjectorStatusChanged?: (callback: (data: { groupId: string; status: ProjectorStatus }) => void) => () => void;
+      syncProjectorDisplays?: (assignments: Array<{ displayId: string; groupId: string | null }>) => Promise<{
+        success: boolean;
+        activeDisplays: Array<{ displayId: string; groupId: string | null; bounds?: any }>;
+        closedDisplays: string[];
+        switchedDisplays: Array<{ displayId: string; fromGroupId: string; toGroupId: string }>;
+      }>;
+      onProjectorRouteChanged?: (callback: (data: { displayId: string; groupId: string }) => void) => () => void;
+      onProjectorError?: (callback: (data: { displayId: string; error: string; code?: string }) => void) => () => void;
       saveSwsFile?: (defaultName: string, data: Uint8Array | number[]) => Promise<{ canceled: boolean; filePath?: string }>;
       openSwsFile?: () => Promise<{ canceled: boolean; filePath?: string; data?: ArrayBuffer | Uint8Array }>;
       readSwsFromPath?: (filePath: string) => Promise<{ canceled: boolean; filePath?: string; data?: ArrayBuffer | Uint8Array; error?: string }>;

@@ -17,19 +17,19 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
   {
     id: 'default',
     name: 'Standard 4-Pane (Default)',
-    description: 'Classic presentation layout with Schedule, Preview, Live, and Bottom Resources dock.',
+    description: 'Classic presentation layout with Schedule, Preview, and Live panels.',
     isBuiltIn: true,
     panels: {
       schedule: { visible: true, isCollapsed: false, isDocked: true },
       preview: { visible: true, isCollapsed: false, isDocked: true },
       live: { visible: true, isCollapsed: false, isDocked: true },
       multiGroup: { visible: false, isCollapsed: false, isDocked: true },
-      resources: { visible: true, isCollapsed: false, isDocked: true },
+      resources: { visible: false, isCollapsed: false, isDocked: false },
       stageMonitor: { visible: false, isCollapsed: false, isDocked: false },
       quickNotes: { visible: false, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
     },
     panelGroupSizes: {
-      verticalSplit: [55, 45],
+      verticalSplit: [100, 0],
       horizontalMainSplit: [20, 40, 40],
       bottomSplit: [0, 100],
       previewVerticalSplit: [65, 35],
@@ -47,12 +47,12 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
       preview: { visible: true, isCollapsed: false, isDocked: true },
       live: { visible: true, isCollapsed: false, isDocked: true },
       multiGroup: { visible: false, isCollapsed: false, isDocked: true },
-      resources: { visible: true, isCollapsed: false, isDocked: true },
+      resources: { visible: false, isCollapsed: false, isDocked: false },
       stageMonitor: { visible: true, isCollapsed: false, isDocked: false },
       quickNotes: { visible: false, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
     },
     panelGroupSizes: {
-      verticalSplit: [60, 40],
+      verticalSplit: [100, 0],
       horizontalMainSplit: [15, 35, 50],
       bottomSplit: [0, 100],
       previewVerticalSplit: [55, 45],
@@ -70,12 +70,12 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
       preview: { visible: true, isCollapsed: false, isDocked: true },
       live: { visible: true, isCollapsed: false, isDocked: true },
       multiGroup: { visible: false, isCollapsed: false, isDocked: true },
-      resources: { visible: true, isCollapsed: false, isDocked: true },
+      resources: { visible: false, isCollapsed: false, isDocked: false },
       stageMonitor: { visible: false, isCollapsed: false, isDocked: false },
       quickNotes: { visible: true, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
     },
     panelGroupSizes: {
-      verticalSplit: [65, 35],
+      verticalSplit: [100, 0],
       horizontalMainSplit: [28, 44, 28],
       bottomSplit: [0, 100],
       previewVerticalSplit: [70, 30],
@@ -93,12 +93,12 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
       preview: { visible: true, isCollapsed: false, isDocked: true },
       live: { visible: true, isCollapsed: false, isDocked: false },
       multiGroup: { visible: false, isCollapsed: false, isDocked: true },
-      resources: { visible: true, isCollapsed: false, isDocked: true },
+      resources: { visible: false, isCollapsed: false, isDocked: false },
       stageMonitor: { visible: true, isCollapsed: false, isDocked: false },
       quickNotes: { visible: false, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
     },
     panelGroupSizes: {
-      verticalSplit: [55, 45],
+      verticalSplit: [100, 0],
       horizontalMainSplit: [30, 70, 0],
       bottomSplit: [0, 100],
       previewVerticalSplit: [65, 35],
@@ -160,13 +160,13 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
   resources: {
     id: 'resources',
     title: 'Resources',
-    visible: true,
-    visibility: true,
+    visible: false,
+    visibility: false,
     isCollapsed: false,
     collapsed: false,
-    isDocked: true,
-    size: 65,
-    defaultDockSize: 100,
+    isDocked: false,
+    size: 0,
+    defaultDockSize: 0,
     floating: { x: 60, y: 120, width: 780, height: 460, zIndex: 14 }
   },
   stageMonitor: {
@@ -421,6 +421,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!current) return prev;
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: {
@@ -440,6 +441,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!current) return prev;
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: {
@@ -463,6 +465,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const nextCollapsed = !current.isCollapsed;
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: {
@@ -483,6 +486,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!current) return prev;
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: {
@@ -506,6 +510,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const nextVisible = !current.visible;
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: {
@@ -550,6 +555,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const willBeDocked = !current.isDocked;
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: {
@@ -573,6 +579,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const current = prev.panels[panelKey] || DEFAULT_PANEL_STATES[panelKey];
       return {
         ...prev,
+        activePresetId: '',
         panels: {
           ...prev.panels,
           [panelKey]: { ...current, isDocked }

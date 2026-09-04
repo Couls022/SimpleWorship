@@ -419,16 +419,6 @@ export const defaultAssets: Asset[] = [
 
 export const defaultOutputGroups: OutputGroup[] = [
   {
-    id: 'group-main',
-    name: 'Lobby & Overflow',
-    themeId: 'theme-global',
-    role: 'primary',
-    displayIds: ['Monitor 1 (Primary)'],
-    isBlack: false,
-    isClear: false,
-    showLogo: true
-  },
-  {
     id: 'group-congregation',
     name: 'Congregation Display',
     themeId: 'theme-global',
@@ -452,50 +442,7 @@ export const defaultOutputGroups: OutputGroup[] = [
 
 export const defaultSchedule: Schedule = {
   id: 'sched-1',
-  name: 'Schedule - UNTITLED',
+  name: 'Sunday Morning Service',
   createdAt: Date.now(),
-  items: [
-    {
-      id: 'item-gen-1',
-      type: 'bible',
-      contentId: 'bible-gen-1-1',
-      name: 'Genesis 1:1 (KJV)',
-      notes: 'Scripture Call to Worship',
-      isExpanded: false,
-      data: {
-        reference: 'Genesis 1:1 (KJV)',
-        text: 'In the beginning God created the heaven and the earth.'
-      }
-    },
-    {
-      id: 'item-psa-23',
-      type: 'bible',
-      contentId: 'bible-psa-23',
-      name: 'Mga Awit 23:1-3 (Tagalog)',
-      notes: 'Pagbasa ng Salita ng Diyos',
-      isExpanded: true,
-      data: {
-        reference: 'Mga Awit 23:1-3 (Tagalog)',
-        text: '1 Ang Panginoon ay aking pastor; hindi ako magkukulang.\n\n2 Kaniyang pinahihiga ako sa sariwang pastulan: pinapatnubayan niya ako sa tabi ng mga tubig na pahingahan.\n\n3 Kaniyang pinapanumbalik ang aking kaluluwa: pinapatnubayan niya ako sa mga landas ng katuwiran dahil sa kaniyang pangalan.'
-      }
-    },
-    {
-      id: 'item-1',
-      type: 'song',
-      contentId: 'song-1',
-      name: 'Hallelujah What A Savior',
-      notes: 'Key of B - acoustic opening',
-      isExpanded: false,
-      customBackgroundUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80'
-    },
-    {
-      id: 'item-2',
-      type: 'song',
-      contentId: 'song-2',
-      name: 'Jesus Paid It All',
-      notes: 'Key of Eb - congregation chorus loop',
-      isExpanded: false,
-      customBackgroundUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1920&q=80'
-    }
-  ]
+  items: []
 };

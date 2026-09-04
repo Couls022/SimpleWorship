@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { DisplayManager } from '../core/DisplayManager';
 import { 
   Server, 
   Database, 
@@ -517,8 +518,7 @@ export default function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsMod
 
                       <button
                         onClick={() => {
-                          const url = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${group.id}`;
-                          window.open(url, `Projector_${group.id}`, 'width=1280,height=720,menubar=no,toolbar=no');
+                          DisplayManager.openProjector(group.id, group.displayIds?.[0]);
                         }}
                         className="flex items-center gap-1 bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded text-xs font-bold transition-all shadow cursor-pointer"
                       >

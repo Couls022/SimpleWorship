@@ -102,7 +102,7 @@ export const defaultSystemOptions: SystemOptions = {
         location: 'Top Right',
         autoRemove: true,
         autoRemoveDuration: '01:00',
-        currentCode: '12, 5',
+        currentCode: '',
       },
       message: {
         enabled: true,

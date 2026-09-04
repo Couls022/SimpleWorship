@@ -49,7 +49,7 @@ export default function TargetSelectionModal() {
 
     if (targetId === 'ALL') {
       outputGroups.forEach(g => {
-        goLiveItem(itemId, slideIdx, g.id);
+        goLiveItem(itemId, slideIdx, g.id, routingRequest.item as any);
       });
       window.dispatchEvent(
         new CustomEvent('simpleworship:notify', { 
@@ -58,7 +58,7 @@ export default function TargetSelectionModal() {
       );
     } else {
       setActiveControlGroupId(targetId);
-      goLiveItem(itemId, slideIdx, targetId);
+      goLiveItem(itemId, slideIdx, targetId, routingRequest.item as any);
       const targetGroup = outputGroups.find(g => g.id === targetId);
       window.dispatchEvent(
         new CustomEvent('simpleworship:notify', { 

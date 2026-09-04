@@ -18,22 +18,30 @@ export function SimpleWorshipLogo({
 }: SimpleWorshipLogoProps) {
   const iconSize = size;
   
-  // Decide which official logo asset to show based on variant/showText
+  // Official 3D SW Brand assets
   const logoSrc = (variant === 'icon' || !showText) 
     ? BrandConfig.logoIcon 
-    : BrandConfig.logoLight; // Defaulting to light variant for dark UI backgrounds
+    : BrandConfig.logoLight;
 
   return (
     <div className={`inline-flex items-center gap-2.5 select-none ${className}`}>
-      {/* Official Brand Image Asset */}
+      {/* Official 3D SW Brand Logo Asset */}
       <img 
         src={logoSrc} 
         alt={BrandConfig.productName} 
-        style={{ height: `${iconSize}px`, objectFit: 'contain' }}
-        className="shrink-0"
+        style={{ height: `${iconSize}px`, width: (variant === 'icon' || !showText) ? `${iconSize}px` : 'auto', objectFit: 'contain' }}
+        className="shrink-0 drop-shadow-sm"
+        onError={(e) => {
+          // Fallback to inline SVG or relative path
+          const target = e.currentTarget;
+          if (!target.dataset.fallback) {
+            target.dataset.fallback = 'true';
+            target.src = './branding/logo/SimpleWorship-icon.svg';
+          }
+        }}
       />
 
-      {/* Optional Subtitle (if requested for UI context, not part of the logo itself) */}
+      {/* Optional Subtitle */}
       {showText && variant !== 'icon' && subtitle && (
         <div className="flex flex-col leading-none border-l border-gray-700 pl-2.5 ml-0.5">
           <span className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">

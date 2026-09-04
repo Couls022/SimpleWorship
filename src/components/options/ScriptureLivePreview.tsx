@@ -24,7 +24,7 @@ interface SamplePassage {
 const SAMPLE_PASSAGES: SamplePassage[] = [
   {
     id: 'john-3-16',
-    label: 'John 3:16 (Standard)',
+    label: 'John 3:16 (KJV)',
     book: 'John',
     chapter: 3,
     translation: 'KJV',
@@ -37,7 +37,7 @@ const SAMPLE_PASSAGES: SamplePassage[] = [
   },
   {
     id: 'psalm-23',
-    label: 'Psalm 23:1-2 (Multi-Verse)',
+    label: 'Psalm 23:1-2 (KJV)',
     book: 'Psalms',
     chapter: 23,
     translation: 'KJV',
@@ -48,7 +48,7 @@ const SAMPLE_PASSAGES: SamplePassage[] = [
   },
   {
     id: 'romans-8-28',
-    label: 'Romans 8:28',
+    label: 'Romans 8:28 (KJV)',
     book: 'Romans',
     chapter: 8,
     translation: 'KJV',
@@ -60,16 +60,15 @@ const SAMPLE_PASSAGES: SamplePassage[] = [
     ]
   },
   {
-    id: 'juan-3-16',
-    label: 'Juan 3:16 (Tagalog)',
-    book: 'Juan',
-    chapter: 3,
-    translation: 'Tagalog',
+    id: 'genesis-1-1',
+    label: 'Genesis 1:1-3 (KJV)',
+    book: 'Genesis',
+    chapter: 1,
+    translation: 'KJV',
     verses: [
-      {
-        verse: 16,
-        text: 'Sapagka\'t gayon na lamang ang pagsinta ng Dios sa sanglibutan, na ibinigay niya ang kaniyang bugtong na Anak, upang ang sinomang sa kaniya\'y sumampalataya ay huwag mapahamak, kundi magkaroon ng buhay na walang hanggan.'
-      }
+      { verse: 1, text: 'In the beginning God created the heaven and the earth.' },
+      { verse: 2, text: 'And the earth was without form, and void; and darkness was upon the face of the deep. And the Spirit of God moved upon the face of the waters.' },
+      { verse: 3, text: 'And God said, Let there be light: and there was light.' }
     ]
   }
 ];

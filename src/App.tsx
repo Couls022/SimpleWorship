@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import ModeratorView from './components/ModeratorView';
 import ProjectorView from './components/ProjectorView';
+import RemoteView from './components/RemoteView';
 import { WorkspaceProvider } from './context/WorkspaceContext';
 import { initSync } from './store/sync';
 import { getDB, dbApi } from './db';
@@ -17,9 +18,41 @@ import { v4 as uuidv4 } from 'uuid';
 export default function App() {
   const [isReady, setIsReady] = useState(false);
   
-  const searchParams = new URLSearchParams(window.location.search || window.location.hash.replace(/^#\/?\??/, ''));
-  const isProjector = searchParams.get('projector') === 'true' || window.location.hash.includes('projector');
-  const groupId = searchParams.get('groupId') || searchParams.get('group');
+  const searchParams = new URLSearchParams(window.location.search);
+  let hashQueryString = '';
+  if (window.location.hash.includes('?')) {
+    hashQueryString = window.location.hash.split('?')[1] || '';
+  } else if (window.location.hash.includes('projector')) {
+    hashQueryString = window.location.hash.replace(/^#\/?projector\/?\??/, '');
+  } else if (window.location.hash.includes('remote')) {
+    hashQueryString = window.location.hash.replace(/^#\/?remote\/?\??/, '');
+  }
+  const hashParams = new URLSearchParams(hashQueryString);
+
+  const isProjector =
+    searchParams.get('projector') === 'true' ||
+    hashParams.get('projector') === 'true' ||
+    window.location.hash.includes('projector');
+
+  const isRemote =
+    searchParams.get('remote') === 'true' ||
+    hashParams.get('remote') === 'true' ||
+    window.location.hash.includes('remote');
+
+  const pinFromUrl = searchParams.get('pin') || hashParams.get('pin') || '';
+
+  const rawGroupId =
+    searchParams.get('groupId') ||
+    searchParams.get('group') ||
+    hashParams.get('groupId') ||
+    hashParams.get('group');
+
+  const displayId =
+    searchParams.get('displayId') ||
+    hashParams.get('displayId') ||
+    undefined;
+
+  const groupId = rawGroupId || (isProjector ? 'group-congregation' : undefined);
 
   useEffect(() => {
     async function init() {
@@ -53,6 +86,19 @@ export default function App() {
                 const file = new File([blob], fileName);
                 const result = await readSwsFile(file);
                 if (result.schedule) {
+                  // Ingest bundled songs into offline database
+                  if (result.bundledSongs && result.bundledSongs.length > 0) {
+                    for (const song of result.bundledSongs) {
+                      await dbApi.addSong(song).catch(() => {});
+                    }
+                  }
+                  // Ingest bundled themes into offline database
+                  if (result.bundledThemes && result.bundledThemes.length > 0) {
+                    for (const thm of result.bundledThemes) {
+                      await dbApi.addTheme(thm).catch(() => {});
+                    }
+                  }
+                  await dbApi.addSchedule(result.schedule).catch(() => {});
                   useStore.getState().setActiveSchedule(result.schedule);
                   window.dispatchEvent(new CustomEvent('simpleworship:notify', {
                     detail: `Opened Service: ${result.schedule.name}`
@@ -84,7 +130,11 @@ export default function App() {
   }
 
   if (isProjector && groupId) {
-    return <ProjectorView groupId={groupId} />;
+    return <ProjectorView groupId={groupId} displayId={displayId} />;
+  }
+
+  if (isRemote) {
+    return <RemoteView pinFromUrl={pinFromUrl} />;
   }
 
   return (

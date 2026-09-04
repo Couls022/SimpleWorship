@@ -1,0 +1,31 @@
+appId: com.simpleworship.app
+productName: SimpleWorship
+directories:
+  output: dist-electron
+  buildResources: build
+files:
+  - dist/**/*
+  - electron/**/*
+extraMetadata:
+  main: electron/main.cjs
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+  icon: public/branding/logo/SimpleWorship.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: SimpleWorship
+fileAssociations:
+  - ext: sws
+    name: SimpleWorship Service
+    description: SimpleWorship Service Package
+    role: Editor

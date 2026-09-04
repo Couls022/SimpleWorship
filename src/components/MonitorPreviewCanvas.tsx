@@ -1,12 +1,19 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Music, Volume2 } from 'lucide-react';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import { OutputGroup, PresentationState, SystemOptions } from '../types';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
+import { PresentationContentResolver } from '../core/PresentationContentResolver';
+import CameraLiveRenderer from './CameraLiveRenderer';
+import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
+import { isValidPptxBinary } from '../utils/pptxValidator';
+import { SlideTransitionManager } from '../core/SlideTransitionManager';
+import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 
 interface MonitorPreviewCanvasProps {
   groupId: string;
@@ -83,7 +90,7 @@ export default function MonitorPreviewCanvas({
   groupId,
   customGroup,
   customState,
-  showResolutionTag = true,
+  showResolutionTag = false,
   className = '',
 }: MonitorPreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -101,7 +108,7 @@ export default function MonitorPreviewCanvas({
   } = store;
 
   const group = customGroup || outputGroups.find(g => g.id === groupId) || outputGroups[0];
-  const presentationState = customState || groupStates[groupId] || {
+  const presentationState = customState || groupStates[groupId] || ({
     activeScheduleId: null,
     activeItemId: null,
     activeSlideIndex: 0,
@@ -110,10 +117,47 @@ export default function MonitorPreviewCanvas({
     isClear: false,
     showLogo: false,
     timestamp: Date.now(),
-  };
+    isLiveEnabled: false,
+  } as PresentationState);
+
+  const activeItem = PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
+
+  useEffect(() => {
+    if (activeItem?.type === 'presentation' && activeItem.contentId && !isValidPptxBinary(activeItem.data?.fileBytes)) {
+      PresentationContentResolver.hydrateItemBinaryIfNeeded(activeItem).then((hydratedItem) => {
+        if (hydratedItem && hydratedItem.data?.fileBytes) {
+          useStore.setState((prev) => {
+            const currentGroupState = prev.groupStates[groupId];
+            if (!currentGroupState) return prev;
+            if (currentGroupState.activeItemId !== activeItem.id) return prev;
+
+            return {
+              groupStates: {
+                ...prev.groupStates,
+                [groupId]: {
+                  ...currentGroupState,
+                  directLiveItem: hydratedItem
+                }
+              }
+            };
+          });
+        }
+      });
+    }
+  }, [activeItem?.id, activeItem?.type, activeItem?.contentId, groupId]);
+
+  // Resolve Content & Themes
+  const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
+  const currentSlide = slides[presentationState.activeSlideIndex] || null;
 
   // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
-  const { width: targetWidth, height: targetHeight, aspectRatio, aspectLabel, margins } = resolveGroupResolution(group, systemOptions);
+  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = resolveGroupResolution(group, systemOptions);
+
+  // If active item is a presentation with template aspect ratio, adapt to the PowerPoint template ratio
+  const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt' || isValidPptxBinary(activeItem?.data?.fileBytes);
+  const templateAspectRatio = currentSlide?.aspectRatio || activeItem?.data?.aspectRatio;
+  const aspectRatio = (isPptx && templateAspectRatio && templateAspectRatio > 0) ? templateAspectRatio : groupAspectRatio;
+  const aspectLabel = (isPptx && currentSlide?.aspectRatioLabel) ? currentSlide.aspectRatioLabel : groupAspectLabel;
 
   // Track parent container dimensions via ResizeObserver
   useEffect(() => {
@@ -155,11 +199,6 @@ export default function MonitorPreviewCanvas({
   }
 
   const scale = fittedWidth / targetWidth;
-
-  // Resolve Content & Themes
-  const activeItem = PresentationCore.getActiveContent(activeSchedule, presentationState);
-  const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
-  const currentSlide = slides[presentationState.activeSlideIndex] || null;
 
   const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
   const groupTheme = themesList.find(t => t.id === group?.themeId);
@@ -215,6 +254,15 @@ export default function MonitorPreviewCanvas({
   const logoTheme = themesList.find(t => t.type === 'logo' || t.id === 'theme-logo');
   const logoStyles = logoTheme?.styles || {};
 
+  const contentType = PresentationContentResolver.detectContentType(activeItem);
+
+  const formatVideoTime = (seconds: number): string => {
+    if (isNaN(seconds) || seconds < 0) return '00:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   const isVideoUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return false;
     const lower = url.toLowerCase();
@@ -227,9 +275,22 @@ export default function MonitorPreviewCanvas({
     return lower.startsWith('data:image/') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.webp') || lower.endsWith('.gif') || lower.endsWith('.svg');
   };
 
+  // Track slide index for direction-aware transitions (e.g. push-left vs push-right)
+  const prevSlideIndexRef = useRef(0);
+  const currentSlideIndex = presentationState?.activeSlideIndex || 0;
+  const isForward = currentSlideIndex >= prevSlideIndexRef.current;
+
+  useEffect(() => {
+    prevSlideIndexRef.current = currentSlideIndex;
+  }, [currentSlideIndex]);
+
+  const activeTransition = SlideTransitionManager.resolveTransition(currentSlide, systemOptions);
+  const motionConfig = SlideTransitionManager.getMotionConfig(activeTransition, isForward);
+
   let isVideo = false;
   let videoSrc = '';
   let backgroundUrl = '';
+  let audioSrc = '';
 
   if (isLogoMode) {
     if (logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) {
@@ -244,18 +305,28 @@ export default function MonitorPreviewCanvas({
     const slideIsVideo = currentSlide?.isVideo;
 
     const isExplicitImageItem = (
+      contentType === 'image' ||
       activeItem?.type === 'image' ||
       (activeItem?.type === 'media' && activeItem.data?.isVideo === false) ||
       (activeItem?.type === 'media' && activeItem.data?.type === 'image')
     );
 
     const isExplicitVideoItem = (
+      contentType === 'video' ||
       activeItem?.type === 'video' ||
       (activeItem?.type === 'media' && activeItem.data?.isVideo === true) ||
       (activeItem?.type === 'media' && (activeItem.data?.type === 'video' || activeItem.data?.type === 'motion'))
     );
 
-    if (slideBgUrl) {
+    if (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') {
+      isVideo = false;
+      videoSrc = '';
+      backgroundUrl = '';
+    } else if (contentType === 'audio') {
+      isVideo = false;
+      audioSrc = activeItem?.data?.url || activeItem?.customBackgroundUrl || '';
+      backgroundUrl = resolvedStyles.backgroundImageUrl || '';
+    } else if (slideBgUrl) {
       if (slideIsVideo === true || isExplicitVideoItem || isVideoUrl(slideBgUrl)) {
         isVideo = true;
         videoSrc = slideBgUrl;
@@ -275,6 +346,7 @@ export default function MonitorPreviewCanvas({
   }
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -310,6 +382,44 @@ export default function MonitorPreviewCanvas({
       store.setGroupState(groupId, {
         videoCurrentTime: videoEl.currentTime,
         videoDuration: videoEl.duration || 0,
+      });
+    }
+  };
+
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (!audioEl) return;
+
+    audioEl.loop = presentationState.isVideoLooping ?? true;
+    audioEl.muted = presentationState.isVideoMuted ?? false;
+    audioEl.volume = presentationState.videoVolume ?? 1;
+
+    if (presentationState.isVideoPlaying === false) {
+      audioEl.pause();
+    } else {
+      audioEl.play().catch(() => {});
+    }
+  }, [
+    presentationState.isVideoPlaying,
+    presentationState.isVideoMuted,
+    presentationState.isVideoLooping,
+    presentationState.videoVolume,
+    audioSrc
+  ]);
+
+  useEffect(() => {
+    const audioEl = audioRef.current;
+    if (!audioEl || presentationState.videoSeekTime === undefined) return;
+    audioEl.currentTime = presentationState.videoSeekTime;
+  }, [presentationState.videoSeekTime]);
+
+  const handleAudioTimeUpdate = () => {
+    const audioEl = audioRef.current;
+    if (!audioEl) return;
+    if (store.setGroupState) {
+      store.setGroupState(groupId, {
+        videoCurrentTime: audioEl.currentTime,
+        videoDuration: audioEl.duration || 0,
       });
     }
   };
@@ -360,15 +470,19 @@ export default function MonitorPreviewCanvas({
                 playsInline
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleTimeUpdate}
-                className="w-full h-full object-cover"
-                style={{ filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none' }}
+                className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
+                style={{ 
+                  filter: contentType === 'video'
+                    ? 'none'
+                    : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
+                }}
               />
             ) : backgroundUrl ? (
               <div
                 className="w-full h-full bg-cover bg-center transition-all duration-300"
                 style={{ 
                   backgroundImage: `url(${backgroundUrl})`,
-                  filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none'
+                  filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
                 }}
               />
             ) : isGradient ? (
@@ -378,13 +492,15 @@ export default function MonitorPreviewCanvas({
             )}
 
             {/* Tint Overlay */}
-            <div 
-              className="absolute inset-0"
-              style={{
-                backgroundColor: (isLogoMode ? logoStyles.backgroundOverlayColor : resolvedStyles.backgroundOverlayColor) || '#000000',
-                opacity: (isLogoMode ? logoStyles.backgroundOverlayOpacity : resolvedStyles.backgroundOverlayOpacity) ?? 0.35
-              }}
-            />
+            {contentType !== 'video' && (
+              <div 
+                className="absolute inset-0"
+                style={{
+                  backgroundColor: (isLogoMode ? logoStyles.backgroundOverlayColor : resolvedStyles.backgroundOverlayColor) || '#000000',
+                  opacity: (isLogoMode ? logoStyles.backgroundOverlayOpacity : resolvedStyles.backgroundOverlayOpacity) ?? 0.35
+                }}
+              />
+            )}
           </div>
 
           {/* Top Corner Labels (Song Section Corner Badge or Scripture Reference) */}
@@ -436,8 +552,147 @@ export default function MonitorPreviewCanvas({
             </>
           )}
 
-          {/* Slide Content Layer with Margins */}
-          {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && !(activeItem?.type === 'presentation' && activeItem.data?.fileBytes) && (
+          {/* Foreground Crisp Image Layer */}
+          {contentType === 'image' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && backgroundUrl && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
+              <img 
+                className="w-full h-full object-contain" 
+                src={backgroundUrl} 
+                alt={activeItem?.name || 'Image'}
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          )}
+
+          {/* Foreground Audio Presentation Layer */}
+          {contentType === 'audio' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 select-none">
+              <audio
+                ref={audioRef}
+                key={audioSrc}
+                src={audioSrc}
+                autoPlay
+                loop={presentationState.isVideoLooping ?? true}
+                muted={presentationState.isVideoMuted ?? false}
+                onTimeUpdate={handleAudioTimeUpdate}
+                onLoadedMetadata={handleAudioTimeUpdate}
+              />
+              <div className="p-8 rounded-2xl bg-[#0e111a]/95 backdrop-blur-md border border-cyan-500/20 flex flex-col items-center w-full max-w-xl shadow-2xl relative overflow-hidden">
+                {/* Decorative pulsing animated radar rings */}
+                {presentationState.isVideoPlaying !== false && (
+                  <div className="absolute -inset-10 flex items-center justify-center pointer-events-none opacity-20">
+                    <div className="w-[300px] h-[300px] rounded-full border border-cyan-500 animate-ping absolute" style={{ animationDuration: '3s' }} />
+                    <div className="w-[450px] h-[450px] rounded-full border border-cyan-400 animate-ping absolute" style={{ animationDuration: '4.5s' }} />
+                  </div>
+                )}
+                
+                {/* Music vinyl disk icon or stylized audio waveform */}
+                <div className="relative w-32 h-32 flex items-center justify-center mb-6">
+                  {/* Glowing ambient ring */}
+                  <div className={`absolute inset-0 rounded-full bg-cyan-500/10 blur-xl transition-all duration-1000 ${presentationState.isVideoPlaying !== false ? 'scale-125 opacity-100' : 'scale-90 opacity-50'}`} />
+                  
+                  {/* Spinning/pulsing vinyl record or music visualizer */}
+                  <div className={`w-28 h-28 rounded-full bg-gradient-to-tr from-[#161b26] to-[#0f131c] border-4 border-[#252f44] shadow-2xl flex items-center justify-center relative ${presentationState.isVideoPlaying !== false ? 'animate-spin' : ''}`} style={{ animationDuration: '8s' }}>
+                    {/* Record grooves */}
+                    <div className="absolute inset-2 rounded-full border border-dashed border-gray-700/40" />
+                    <div className="absolute inset-4 rounded-full border border-[#1b2333]" />
+                    <div className="absolute inset-6 rounded-full border border-dashed border-gray-700/20" />
+                    <div className="absolute inset-8 rounded-full border border-[#1b2333]" />
+                    {/* Record label */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-600 to-cyan-400 border border-cyan-300/30 flex items-center justify-center shadow-inner z-10">
+                      <div className="w-3 h-3 rounded-full bg-[#0a0b0e]" />
+                    </div>
+                  </div>
+
+                  {/* Pulsing visualizer bars overlapping the disc */}
+                  <div className="absolute -bottom-2 flex items-end justify-center gap-1.5 h-10 px-4 bg-black/60 backdrop-blur-md border border-[#232d3f] rounded-full z-20">
+                    {[1, 2, 3, 4, 5, 6].map((i) => {
+                      const delays = ['0s', '0.2s', '0.4s', '0.1s', '0.3s', '0.5s'];
+                      const heights = ['h-3', 'h-6', 'h-8', 'h-5', 'h-7', 'h-4'];
+                      return (
+                        <div
+                          key={i}
+                          className={`w-1 rounded-t-sm bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] ${heights[i - 1]} ${presentationState.isVideoPlaying !== false ? 'animate-bounce' : 'opacity-60'}`}
+                          style={{
+                            animationDelay: delays[i - 1],
+                            animationDuration: '0.8s',
+                            transformOrigin: 'bottom',
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[10px] font-black tracking-widest uppercase mb-3 shadow-xs">
+                  SimpleWorship Audio Stream
+                </span>
+                
+                <h2 className="text-xl md:text-2xl font-black text-gray-100 tracking-wide text-center truncate max-w-full px-4 drop-shadow-md">
+                  {activeItem?.name || 'Audio Track'}
+                </h2>
+
+                <p className="text-xs text-gray-400 font-medium font-sans mt-1.5 flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${presentationState.isVideoPlaying !== false ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span>{presentationState.isVideoPlaying !== false ? 'STREAMING ACTIVE' : 'STREAM MUTED'}</span>
+                </p>
+
+                {/* Progress Indicators */}
+                <div className="mt-5 w-full flex items-center justify-between gap-3 text-[11px] font-mono text-cyan-400/80 bg-black/30 px-4 py-2 rounded-lg border border-white/5 shadow-inner">
+                  <div className="flex items-center gap-1.5">
+                    <span>PROGRESS:</span>
+                    <span className="font-bold text-gray-200">{formatVideoTime(presentationState.videoCurrentTime || 0)}</span>
+                  </div>
+                  <span>/</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>TOTAL:</span>
+                    <span className="font-bold text-gray-200">{formatVideoTime(presentationState.videoDuration || 0)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Presentation (PowerPoint / Deck) Slide Layer */}
+          <AnimatePresence>
+            {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && (
+              <motion.div 
+                key={isValidPptxBinary(activeItem?.data?.fileBytes) ? `preview-pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}` : `preview-pptx-${currentSlide.id || presentationState.activeSlideIndex}`}
+                initial={motionConfig.initial}
+                animate={motionConfig.animate}
+                exit={motionConfig.exit}
+                transition={motionConfig.transition}
+                className="absolute inset-0 z-10 w-full h-full overflow-hidden"
+              >
+                {isValidPptxBinary(activeItem?.data?.fileBytes) ? (
+                  <PptxRenderOverlay
+                    fileBytes={activeItem?.data?.fileBytes}
+                    activeSlideIndex={presentationState.activeSlideIndex || 0}
+                    fallbackContent={
+                      <PresentationSlideView 
+                        slide={currentSlide}
+                        slideIndex={presentationState.activeSlideIndex || 0}
+                        totalSlides={slides.length}
+                        mode="full"
+                        themeStyles={resolvedStyles}
+                      />
+                    }
+                  />
+                ) : (
+                  <PresentationSlideView 
+                    slide={currentSlide}
+                    slideIndex={presentationState.activeSlideIndex || 0}
+                    totalSlides={slides.length}
+                    mode="full"
+                    themeStyles={resolvedStyles}
+                  />
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Slide Content Layer with Margins for Songs, Scriptures, Announcements */}
+          {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && (
             <div 
               className="absolute inset-0 z-10 w-full h-full"
               style={{
@@ -612,7 +867,7 @@ export default function MonitorPreviewCanvas({
 
           {/* Standby State (When no content or slide is currently live and not in logo mode) */}
           {!currentSlide && !presentationState.isBlack && !presentationState.isClear && !presentationState.showLogo && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none bg-black">
               <div className="p-8 rounded-2xl bg-black/50 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
                 <SimpleWorshipLogo size={56} showText={true} subtitle={group?.name || "Live Display Screen"} />
                 <div className="mt-5 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold tracking-wider">
@@ -680,6 +935,16 @@ export default function MonitorPreviewCanvas({
             ) : null
           )}
 
+          {/* Slide Annotation Layer (Semi-transparent vector overlay that persists across transitions) */}
+          {!presentationState.isBlack && (
+            <SlideAnnotationLayer 
+              interactive={true} 
+              stageWidth={targetWidth}
+              stageHeight={targetHeight}
+              className="z-35"
+            />
+          )}
+
           {/* Marquee Alert Banner */}
           {alert.active && !presentationState.isBlack && (
             <div 
@@ -700,23 +965,25 @@ export default function MonitorPreviewCanvas({
             </div>
           )}
 
-          {/* PPTX Native Render Overlay */}
-          {activeItem?.type === 'presentation' && activeItem.data?.fileBytes && (
+          {/* Camera Live Renderer */}
+          {activeItem?.type === 'camera' && activeItem.data?.deviceId && (
             <div 
-              className="absolute inset-0 z-30 pointer-events-none transition-opacity duration-300"
-              style={{ 
-                opacity: presentationState.showLogo || presentationState.isClear || presentationState.isBlack ? 0 : 1 
-              }}
+              className="absolute inset-0 z-25 transition-opacity duration-300 pointer-events-none"
+              style={{ opacity: presentationState.isBlack ? 0 : 1 }}
             >
-               <PptxRenderOverlay 
-                  fileBytes={activeItem.data.fileBytes}
-                  activeSlideIndex={presentationState.activeSlideIndex}
-               />
+              <CameraLiveRenderer 
+                deviceId={activeItem.data.deviceId}
+                isBlack={presentationState.isBlack}
+                isClear={presentationState.isClear}
+                showLogo={presentationState.showLogo}
+                logoUrl={systemOptions?.mainOutput?.general?.disableLogoOnLive ? undefined : (resolvedStyles.backgroundImageUrl)}
+                isLiveOutput={false}
+              />
             </div>
           )}
 
           {/* Nursery Alert Badge Overlay */}
-          {(alert.showNursery || systemOptions?.mainOutput?.alerts?.nursery?.enabled) && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !presentationState.isBlack && (
+          {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !presentationState.isBlack && (
             <div 
               className={`absolute z-40 px-3 py-1.5 rounded-lg shadow-xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
                 systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-4 left-4' :

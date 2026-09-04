@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Plus, Play, Music, Tv } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { Song } from '../types';
+import { OfflineSearchEngine } from '../core/OfflineSearchEngine';
 
 interface QuickSongSearchModalProps {
   onClose: () => void;
@@ -15,11 +16,7 @@ export default function QuickSongSearchModal({ onClose }: QuickSongSearchModalPr
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const filteredSongs = songsList.filter(song => 
-    song.title.toLowerCase().includes(search.toLowerCase()) ||
-    (song.lyrics && song.lyrics.toLowerCase().includes(search.toLowerCase())) ||
-    (song.author && song.author.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredSongs = OfflineSearchEngine.filterSongs(songsList, search);
 
   useEffect(() => {
     inputRef.current?.focus();
