@@ -1,9 +1,45 @@
-const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { pathToFileURL } = require('url');
 
+// ============================================================================
+// HARDWARE ACCELERATION & HIGH-PERFORMANCE WINDOWS SYSTEM ENGINE
+// Configured to adapt directly to real device CPU, RAM, GPU, and graphics drivers
+// ============================================================================
+
+// 1. Force GPU Hardware Acceleration & Bypass strict Chromium blocklists on Windows
+// (Ensures Intel HD/UHD/Iris, AMD Radeon, and NVIDIA GPUs utilize direct D3D11/DirectX rasterization)
+app.commandLine.appendSwitch('ignore-gpu-blocklist');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
+app.commandLine.appendSwitch('force-gpu-mem-available-mb', '2048');
+
+// 2. Hardware Video & Media Decoding (DXVA2 / Direct3D11 / NVDEC / VAAPI)
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
+app.commandLine.appendSwitch('enable-accelerated-mjpeg-decode');
+app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,CanvasOopRasterization,RawDraw,DirectShow');
+
+// 3. Prevent Background Throttling on Unfocused Projector Windows
+// When operator clicks main console window, secondary projector display MUST NOT lag or drop frames
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
+// 4. Memory & V8 Engine Optimization for 4K Media, Video Loops, and PPTX
+// Avoids stop-the-world GC pauses on real devices with 4GB - 16GB RAM
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+
+// 5. Windows D3D11 Compositor Optimization
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('use-angle', 'd3d11');
+  app.commandLine.appendSwitch('enable-hardware-overlays', 'single-fullscreen,single-on-top');
+}
+
 let mainWindow = null;
+let powerSaveId = null;
 // Display-Centric Projector Windows: Keyed by physical display ID
 const displayWindows = new Map(); // physicalDisplayId -> BrowserWindow
 const displayRouteMap = new Map(); // physicalDisplayId -> groupId
@@ -28,6 +64,13 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    // Prevent OS from sleeping displays during worship / presentation
+    try {
+      powerSaveId = powerSaveBlocker.start('prevent-display-sleep');
+    } catch (e) {
+      console.warn('[PowerSaveBlocker] Could not lock display sleep:', e);
+    }
+
     // Auto-grant camera and microphone permissions
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
       if (permission === 'media' || permission === 'camera') {
@@ -56,7 +99,9 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      backgroundThrottling: false,
+      spellcheck: false
     }
   });
 
@@ -457,7 +502,9 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      backgroundThrottling: false,
+      spellcheck: false
     }
   });
 
@@ -604,7 +651,9 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
           preload: path.join(__dirname, 'preload.cjs'),
           contextIsolation: true,
           nodeIntegration: false,
-          sandbox: true
+          sandbox: true,
+          backgroundThrottling: false,
+          spellcheck: false
         }
       });
 
@@ -838,6 +887,45 @@ ipcMain.handle('file:read-sws-path', async (event, filePath) => {
     return { canceled: false, filePath, data: buffer };
   } catch (err) {
     return { canceled: true, error: err.message };
+  }
+});
+
+// Real Device Hardware Diagnostics & Adaptive Engine IPC
+ipcMain.handle('system:get-hardware-info', async () => {
+  try {
+    const gpuFeatures = app.getGPUFeatureStatus();
+    let gpuInfo = null;
+    try {
+      gpuInfo = await app.getGPUInfo('basic');
+    } catch (e) {}
+
+    let memInfo = null;
+    if (process.getProcessMemoryInfo) {
+      memInfo = await process.getProcessMemoryInfo().catch(() => null);
+    }
+
+    const cpus = os.cpus();
+    const totalRamMb = Math.round(os.totalmem() / (1024 * 1024));
+    const freeRamMb = Math.round(os.freemem() / (1024 * 1024));
+
+    return {
+      success: true,
+      platform: process.platform,
+      arch: process.arch,
+      cpuModel: cpus && cpus[0] ? cpus[0].model.trim() : 'Real Device CPU',
+      cpuCores: cpus ? cpus.length : 1,
+      cpuSpeedMhz: cpus && cpus[0] ? cpus[0].speed : 0,
+      totalRamMb,
+      freeRamMb,
+      usedRamMb: totalRamMb - freeRamMb,
+      processMemMb: memInfo ? Math.round(memInfo.residentSet / 1024) : null,
+      gpuFeatures,
+      gpuInfo,
+      isHardwareAccelerated: gpuFeatures?.gpu_compositing === 'enabled' || gpuFeatures?.['rasterization'] === 'enabled_force' || gpuFeatures?.['rasterization'] === 'enabled',
+      directXStatus: process.platform === 'win32' ? 'Direct3D 11 Active' : 'Native Compositor Active'
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 });
 

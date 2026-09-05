@@ -546,10 +546,14 @@ export default function MonitorPreviewCanvas({
                 loop={presentationState.isVideoLooping ?? true}
                 muted={presentationState.isVideoMuted ?? false}
                 playsInline
+                preload="auto"
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleTimeUpdate}
                 className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
                 style={{ 
+                  transform: 'translateZ(0)',
+                  willChange: 'transform',
+                  backfaceVisibility: 'hidden',
                   filter: contentType === 'video'
                     ? 'none'
                     : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
@@ -559,6 +563,9 @@ export default function MonitorPreviewCanvas({
               <div
                 className="w-full h-full bg-cover bg-center transition-all duration-300"
                 style={{ 
+                  transform: 'translateZ(0)',
+                  willChange: 'transform',
+                  backfaceVisibility: 'hidden',
                   backgroundImage: `url(${localBackgroundUrl})`,
                   filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
                 }}

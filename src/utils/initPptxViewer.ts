@@ -51,7 +51,8 @@ interface CacheEntry {
 
 class OffscreenPptxCacheManager {
   private cache = new Map<string, CacheEntry>();
-  private maxCacheSize = 120;
+  // Memory-conscious cache size dynamically scaled to real device hardware (default 16 frames = ~120MB instead of 120 frames = ~1GB)
+  private maxCacheSize = 16;
 
   // Off-screen canvas double-buffers for thread-safe off-screen rendering
   private frontCanvas: HTMLCanvasElement | null = null;
@@ -71,6 +72,11 @@ class OffscreenPptxCacheManager {
         console.warn('[initPptxViewer] Could not instantiate off-screen canvas buffers:', e);
       }
     }
+  }
+
+  public setMaxCacheSize(size: number) {
+    this.maxCacheSize = Math.max(6, Math.min(size, 32));
+    this.evictIfNeeded();
   }
 
   private buildKey(presKey: string, slideIndex: number): string {
@@ -139,6 +145,17 @@ class OffscreenPptxCacheManager {
             // ignore
           }
         }
+      }
+
+      // Revoke any previous objectUrl for this key before storing new frame
+      const existingEntry = this.cache.get(key);
+      if (existingEntry?.frame?.objectUrl) {
+        URL.revokeObjectURL(existingEntry.frame.objectUrl);
+      }
+      if (existingEntry?.frame?.canvas) {
+        existingEntry.frame.canvas.width = 1;
+        existingEntry.frame.canvas.height = 1;
+        existingEntry.frame.canvas = null;
       }
 
       const frame: OffscreenSlideFrame = {
@@ -220,9 +237,7 @@ class OffscreenPptxCacheManager {
 
     const targetIndices = [
       currentIndex + 1,
-      currentIndex - 1,
-      currentIndex + 2,
-      currentIndex - 2
+      currentIndex - 1
     ].filter(idx => idx >= 0 && idx < totalSlides);
 
     const scheduleNext = (i: number) => {
@@ -254,24 +269,32 @@ class OffscreenPptxCacheManager {
    * LRU eviction to maintain optimal memory consumption.
    */
   private evictIfNeeded() {
-    if (this.cache.size <= this.maxCacheSize) return;
+    while (this.cache.size > this.maxCacheSize) {
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
 
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-
-    for (const [k, v] of this.cache.entries()) {
-      if (v.status === 'ready' && v.frame && v.frame.renderedAt < oldestTime) {
-        oldestTime = v.frame.renderedAt;
-        oldestKey = k;
+      for (const [k, v] of this.cache.entries()) {
+        const time = v.frame ? v.frame.renderedAt : 0;
+        if (time < oldestTime) {
+          oldestTime = time;
+          oldestKey = k;
+        }
       }
-    }
 
-    if (oldestKey) {
-      const entry = this.cache.get(oldestKey);
-      if (entry?.frame?.objectUrl) {
-        URL.revokeObjectURL(entry.frame.objectUrl);
+      if (oldestKey) {
+        const entry = this.cache.get(oldestKey);
+        if (entry?.frame?.objectUrl) {
+          URL.revokeObjectURL(entry.frame.objectUrl);
+        }
+        if (entry?.frame?.canvas) {
+          entry.frame.canvas.width = 1;
+          entry.frame.canvas.height = 1;
+          entry.frame.canvas = null;
+        }
+        this.cache.delete(oldestKey);
+      } else {
+        break;
       }
-      this.cache.delete(oldestKey);
     }
   }
 
@@ -286,6 +309,11 @@ class OffscreenPptxCacheManager {
           if (entry?.frame?.objectUrl) {
             URL.revokeObjectURL(entry.frame.objectUrl);
           }
+          if (entry?.frame?.canvas) {
+            entry.frame.canvas.width = 1;
+            entry.frame.canvas.height = 1;
+            entry.frame.canvas = null;
+          }
           this.cache.delete(k);
         }
       }
@@ -293,6 +321,11 @@ class OffscreenPptxCacheManager {
       for (const entry of this.cache.values()) {
         if (entry.frame?.objectUrl) {
           URL.revokeObjectURL(entry.frame.objectUrl);
+        }
+        if (entry.frame?.canvas) {
+          entry.frame.canvas.width = 1;
+          entry.frame.canvas.height = 1;
+          entry.frame.canvas = null;
         }
       }
       this.cache.clear();

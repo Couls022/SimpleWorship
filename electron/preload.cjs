@@ -60,5 +60,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (event, filePath) => callback(filePath);
     ipcRenderer.on('file:opened-via-association', handler);
     return () => ipcRenderer.removeListener('file:opened-via-association', handler);
-  }
+  },
+  getHardwareInfo: () => ipcRenderer.invoke('system:get-hardware-info')
 });

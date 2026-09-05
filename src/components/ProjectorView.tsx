@@ -664,6 +664,9 @@ function ProjectorLayer({
     <div 
       className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none transition-opacity duration-300"
       style={{
+        transform: 'translateZ(0)',
+        willChange: 'opacity, transform',
+        backfaceVisibility: 'hidden',
         fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
         opacity: presentationState.isLiveEnabled ? 1 : 0
       }}
@@ -679,8 +682,12 @@ function ProjectorLayer({
               loop={presentationState.isVideoLooping ?? true}
               muted={presentationState.isVideoMuted ?? false}
               playsInline
+              preload="auto"
               className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
               style={{ 
+                transform: 'translateZ(0)',
+                willChange: 'transform',
+                backfaceVisibility: 'hidden',
                 filter: contentType === 'video'
                   ? 'none'
                   : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
@@ -690,6 +697,9 @@ function ProjectorLayer({
             <div
               className="w-full h-full bg-cover bg-center transition-all duration-300"
               style={{ 
+                transform: 'translateZ(0)',
+                willChange: 'transform',
+                backfaceVisibility: 'hidden',
                 backgroundImage: `url(${localBackgroundUrl})`,
                 filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
               }}
