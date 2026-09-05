@@ -529,11 +529,22 @@ export interface OutputGroup {
   themeId?: string;
   themeStyles?: ThemeStyles;
   displayIds?: string[];
+  targetDisplayId?: string;
+  activeControllerId?: string | null;
+  status?: string;
   aspectRatio?: string;
   customResolution?: { width: number; height: number };
   isBlack?: boolean;
   isClear?: boolean;
   showLogo?: boolean;
+}
+
+export interface RouterPanelState {
+  routerId: string;
+  targetOutputGroupId: string | null;
+  active: boolean;
+  visible: boolean;
+  focused: boolean;
 }
 
 export interface AlertState {
@@ -608,7 +619,7 @@ export interface PresentationState {
 }
 
 // Workspace & Panel Management Types
-export type PanelId = 'schedule' | 'preview' | 'live' | 'multiGroup' | 'resources' | 'stageMonitor' | 'quickNotes' | 'mediaLibrary';
+export type PanelId = 'schedule' | 'preview' | 'live' | 'multiGroup' | 'resources' | 'stageMonitor' | 'quickNotes' | 'mediaLibrary' | string;
 
 export interface FloatingCoordinates {
   x: number;

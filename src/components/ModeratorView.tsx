@@ -400,19 +400,37 @@ export default function ModeratorView() {
         />
       </FloatingPanel>
 
+      {/* Fixed primary Live panel via Workspace Layout (if floating, LayoutManager hides its fixed one) */}
       <FloatingPanel id="live" icon={<Tv size={13} />}>
         <div className="flex h-full w-full">
-          {store.activeControlGroupId || outputGroups[0]?.id ? (
+          {store.routerPanels[0] ? (
             <div className="flex-1 h-full overflow-hidden">
-              <LivePanel groupId={store.activeControlGroupId || outputGroups[0].id} />
+              <LivePanel 
+                groupId={store.routerPanels[0].targetOutputGroupId || outputGroups[0]?.id} 
+                routerId={store.routerPanels[0].routerId}
+              />
             </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-500 text-xs">
-              No active output target selected
+              No active router panel
             </div>
           )}
         </div>
       </FloatingPanel>
+
+      {/* Dynamic Additional Router Panels */}
+      {store.routerPanels.slice(1).map(router => (
+        <FloatingPanel key={router.routerId} id={`live-${router.routerId}`} icon={<Tv size={13} />}>
+          <div className="flex h-full w-full">
+            <div className="flex-1 h-full overflow-hidden">
+              <LivePanel 
+                groupId={router.targetOutputGroupId || outputGroups[0]?.id} 
+                routerId={router.routerId}
+              />
+            </div>
+          </div>
+        </FloatingPanel>
+      ))}
 
       <FloatingPanel id="multiGroup" icon={<Monitor size={13} />}>
         <MultiGroupPreviewBar />

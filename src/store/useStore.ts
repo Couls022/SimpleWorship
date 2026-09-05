@@ -3,6 +3,7 @@ import {
   Profile, 
   PresentationState, 
   OutputGroup, 
+  RouterPanelState,
   Schedule, 
   PresentationItem, 
   Song, 
@@ -137,6 +138,14 @@ interface AppState {
   systemOptions: SystemOptions;
   updateSystemOptions: (updates: Partial<SystemOptions> | ((prev: SystemOptions) => SystemOptions)) => void;
   resetSystemOptions: () => void;
+
+  // Router Panels
+  routerPanels: RouterPanelState[];
+  activeRouterId: string | null;
+  addRouterPanel: (panel: RouterPanelState) => void;
+  removeRouterPanel: (id: string) => void;
+  updateRouterPanel: (id: string, updates: Partial<RouterPanelState>) => void;
+  setActiveRouterId: (id: string | null) => void;
 
   // Config
   outputGroups: OutputGroup[];
@@ -362,6 +371,64 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
+  // Router Panels
+  routerPanels: [
+    {
+      routerId: 'router-1',
+      targetOutputGroupId: 'group-congregation',
+      active: true,
+      visible: true,
+      focused: true
+    }
+  ],
+  activeRouterId: 'router-1',
+  addRouterPanel: (panel) => set((state) => {
+    const panels = [...state.routerPanels, panel];
+    return {
+      routerPanels: panels,
+      activeRouterId: panel.routerId,
+      activeControlGroupId: panel.targetOutputGroupId
+    };
+  }),
+  removeRouterPanel: (id) => set((state) => {
+    const panels = state.routerPanels.filter(p => p.routerId !== id);
+    const newActiveId = state.activeRouterId === id ? (panels[0]?.routerId || null) : state.activeRouterId;
+    const newActiveTarget = panels.find(p => p.routerId === newActiveId)?.targetOutputGroupId || null;
+    return {
+      routerPanels: panels.map(p => ({
+        ...p,
+        active: p.routerId === newActiveId
+      })),
+      activeRouterId: newActiveId,
+      activeControlGroupId: newActiveTarget
+    };
+  }),
+  updateRouterPanel: (id, updates) => set((state) => {
+    const panels = state.routerPanels.map(p => p.routerId === id ? { ...p, ...updates } : p);
+    const activeTarget = panels.find(p => p.routerId === state.activeRouterId)?.targetOutputGroupId || null;
+    return { 
+      routerPanels: panels,
+      activeControlGroupId: activeTarget
+    };
+  }),
+  setActiveRouterId: (id) => {
+    set((state) => {
+      const panels = state.routerPanels.map(p => ({
+        ...p,
+        active: p.routerId === id,
+        focused: p.routerId === id ? true : p.focused
+      }));
+      const newActiveTarget = panels.find(p => p.routerId === id)?.targetOutputGroupId || null;
+      return {
+        activeRouterId: id,
+        routerPanels: panels,
+        activeControlGroupId: newActiveTarget
+      };
+    });
+    const { outputGroups, groupStates, activeControlGroupId } = get();
+    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, activeControlGroupId).catch(() => {});
+  },
+
   outputGroups: defaultOutputGroups,
   setOutputGroups: (groups) => {
     set((state) => {
@@ -557,7 +624,16 @@ export const useStore = create<AppState>((set, get) => ({
 
   activeControlGroupId: 'group-congregation',
   setActiveControlGroupId: (id) => {
-    set({ activeControlGroupId: id });
+    set((state) => {
+      if (!state.activeRouterId) return { activeControlGroupId: id };
+      const panels = state.routerPanels.map(p => 
+        p.routerId === state.activeRouterId ? { ...p, targetOutputGroupId: id } : p
+      );
+      return { 
+        routerPanels: panels,
+        activeControlGroupId: id 
+      };
+    });
     const { outputGroups, groupStates } = get();
     DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, id).catch(() => {});
   },
@@ -787,13 +863,25 @@ export const useStore = create<AppState>((set, get) => ({
 
   // LIVE Navigation & Controls
   goLiveNext: () => {
-    const { activeControlGroupId, groupStates, activeSchedule, songsList, systemOptions, shortcutSettings } = get();
+    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings } = get();
     if (!activeControlGroupId) return;
     const currentState = groupStates[activeControlGroupId] || defaultState;
+    const currentItemId = currentState.activeItemId;
 
-    const liveItem = PresentationCore.getActiveContent(activeSchedule, currentState, currentState.directLiveItem);
-    const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
-    const totalSlides = slides.length > 0 ? slides.length : 1;
+    let totalSlides = 999;
+    if (currentItemId) {
+      const scheduleItem = activeSchedule?.items?.find(i => i.id === currentItemId);
+      if (scheduleItem?.data?.slides?.length) {
+        totalSlides = scheduleItem.data.slides.length;
+      } else {
+        const song = songsList.find(s => s.id === currentItemId);
+        if (song?.sections?.length) {
+          totalSlides = song.sections.length;
+        } else if (song?.lyrics) {
+          totalSlides = song.lyrics.split(/\n\s*\n/).length;
+        }
+      }
+    }
 
     let nextIndex = currentState.activeSlideIndex + 1;
     if (nextIndex >= totalSlides) {
@@ -807,16 +895,28 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   goLivePrev: () => {
-    const { activeControlGroupId, groupStates, activeSchedule, songsList, systemOptions, shortcutSettings } = get();
+    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings } = get();
     if (!activeControlGroupId) return;
     const currentState = groupStates[activeControlGroupId] || defaultState;
+    const currentItemId = currentState.activeItemId;
 
     let prevIndex = currentState.activeSlideIndex - 1;
     if (prevIndex < 0) {
       if (shortcutSettings.wrapAroundSlides) {
-        const liveItem = PresentationCore.getActiveContent(activeSchedule, currentState, currentState.directLiveItem);
-        const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
-        const totalSlides = slides.length > 0 ? slides.length : 1;
+        let totalSlides = 1;
+        if (currentItemId) {
+          const scheduleItem = activeSchedule?.items?.find(i => i.id === currentItemId);
+          if (scheduleItem?.data?.slides?.length) {
+            totalSlides = scheduleItem.data.slides.length;
+          } else {
+            const song = songsList.find(s => s.id === currentItemId);
+            if (song?.sections?.length) {
+              totalSlides = song.sections.length;
+            } else if (song?.lyrics) {
+              totalSlides = song.lyrics.split(/\n\s*\n/).length;
+            }
+          }
+        }
         prevIndex = Math.max(0, totalSlides - 1);
       } else {
         prevIndex = 0;

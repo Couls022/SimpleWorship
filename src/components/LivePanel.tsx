@@ -47,11 +47,12 @@ import { SlideAnnotationHUD } from './SlideAnnotationHUD';
 
 interface LivePanelProps {
   groupId: string;
+  routerId?: string;
   showPreviewDisplay?: boolean;
   key?: React.Key;
 }
 
-export default function LivePanel({ groupId, showPreviewDisplay = true }: LivePanelProps) {
+export default function LivePanel({ groupId, routerId, showPreviewDisplay = true }: LivePanelProps) {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isDraggingSelf, setIsDraggingSelf] = useState(false);
   const [dropPosition, setDropPosition] = useState<'left' | 'right' | null>(null);
@@ -98,7 +99,7 @@ export default function LivePanel({ groupId, showPreviewDisplay = true }: LivePa
   const isFirst = groupIndex <= 0;
   const isLast = groupIndex === -1 || groupIndex >= outputGroups.length - 1;
   const activeControlState = groupStates[groupId];
-  const isTargetedGroup = store.activeControlGroupId === groupId;
+  const isTargetedGroup = store.activeRouterId === routerId || (!routerId && store.activeControlGroupId === groupId);
 
   const handleAddPanel = () => {
     const newGroup = {
@@ -413,7 +414,7 @@ export default function LivePanel({ groupId, showPreviewDisplay = true }: LivePa
         }`}
         title="Drag header to move panel left or right • Click to select as Active Target"
       >
-        <div className="flex items-center gap-1.5 min-w-0" onClick={() => store.setActiveControlGroupId(groupId)}>
+        <div className="flex items-center gap-1.5 min-w-0" onClick={() => store.setActiveRouterId(routerId || 'router-1')}>
           {/* Drag Handle Icon */}
           <div 
             className="p-0.5 text-gray-400 hover:text-cyan-300 transition-colors flex items-center cursor-grab active:cursor-grabbing"
@@ -422,8 +423,30 @@ export default function LivePanel({ groupId, showPreviewDisplay = true }: LivePa
             <GripVertical size={14} />
           </div>
 
-          <span className="text-xs font-bold text-gray-200 tracking-wide uppercase truncate">
-            <span className={isTargetedGroup ? 'text-cyan-300 font-extrabold' : 'text-indigo-400'}>{activeGroup?.name || 'Live Panel'}</span> • Live - {liveItem?.name || 'No Content Live'}
+          <span className="text-xs font-bold text-gray-200 tracking-wide uppercase flex items-center gap-2">
+            <span className={isTargetedGroup ? 'text-cyan-300 font-extrabold' : 'text-indigo-400'}>Router {routerId?.replace('router-', '') || '1'}</span>
+            
+            <select
+              value={groupId}
+              onChange={(e) => {
+                if (routerId) {
+                  store.updateRouterPanel(routerId, { targetOutputGroupId: e.target.value });
+                  if (store.activeRouterId === routerId) {
+                    store.setActiveControlGroupId(e.target.value);
+                  }
+                }
+              }}
+              className="bg-[#1e2026] text-xs text-gray-300 border border-[#3b4152] rounded py-0.5 px-1 outline-none cursor-pointer"
+            >
+              {outputGroups.map(g => (
+                <option key={g.id} value={g.id}>
+                  Target: {g.name}
+                </option>
+              ))}
+            </select>
+            
+            <span className="opacity-50 mx-1">•</span> 
+            <span className="truncate max-w-[150px]">{liveItem?.name || 'No Content'}</span>
           </span>
         </div>
 
