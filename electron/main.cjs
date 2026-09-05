@@ -88,11 +88,14 @@ function createMainWindow() {
   // Disable native OS menu to eliminate duplicate top menu layer
   Menu.setApplicationMenu(null);
 
+  
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1280,
+    width: Math.min(1440, width),
+    height: Math.min(900, height),
+    minWidth: 1024,
     minHeight: 720,
+
     frame: false,
     backgroundColor: '#0c0d10',
     webPreferences: {

@@ -1,7 +1,5 @@
 import { useStore } from './useStore';
-
-const CHANNEL_NAME = 'simpleworship_sync';
-let channel: BroadcastChannel | null = null;
+import { broadcastStateChange, subscribeToBroadcast } from '../utils/broadcastSync';
 
 export interface SyncTelemetry {
   channelActive: boolean;
@@ -15,8 +13,8 @@ export interface SyncTelemetry {
 }
 
 export const syncTelemetry: SyncTelemetry = {
-  channelActive: false,
-  channelName: CHANNEL_NAME,
+  channelActive: true,
+  channelName: 'simpleworship_live_channel',
   lastBroadcastTime: null,
   lastReceivedTime: null,
   messageCount: 0,
@@ -26,6 +24,7 @@ export const syncTelemetry: SyncTelemetry = {
 };
 
 let syncBackendTimeout: any = null;
+let initialized = false;
 
 function isHttpServerAvailable(): boolean {
   return typeof window !== 'undefined' && window.location.protocol.startsWith('http');
@@ -72,43 +71,34 @@ function debouncedBackendSync() {
 }
 
 export function initSync(isProjector: boolean = false) {
-  if (channel) return;
-  
-  try {
-    channel = new BroadcastChannel(CHANNEL_NAME);
-    syncTelemetry.channelActive = true;
-  } catch (e) {
-    console.warn('BroadcastChannel not supported in this browser, falling back to REST sync', e);
-    syncTelemetry.channelActive = false;
-  }
+  if (initialized) return;
+  initialized = true;
 
   if (isProjector) {
-    // Projector listens for state updates
-    if (channel) {
-      channel.onmessage = (event) => {
-        if (event.data?.type === 'SYNC_STATE') {
-          const payload = event.data;
-          syncTelemetry.lastReceivedTime = Date.now();
-          syncTelemetry.messageCount++;
-          
-          useStore.setState({
-            groupStates: payload.groupStates || {},
-            alert: payload.alert || useStore.getState().alert,
-            ...(payload.annotationState ? { annotationState: payload.annotationState } : {}),
-            ...(payload.activeControlGroupId !== undefined ? { activeControlGroupId: payload.activeControlGroupId } : {}),
-            ...(payload.outputGroups ? { outputGroups: payload.outputGroups } : {}),
-            ...(payload.activeSchedule ? { activeSchedule: payload.activeSchedule } : {}),
-            ...(payload.themesList ? { themesList: payload.themesList } : {}),
-            ...(payload.systemOptions ? { systemOptions: payload.systemOptions } : {})
-          });
-          
-          window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
-        }
-      };
-      
-      // Request initial state via BroadcastChannel
-      channel.postMessage({ type: 'REQUEST_STATE' });
-    }
+    // Projector listens for full sync state updates
+    subscribeToBroadcast((payload) => {
+      if (payload.type === 'SYNC_STATE' && payload.data) {
+        syncTelemetry.lastReceivedTime = Date.now();
+        syncTelemetry.messageCount++;
+        
+        const data = payload.data;
+        useStore.setState({
+          groupStates: data.groupStates || {},
+          alert: data.alert || useStore.getState().alert,
+          ...(data.annotationState ? { annotationState: data.annotationState } : {}),
+          ...(data.activeControlGroupId !== undefined ? { activeControlGroupId: data.activeControlGroupId } : {}),
+          ...(data.outputGroups ? { outputGroups: data.outputGroups } : {}),
+          ...(data.activeSchedule ? { activeSchedule: data.activeSchedule } : {}),
+          ...(data.themesList ? { themesList: data.themesList } : {}),
+          ...(data.systemOptions ? { systemOptions: data.systemOptions } : {})
+        });
+        
+        window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
+      }
+    });
+    
+    // Request initial state via robust sync channel
+    broadcastStateChange({ type: 'REQUEST_STATE', data: null });
 
     // Also fetch initial state from backend as fallback if HTTP server is available
     if (isHttpServerAvailable()) {
@@ -131,12 +121,12 @@ export function initSync(isProjector: boolean = false) {
     }
   } else {
     // Moderator listens for requests and broadcasts updates
-    if (channel) {
-      channel.onmessage = (event) => {
-        if (event.data?.type === 'REQUEST_STATE') {
-          const store = useStore.getState();
-          channel?.postMessage({
-            type: 'SYNC_STATE',
+    subscribeToBroadcast((payload) => {
+      if (payload.type === 'REQUEST_STATE') {
+        const store = useStore.getState();
+        broadcastStateChange({
+          type: 'SYNC_STATE',
+          data: {
             groupStates: store.groupStates,
             activeControlGroupId: store.activeControlGroupId,
             outputGroups: store.outputGroups,
@@ -145,17 +135,16 @@ export function initSync(isProjector: boolean = false) {
             activeSchedule: store.activeSchedule,
             themesList: store.themesList,
             systemOptions: store.systemOptions,
-          });
-          syncTelemetry.lastBroadcastTime = Date.now();
-          syncTelemetry.messageCount++;
-          window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
-        }
-      };
-    }
+          }
+        });
+        syncTelemetry.lastBroadcastTime = Date.now();
+        syncTelemetry.messageCount++;
+        window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
+      }
+    });
 
     // Subscribe to local state changes to broadcast them & sync with backend
     let lastLocalUpdateTime = Date.now();
-
     useStore.subscribe((state, prevState) => {
       if (
         state.groupStates !== prevState.groupStates ||
@@ -168,37 +157,18 @@ export function initSync(isProjector: boolean = false) {
         state.systemOptions !== prevState.systemOptions
       ) {
         lastLocalUpdateTime = Date.now();
-        if (channel) {
-          channel.postMessage({
-            type: 'SYNC_STATE',
-            groupStates: state.groupStates,
-            activeControlGroupId: state.activeControlGroupId,
-            outputGroups: state.outputGroups,
-            alert: state.alert,
-            annotationState: state.annotationState,
-            activeSchedule: state.activeSchedule,
-            themesList: state.themesList,
-            systemOptions: state.systemOptions,
-          });
-          syncTelemetry.lastBroadcastTime = Date.now();
-          syncTelemetry.messageCount++;
-        }
-        
-        // Push state update to backend
+        // Individual delta updates are handled in useStore using broadcastStateChange,
+        // but we also sync full state to backend here.
         debouncedBackendSync();
-        window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
       }
     });
 
-    // ─── POLLING SYSTEM FOR BI-DIRECTIONAL REMOTE CONTROL ───
-    // Poll the server state periodically to instantly grab updates pushed by a phone remote (only when running via HTTP)
+    // Polling for REST sync (remote control apps)
     setInterval(async () => {
       if (!isHttpServerAvailable()) return;
       try {
         const timeSinceLocalChange = Date.now() - lastLocalUpdateTime;
-        // Only fetch external updates if we haven't modified state locally in the last 1.5 seconds
         if (timeSinceLocalChange < 1500) return;
-
         const res = await fetch('/api/sync/state');
         if (res.ok) {
           const ct = res.headers.get('content-type') || '';
@@ -206,11 +176,8 @@ export function initSync(isProjector: boolean = false) {
           const payload = await res.json();
           if (payload.success && payload.data) {
             const serverState = payload.data;
-            
-            // If the server state is newer than our last known update, apply it
             if (serverState.lastUpdated > lastLocalUpdateTime) {
               lastLocalUpdateTime = serverState.lastUpdated;
-              
               useStore.setState({
                 groupStates: serverState.groupStates || {},
                 alert: serverState.alert || useStore.getState().alert,
@@ -219,18 +186,16 @@ export function initSync(isProjector: boolean = false) {
             }
           }
         }
-      } catch (err) {
-        // Silent fail for polling
-      }
+      } catch (err) {}
     }, 500);
   }
 }
 
 export function broadcastState() {
-  if (channel) {
-    const store = useStore.getState();
-    channel.postMessage({
-      type: 'SYNC_STATE',
+  const store = useStore.getState();
+  broadcastStateChange({
+    type: 'SYNC_STATE',
+    data: {
       groupStates: store.groupStates,
       activeControlGroupId: store.activeControlGroupId,
       outputGroups: store.outputGroups,
@@ -238,10 +203,10 @@ export function broadcastState() {
       activeSchedule: store.activeSchedule,
       themesList: store.themesList,
       systemOptions: store.systemOptions,
-    });
-    syncTelemetry.lastBroadcastTime = Date.now();
-    syncTelemetry.messageCount++;
-    debouncedBackendSync();
-    window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
-  }
+    }
+  });
+  syncTelemetry.lastBroadcastTime = Date.now();
+  syncTelemetry.messageCount++;
+  debouncedBackendSync();
+  window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
 }

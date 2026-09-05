@@ -9,15 +9,15 @@
   "scripts": {
     "dev": "vite --port 3000 --host 0.0.0.0",
     "dev:electron": "electron .",
-    "build": "vite build",
+    "build": "vite build && node scripts/postbuild.cjs",
     "build:renderer": "vite build",
-    "dist": "vite build && electron-builder --win",
-    "dist:dir": "vite build && electron-builder --dir",
+    "dist": "vite build && node scripts/postbuild.cjs && electron-builder --win",
+    "dist:dir": "vite build && node scripts/postbuild.cjs && electron-builder --dir",
     "preview": "vite preview --port 3000 --host 0.0.0.0",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:installer": "vite build && electron-builder --win"
+    "build:installer": "vite build && node scripts/postbuild.cjs && electron-builder --win"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.95",
@@ -53,5 +53,25 @@
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
     "vitest": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.simpleworship.app",
+    "productName": "SimpleWorship",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
   }
 }

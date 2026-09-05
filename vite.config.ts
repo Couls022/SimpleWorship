@@ -142,7 +142,7 @@ function simpleWorshipApiPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
-    base: process.env.ELECTRON_BUILD === 'true' ? './' : '/',
+    base: './',
     plugins: [react(), tailwindcss(), simpleWorshipApiPlugin()],
     resolve: {
       alias: {

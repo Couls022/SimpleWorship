@@ -480,6 +480,7 @@ function ProjectorLayer({
   }
 
   const [localBackgroundUrl, setLocalBackgroundUrl] = useState<string>('');
+  const [localLogoUrl, setLocalLogoUrl] = useState<string>('');
   const [localAudioSrc, setLocalAudioSrc] = useState<string>('');
   const [managedVideoSrc, setManagedVideoSrc] = useState<string | null>(null);
 
@@ -508,13 +509,26 @@ function ProjectorLayer({
     }
     
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
-      if (!url || !url.startsWith('blob:') || !contentId) return url;
+      if (!url || !url.startsWith('blob:')) return url;
+      
+      let targetId = contentId;
+      // Try to reverse lookup if contentId is missing (e.g. for theme backgrounds)
+      if (!targetId) {
+        const assetsList = useStore.getState().assetsList || [];
+        const matched = assetsList.find(a => a.url === url);
+        if (matched) {
+          targetId = matched.id;
+        }
+      }
+      
+      if (!targetId) return url;
+      
       try {
-        const cachedUrl = dbApi.getCachedUrl(contentId);
+        const cachedUrl = dbApi.getCachedUrl(targetId);
         if (cachedUrl) return cachedUrl;
         
         // Slow path: hit IndexedDB
-        const asset = await dbApi.getAsset(contentId);
+        const asset = await dbApi.getAsset(targetId);
         if (asset?.url) return asset.url;
       } catch (e) {}
       return url;
@@ -523,6 +537,11 @@ function ProjectorLayer({
     resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
       if (isMounted) {
         setLocalBackgroundUrl(resolved);
+      }
+    });
+        resolveUrl(localLogoUrl || localLogoUrl || '', undefined).then(resolved => {
+      if (isMounted) {
+        setLocalLogoUrl(resolved);
       }
     });
     resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
@@ -1040,10 +1059,10 @@ function ProjectorLayer({
       {/* Master Logo Splash Mode or Theme Watermark */}
       {!presentationState.isBlack && (
         presentationState.showLogo ? (
-          (logoStyles.logoUrl && logoStyles.logoUrl !== localBackgroundUrl) ? (
+          (localLogoUrl && localLogoUrl !== localBackgroundUrl) ? (
             <div className="absolute inset-0 z-30 flex items-center justify-center p-12 pointer-events-none">
               <img
-                src={logoStyles.logoUrl}
+                src={localLogoUrl}
                 alt="Logo"
                 className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl"
                 style={{
@@ -1053,7 +1072,7 @@ function ProjectorLayer({
               />
             </div>
           ) : null
-        ) : (resolvedStyles.showLogo && resolvedStyles.logoUrl) ? (
+        ) : (resolvedStyles.showLogo && localLogoUrl) ? (
           <div 
             className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg ${
               resolvedStyles.logoPosition === 'top-left' ? 'top-8 left-8' :
@@ -1065,7 +1084,7 @@ function ProjectorLayer({
             }`}
             style={{ opacity: resolvedStyles.logoOpacity ?? 0.85 }}
           >
-            <img src={resolvedStyles.logoUrl} alt="Logo" className="h-7 w-auto object-contain" />
+            <img src={localLogoUrl} alt="Logo" className="h-7 w-auto object-contain" />
           </div>
         ) : null
       )}

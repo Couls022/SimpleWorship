@@ -1,4 +1,5 @@
 import { Asset, PresentationItem } from '../types';
+import { useStore } from '../store/useStore';
 import { getDB } from '../db';
 import { dbApi } from '../db';
 
@@ -86,6 +87,17 @@ export class MediaStreamController {
 
       // If the fallbackUrl IS a blob URL, we just have to trust the existing blob URL
       if (fallbackUrl && fallbackUrl.startsWith('blob:')) {
+        // [FIX] Try to reverse-lookup the asset ID from the Blob URL using the global assetsList!
+        // This allows projectors to find the blob in their local IndexedDB even if only the URL was passed.
+        try {
+          const assetsList = useStore.getState().assetsList || [];
+          const matchedAsset = assetsList.find(a => a.url === fallbackUrl);
+          if (matchedAsset && matchedAsset.id) {
+            console.log('[MediaStreamController] Recovered asset ID from blob URL:', matchedAsset.id);
+            return this.load(matchedAsset.id, fallbackUrl);
+          }
+        } catch (e) {}
+
         this.revokeCurrent();
         this.objectUrl = fallbackUrl;
         this.isOwnedBlob = false;
