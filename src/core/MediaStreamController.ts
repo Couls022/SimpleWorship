@@ -4,6 +4,7 @@ import { dbApi } from '../db';
 
 export class MediaStreamController {
   private objectUrl: string | null = null;
+  private isOwnedBlob = false;
   private videoElement: HTMLVideoElement | HTMLAudioElement | null = null;
   private generation = 0;
   private currentSourceId: string | null = null;
@@ -19,17 +20,38 @@ export class MediaStreamController {
     try {
       if (sourceId) {
         // Fast path: Check the memory cache first to avoid IndexedDB latency
-        let resolvedUrl = dbApi.getCachedUrl(sourceId);
-        
+        let resolvedUrl: string | undefined;
+        if (typeof dbApi !== 'undefined' && dbApi?.getCachedUrl) {
+          resolvedUrl = dbApi.getCachedUrl(sourceId);
+        }
+
         if (!resolvedUrl) {
-          // Slow path: hit IndexedDB if not cached yet
-          const asset = await dbApi.getAsset(sourceId);
-          if (asset?.url) {
-             resolvedUrl = asset.url;
+          // Check IndexedDB
+          const db = await getDB();
+          const asset: any = await db.get('assets', sourceId);
+
+          // If component unmounted or new load was requested while waiting
+          if (currentGen !== this.generation) {
+            console.warn(`[MediaStreamController] Cancelled stale load for ${sourceId}`);
+            return null;
+          }
+
+          if (asset?.blob) {
+            this.revokeCurrent();
+            this.objectUrl = URL.createObjectURL(asset.blob);
+            this.isOwnedBlob = true;
+            this.currentSourceId = sourceId;
+
+            if (this.videoElement) {
+              this.videoElement.src = this.objectUrl;
+              this.videoElement.load();
+            }
+            return this.objectUrl;
+          } else if (asset?.url) {
+            resolvedUrl = asset.url;
           }
         }
-        
-        // If the component unmounted or a new load was requested while fetching DB
+
         if (currentGen !== this.generation) {
           console.warn(`[MediaStreamController] Cancelled stale load for ${sourceId}`);
           return null;
@@ -37,8 +59,8 @@ export class MediaStreamController {
 
         if (resolvedUrl) {
           this.revokeCurrent();
-          // We DO NOT revoke URLs from dbApi, since they are managed globally
-          this.objectUrl = resolvedUrl; 
+          this.objectUrl = resolvedUrl;
+          this.isOwnedBlob = false;
           this.currentSourceId = sourceId;
 
           if (this.videoElement) {
@@ -48,19 +70,30 @@ export class MediaStreamController {
           return this.objectUrl;
         }
       }
-      
+
       // Fallback if item itself has a valid non-blob URL
       if (fallbackUrl && !fallbackUrl.startsWith('blob:')) {
         this.revokeCurrent();
+        this.objectUrl = fallbackUrl;
+        this.isOwnedBlob = false;
         this.currentSourceId = sourceId || fallbackUrl;
+        if (this.videoElement) {
+          this.videoElement.src = this.objectUrl;
+          this.videoElement.load();
+        }
         return fallbackUrl;
       }
-      
-      // If the fallbackUrl IS a blob URL, we can't recreate it easily unless we know the sourceId.
-      // If we don't have a sourceId, we just have to trust the existing blob URL (e.g. from local window).
+
+      // If the fallbackUrl IS a blob URL, we just have to trust the existing blob URL
       if (fallbackUrl && fallbackUrl.startsWith('blob:')) {
         this.revokeCurrent();
+        this.objectUrl = fallbackUrl;
+        this.isOwnedBlob = false;
         this.currentSourceId = sourceId || fallbackUrl;
+        if (this.videoElement) {
+          this.videoElement.src = this.objectUrl;
+          this.videoElement.load();
+        }
         return fallbackUrl;
       }
 
@@ -106,8 +139,11 @@ export class MediaStreamController {
   }
 
   private revokeCurrent() {
-    // We NO LONGER revoke the objectUrl here because it is globally cached by dbApi
+    if (this.isOwnedBlob && this.objectUrl) {
+      URL.revokeObjectURL(this.objectUrl);
+    }
     this.objectUrl = null;
+    this.isOwnedBlob = false;
     this.currentSourceId = null;
   }
 

@@ -14,7 +14,11 @@ vi.mock('../../src/db', () => ({
       }
       return null;
     })
-  })
+  }),
+  dbApi: {
+    getCachedUrl: vi.fn().mockReturnValue(undefined),
+    getAsset: vi.fn().mockReturnValue(undefined)
+  }
 }));
 
 describe('MediaStreamController', () => {

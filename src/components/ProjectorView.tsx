@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { Sparkles, WifiOff, Music, Volume2 } from 'lucide-react';
-import { SimpleWorshipLogo } from './SimpleWorshipLogo';
 import { subscribeToBroadcast } from '../utils/broadcastSync';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationState } from '../types';
@@ -139,18 +138,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     return list;
   }, [displayId, outputGroups, groupStates, activeControlGroupId, routedGroupId, initialGroupId]);
 
-  // Check if all layers targeting this display are currently in standby/empty
-  const allLayersStandby = React.useMemo(() => {
-    return orderedLiveGroupIds.every(gId => {
-      const pState = groupStates[gId];
-      if (!pState) return true;
-      if (pState.isLiveEnabled) return false; // If the group is Live On, it is active and NOT in standby!
-      if (pState.showLogo || pState.isClear || pState.isBlack) return false;
-      const actItem = PresentationCore.getActiveContent(activeSchedule, pState, pState.directLiveItem);
-      return !actItem;
-    });
-  }, [orderedLiveGroupIds, groupStates, activeSchedule, outputGroups]);
-
   // Global blackout state (active if the winning target group is black)
   const isBlackoutActive = React.useMemo(() => {
     if (orderedLiveGroupIds.length === 0) return true;
@@ -188,35 +175,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
           />
         );
       })}
-
-      {/* Standby State (Global for display if all layers are standby) */}
-      <AnimatePresence>
-        {allLayersStandby && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center select-none bg-black/80 backdrop-blur-sm pointer-events-auto"
-          >
-            <div className="p-8 rounded-2xl bg-[#0b0e14]/90 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
-              <SimpleWorshipLogo size={56} showText={true} subtitle={baseGroupObj?.name || "Live Display Screen"} />
-              <div className="mt-5 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold tracking-wider">
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span>STANDBY • LIVE MONITOR READY</span>
-              </div>
-              <p className="mt-3 text-xs text-gray-400 font-sans leading-relaxed">
-                Double-click any item in Schedule or click "GO LIVE" to project lyrics, scriptures, or media to this screen.
-              </p>
-              <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-gray-500 bg-black/40 px-3 py-1 rounded border border-white/5">
-                <span>Target: {baseGroupObj?.displayIds?.join(', ') || 'Monitor Output'}</span>
-                <span>•</span>
-                <span>{baseGroupObj?.name || orderedLiveGroupIds[0]}</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* 2. Slide Annotation Layer */}
       {!isBlackoutActive && (

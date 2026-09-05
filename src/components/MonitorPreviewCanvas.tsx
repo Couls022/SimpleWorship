@@ -5,7 +5,6 @@ import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { dbApi } from '../db';
 import { Sparkles, Music, Volume2 } from 'lucide-react';
-import SimpleWorshipLogo from './SimpleWorshipLogo';
 import { OutputGroup, PresentationState, SystemOptions } from '../types';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
@@ -938,27 +937,6 @@ export default function MonitorPreviewCanvas({
                 </>
               )}
             </>
-          )}
-
-          {/* Standby State (When no content or slide is currently live and not in logo mode and not Live On) */}
-          {!currentSlide && !presentationState.isBlack && !presentationState.isClear && !presentationState.showLogo && isLiveOff && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none bg-black">
-              <div className="p-8 rounded-2xl bg-black/50 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
-                <SimpleWorshipLogo size={56} showText={true} subtitle={group?.name || "Live Display Screen"} />
-                <div className="mt-5 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold tracking-wider">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-                  <span>STANDBY • LIVE MONITOR READY</span>
-                </div>
-                <p className="mt-3 text-xs text-gray-400 font-sans leading-relaxed">
-                  Double-click any item in Schedule or click "GO LIVE" to project lyrics, scriptures, or media to this screen.
-                </p>
-                <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-gray-500 bg-black/40 px-3 py-1 rounded border border-white/5">
-                  <span>Target: {group?.displayIds?.join(', ') || 'Monitor Output'}</span>
-                  <span>•</span>
-                  <span>{targetWidth}×{targetHeight} ({aspectLabel})</span>
-                </div>
-              </div>
-            </div>
           )}
 
           {/* Copyright Notice (Positioned according to copyrightPosition) */}
