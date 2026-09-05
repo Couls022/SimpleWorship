@@ -36,7 +36,7 @@ export interface OffscreenSlideFrame {
   slideIndex: number;
   canvas: HTMLCanvasElement | null;
   imageBitmap?: ImageBitmap | null;
-  dataUrl?: string;
+  objectUrl?: string;
   renderedAt: number;
   width: number;
   height: number;
@@ -93,13 +93,13 @@ class OffscreenPptxCacheManager {
   /**
    * Puts a rendered slide canvas or element into the off-screen cache buffer.
    */
-  public putFrame(
+  public async putFrame(
     presKey: string,
     slideIndex: number,
     sourceCanvasOrElement: HTMLCanvasElement | HTMLElement | string,
     width = 1920,
     height = 1080
-  ): OffscreenSlideFrame | null {
+  ): Promise<OffscreenSlideFrame | null> {
     if (!presKey || typeof document === 'undefined') return null;
     const key = this.buildKey(presKey, slideIndex);
 
@@ -109,16 +109,19 @@ class OffscreenPptxCacheManager {
       offscreenCanvas.height = height;
       const ctx = offscreenCanvas.getContext('2d');
 
-      let dataUrl: string | undefined;
+      let objectUrl: string | undefined;
 
       if (typeof sourceCanvasOrElement === 'string') {
-        dataUrl = sourceCanvasOrElement;
+        objectUrl = sourceCanvasOrElement;
       } else if (sourceCanvasOrElement instanceof HTMLCanvasElement) {
         if (ctx) {
           ctx.drawImage(sourceCanvasOrElement, 0, 0, width, height);
         }
         try {
-          dataUrl = offscreenCanvas.toDataURL('image/png');
+          const blob = await new Promise<Blob | null>(res => offscreenCanvas.toBlob(res, 'image/png'));
+          if (blob) {
+            objectUrl = URL.createObjectURL(blob);
+          }
         } catch {
           // ignore potential canvas taint
         }
@@ -128,7 +131,10 @@ class OffscreenPptxCacheManager {
         if (innerCanvas && ctx) {
           ctx.drawImage(innerCanvas, 0, 0, width, height);
           try {
-            dataUrl = offscreenCanvas.toDataURL('image/png');
+            const blob = await new Promise<Blob | null>(res => offscreenCanvas.toBlob(res, 'image/png'));
+            if (blob) {
+              objectUrl = URL.createObjectURL(blob);
+            }
           } catch {
             // ignore
           }
@@ -139,7 +145,7 @@ class OffscreenPptxCacheManager {
         key,
         slideIndex,
         canvas: offscreenCanvas,
-        dataUrl,
+        objectUrl,
         renderedAt: Date.now(),
         width,
         height
@@ -261,6 +267,10 @@ class OffscreenPptxCacheManager {
     }
 
     if (oldestKey) {
+      const entry = this.cache.get(oldestKey);
+      if (entry?.frame?.objectUrl) {
+        URL.revokeObjectURL(entry.frame.objectUrl);
+      }
       this.cache.delete(oldestKey);
     }
   }
@@ -272,10 +282,19 @@ class OffscreenPptxCacheManager {
     if (presKey) {
       for (const k of Array.from(this.cache.keys())) {
         if (k.startsWith(`${presKey}_`)) {
+          const entry = this.cache.get(k);
+          if (entry?.frame?.objectUrl) {
+            URL.revokeObjectURL(entry.frame.objectUrl);
+          }
           this.cache.delete(k);
         }
       }
     } else {
+      for (const entry of this.cache.values()) {
+        if (entry.frame?.objectUrl) {
+          URL.revokeObjectURL(entry.frame.objectUrl);
+        }
+      }
       this.cache.clear();
     }
   }
@@ -292,13 +311,13 @@ export function getCachedSlideFrame(presKey: string, slideIndex: number): Offscr
   return pptxCacheManager.getFrameSync(presKey, slideIndex);
 }
 
-export function cacheSlideFrame(
+export async function cacheSlideFrame(
   presKey: string,
   slideIndex: number,
   source: HTMLCanvasElement | HTMLElement | string,
   width?: number,
   height?: number
-): OffscreenSlideFrame | null {
+): Promise<OffscreenSlideFrame | null> {
   return pptxCacheManager.putFrame(presKey, slideIndex, source, width, height);
 }
 
@@ -338,9 +357,9 @@ export function useOffscreenPptxCache(
   }, [presKey, activeSlideIndex]);
 
   const registerRenderedFrame = useCallback(
-    (source: HTMLCanvasElement | HTMLElement | string) => {
+    async (source: HTMLCanvasElement | HTMLElement | string) => {
       if (!presKey) return null;
-      const frame = pptxCacheManager.putFrame(presKey, activeSlideIndex, source);
+      const frame = await pptxCacheManager.putFrame(presKey, activeSlideIndex, source);
       if (frame) {
         setCachedFrame(frame);
       }

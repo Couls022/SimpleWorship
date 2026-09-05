@@ -17,6 +17,8 @@ import { PptxRenderOverlay } from './PptxRenderOverlay';
 import { isValidPptxBinary } from '../utils/pptxValidator';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
+import { MediaStreamController } from '../core/MediaStreamController';
+import { TelemetryManager } from '../utils/TelemetryManager';
 
 interface ProjectorViewProps {
   groupId: string;
@@ -27,6 +29,19 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const store = useStore();
   const { groupStates, activeSchedule, songsList, themesList, outputGroups, alert, loadAllData, systemOptions, activeControlGroupId } = store;
   const [routedGroupId, setRoutedGroupId] = React.useState<string>(initialGroupId);
+  
+  const mediaControllerRef = useRef<MediaStreamController | null>(null);
+  if (!mediaControllerRef.current) {
+    mediaControllerRef.current = new MediaStreamController();
+  }
+  const mediaController = mediaControllerRef.current;
+  const [managedVideoSrc, setManagedVideoSrc] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      mediaController.dispose();
+    };
+  }, []);
 
   useEffect(() => {
     loadAllData();
@@ -100,24 +115,34 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     presentationState.directLiveItem
   );
 
-  // Fallback PPTX Binary Hydration
-  // Resolves race conditions and localStorage limitations by independently fetching 
-  // the durable binary source if it was stripped from the broadcast payload.
+  // Fallback Asset Binary & Media URL Hydration
+  // Resolves race conditions and storage limitations by independently fetching 
+  // durable binary or media sources from IndexedDB if stripped from broadcast payload.
   useEffect(() => {
-    if (activeItem?.type === 'presentation' && activeItem.contentId && !isValidPptxBinary(activeItem.data?.fileBytes)) {
+    if (!activeItem || !activeItem.contentId) return;
+
+    const needsPptxHydration = activeItem.type === 'presentation' && !isValidPptxBinary(activeItem.data?.fileBytes);
+    const currentUrl = activeItem.data?.url || activeItem.customBackgroundUrl;
+    // MediaStreamController now handles videos, so only hydrate images and audio
+    const needsMediaHydration = (activeItem.type === 'media' || activeItem.type === 'audio' || activeItem.type === 'image') && (!currentUrl || currentUrl.startsWith('blob:')) && PresentationContentResolver.detectContentType(activeItem) !== 'video';
+
+    if (needsPptxHydration || needsMediaHydration) {
       PresentationContentResolver.hydrateItemBinaryIfNeeded(activeItem).then((hydratedItem) => {
-        if (hydratedItem && hydratedItem.data?.fileBytes) {
+        if (hydratedItem && hydratedItem !== activeItem) {
           useStore.setState((prev) => {
             const currentGroupState = prev.groupStates[activeGroupId];
             if (!currentGroupState) return prev;
-            if (currentGroupState.activeItemId !== activeItem.id) return prev;
+            if (currentGroupState.activeItemId !== activeItem.id && currentGroupState.directLiveItem?.id !== activeItem.id) return prev;
 
             return {
               groupStates: {
                 ...prev.groupStates,
                 [activeGroupId]: {
                   ...currentGroupState,
-                  directLiveItem: hydratedItem
+                  directLiveItem: currentGroupState.directLiveItem?.id === activeItem.id ? hydratedItem : currentGroupState.directLiveItem
+                  // If it's part of schedule, we don't mutate the schedule directly here.
+                  // But since `directLiveItem` is what Projector renders for ad-hoc, it works for ad-hoc. 
+                  // If it's a schedule item, wait, the `directLiveItem` takes precedence.
                 }
               }
             };
@@ -125,7 +150,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         }
       });
     }
-  }, [activeItem?.id, activeItem?.type, activeItem?.contentId, activeGroupId]);
+  }, [activeItem?.id, activeItem?.type, activeItem?.contentId, activeItem?.data?.url, activeItem?.customBackgroundUrl, activeGroupId]);
 
   const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
   const currentSlide = slides[presentationState.activeSlideIndex] || null;
@@ -228,6 +253,20 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   let backgroundUrl = '';
   let audioSrc = '';
 
+  const isExplicitImageItem = (
+    contentType === 'image' ||
+    activeItem?.type === 'image' ||
+    (activeItem?.type === 'media' && activeItem.data?.isVideo === false) ||
+    (activeItem?.type === 'media' && activeItem.data?.type === 'image')
+  );
+
+  const isExplicitVideoItem = (
+    contentType === 'video' ||
+    activeItem?.type === 'video' ||
+    (activeItem?.type === 'media' && activeItem.data?.isVideo === true) ||
+    (activeItem?.type === 'media' && (activeItem.data?.type === 'video' || activeItem.data?.type === 'motion'))
+  );
+
   if (isLogoMode) {
     if (logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) {
       isVideo = true;
@@ -239,20 +278,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   } else {
     const slideBgUrl = currentSlide?.backgroundUrl;
     const slideIsVideo = currentSlide?.isVideo;
-
-    const isExplicitImageItem = (
-      contentType === 'image' ||
-      activeItem?.type === 'image' ||
-      (activeItem?.type === 'media' && activeItem.data?.isVideo === false) ||
-      (activeItem?.type === 'media' && activeItem.data?.type === 'image')
-    );
-
-    const isExplicitVideoItem = (
-      contentType === 'video' ||
-      activeItem?.type === 'video' ||
-      (activeItem?.type === 'media' && activeItem.data?.isVideo === true) ||
-      (activeItem?.type === 'media' && (activeItem.data?.type === 'video' || activeItem.data?.type === 'motion'))
-    );
 
     if (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') {
       isVideo = false;
@@ -283,6 +308,23 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (isVideo && (isExplicitVideoItem ? activeItem?.contentId : videoSrc)) {
+      TelemetryManager.mark('projector-video-load-start');
+      mediaController.replace(
+        isExplicitVideoItem ? activeItem?.contentId : undefined,
+        videoSrc
+      ).then(url => {
+        setManagedVideoSrc(url);
+        TelemetryManager.measure('Projector Video Load', 'projector-video-load-start');
+        TelemetryManager.recordMediaOperation();
+      });
+    } else {
+      mediaController.dispose();
+      setManagedVideoSrc(null);
+    }
+  }, [isVideo, activeItem?.contentId, videoSrc, isExplicitVideoItem]);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -357,11 +399,11 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     >
       {/* Background Media Layer */}
       <div className="absolute inset-0 z-0">
-        {isVideo && videoSrc ? (
+        {isVideo && (managedVideoSrc || videoSrc) ? (
           <video
             ref={videoRef}
-            key={videoSrc}
-            src={videoSrc}
+            key={managedVideoSrc || videoSrc}
+            src={managedVideoSrc || videoSrc}
             autoPlay
             loop={presentationState.isVideoLooping ?? true}
             muted={presentationState.isVideoMuted ?? false}

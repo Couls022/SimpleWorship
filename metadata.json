@@ -1,6 +1,6 @@
 {
   "name": "SimpleWorship",
   "description": "Professional standalone worship presentation platform featuring schedules, dual preview/live monitors, scriptures, songs, media library, and multi-output projection.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

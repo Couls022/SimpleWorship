@@ -16,6 +16,7 @@ import {
   RotateCw
 } from 'lucide-react';
 import { Slide, SlideObject, ShapeType } from '../../types';
+import { useStore } from '../../store/useStore';
 
 interface SlideCanvasProps {
   slide: Slide;
@@ -737,37 +738,38 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   // ==========================================
   // OS DRAG & DROP OF IMAGE FILES ONTO CANVAS
   // ==========================================
-  const handleDropFromOS = (e: React.DragEvent) => {
+  const handleDropFromOS = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith('image/')) {
         const coords = getCanvasCoords(e);
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          const dataUrl = evt.target?.result as string;
-          if (dataUrl) {
-            const newImgObj: SlideObject = {
-              id: `obj-${Date.now()}-img`,
-              type: 'image',
-              imageUrl: dataUrl,
-              x: Math.max(20, Math.round(coords.x - 300)),
-              y: Math.max(20, Math.round(coords.y - 200)),
-              width: 640,
-              height: 400,
-              style: {
-                borderRadius: 8,
-                shadowEnabled: true,
-                shadowBlur: 14,
-                shadowOffsetY: 4,
-              },
-            };
-            onUpdateObjects([...objects, newImgObj], true);
-            onSelectObjects([newImgObj.id]);
-          }
-        };
-        reader.readAsDataURL(file);
+        try {
+          const { processAssetFile } = await import('../../db/assets');
+          const newAsset = await processAssetFile(file);
+          useStore.getState().addAsset(newAsset);
+          
+          const newImgObj: SlideObject = {
+            id: `obj-${Date.now()}-img`,
+            type: 'image',
+            imageUrl: newAsset.url,
+            x: Math.max(20, Math.round(coords.x - 300)),
+            y: Math.max(20, Math.round(coords.y - 200)),
+            width: 640,
+            height: 400,
+            style: {
+              borderRadius: 8,
+              shadowEnabled: true,
+              shadowBlur: 14,
+              shadowOffsetY: 4,
+            },
+          };
+          onUpdateObjects([...objects, newImgObj], true);
+          onSelectObjects([newImgObj.id]);
+        } catch (err) {
+          console.error("Failed to process dropped image", err);
+        }
       }
     }
   };

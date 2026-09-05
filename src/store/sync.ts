@@ -113,9 +113,13 @@ export function initSync(isProjector: boolean = false) {
     // Also fetch initial state from backend as fallback if HTTP server is available
     if (isHttpServerAvailable()) {
       fetch('/api/sync/state')
-        .then(res => res.json())
+        .then(async res => {
+          const ct = res.headers.get('content-type') || '';
+          if (!res.ok || !ct.includes('application/json')) return null;
+          return res.json();
+        })
         .then(res => {
-          if (res.success && res.data) {
+          if (res && res.success && res.data) {
             useStore.setState({
               groupStates: res.data.groupStates || {},
               alert: res.data.alert || useStore.getState().alert,
@@ -197,6 +201,8 @@ export function initSync(isProjector: boolean = false) {
 
         const res = await fetch('/api/sync/state');
         if (res.ok) {
+          const ct = res.headers.get('content-type') || '';
+          if (!ct.includes('application/json')) return;
           const payload = await res.json();
           if (payload.success && payload.data) {
             const serverState = payload.data;
@@ -210,13 +216,6 @@ export function initSync(isProjector: boolean = false) {
                 alert: serverState.alert || useStore.getState().alert,
                 ...(serverState.activeSchedule ? { activeSchedule: serverState.activeSchedule } : {})
               });
-
-              // Trigger custom local notification or render update
-              window.dispatchEvent(
-                new CustomEvent('simpleworship:notify', { 
-                  detail: 'Synchronized remote control command from mobile device' 
-                })
-              );
             }
           }
         }

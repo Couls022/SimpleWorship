@@ -14,6 +14,7 @@ import {
 import { Asset } from '../../types';
 import { dbApi } from '../../db';
 import { defaultAssets } from '../../db/seedData';
+import { useStore } from '../../store/useStore';
 
 interface ImagePickerModalProps {
   isOpen: boolean;
@@ -144,20 +145,22 @@ export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   if (!isOpen) return null;
 
   // Handle file reading
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      if (dataUrl) {
-        setUploadedPreview({
-          url: dataUrl,
-          name: file.name,
-          size: `${(file.size / 1024).toFixed(1)} KB`,
-        });
-      }
-    };
-    reader.readAsDataURL(file);
+    
+    try {
+      const { processAssetFile } = await import('../../db/assets');
+      const newAsset = await processAssetFile(file);
+      useStore.getState().addAsset(newAsset);
+      
+      setUploadedPreview({
+        url: newAsset.url,
+        name: file.name,
+        size: `${(file.size / 1024).toFixed(1)} KB`,
+      });
+    } catch (err) {
+      console.error("Failed to process image file", err);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {

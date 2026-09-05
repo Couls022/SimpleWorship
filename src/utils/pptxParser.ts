@@ -152,8 +152,8 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
   const zip = new JSZip();
   const loadedZip = await zip.loadAsync(file);
 
-  // 1. Extract all media files into Data URLs
-  const mediaMap = new Map<string, string>(); // relative target or filename -> DataURL
+  // 1. Extract all media files into Object URLs
+  const mediaMap = new Map<string, string>(); // relative target or filename -> ObjectURL
   const mediaFiles = Object.keys(loadedZip.files).filter(name => /^ppt\/media\//.test(name));
   
   for (const mediaName of mediaFiles) {
@@ -164,16 +164,20 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
         : ext === 'webp' ? 'image/webp' 
         : ext === 'gif' ? 'image/gif' 
         : ext === 'svg' ? 'image/svg+xml' 
-        : 'image/png';
+        : ext === 'mp4' ? 'video/mp4'
+        : ext === 'mp3' ? 'audio/mpeg'
+        : ext === 'wav' ? 'audio/wav'
+        : 'application/octet-stream';
       
-      const base64 = await loadedZip.files[mediaName].async('base64');
-      const dataUrl = `data:${mimeType};base64,${base64}`;
-      mediaMap.set(mediaName, dataUrl);
+      const blob = await loadedZip.files[mediaName].async('blob');
+      const realBlob = new Blob([blob], { type: mimeType });
+      const objectUrl = URL.createObjectURL(realBlob);
+      mediaMap.set(mediaName, objectUrl);
       
       const simpleName = mediaName.replace('ppt/media/', '');
-      mediaMap.set(simpleName, dataUrl);
-      mediaMap.set(`../media/${simpleName}`, dataUrl);
-      mediaMap.set(`media/${simpleName}`, dataUrl);
+      mediaMap.set(simpleName, objectUrl);
+      mediaMap.set(`../media/${simpleName}`, objectUrl);
+      mediaMap.set(`media/${simpleName}`, objectUrl);
     } catch (e) {
       console.warn('[pptxParser] Failed reading media:', mediaName, e);
     }

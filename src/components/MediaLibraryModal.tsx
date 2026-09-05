@@ -102,37 +102,24 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
     return true;
   });
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const url = event.target?.result as string;
-        const isVideo = file.type.startsWith('video');
-        const isAudio = file.type.startsWith('audio');
-        let assetType: 'image' | 'video' | 'audio' = 'image';
-        if (isVideo) assetType = 'video';
-        else if (isAudio) assetType = 'audio';
-
-        const newAsset: Asset = {
-          id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          type: assetType,
-          url: url,
-          thumbnailUrl: (isVideo || isAudio) ? undefined : url,
-          tags: ['uploaded', assetType],
-        };
+    for (const file of Array.from(files)) {
+      try {
+        const { processAssetFile } = await import('../db/assets');
+        const newAsset = await processAssetFile(file);
         addAsset(newAsset);
         window.dispatchEvent(
           new CustomEvent('simpleworship:notify', { 
             detail: `Imported "${newAsset.name}" successfully!` 
           })
         );
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.error("Failed to import media:", err);
+      }
+    }
   };
 
   const handleToggleAudio = (asset: Asset, e: React.MouseEvent) => {

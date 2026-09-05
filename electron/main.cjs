@@ -98,6 +98,19 @@ function createMainWindow() {
     }
   });
 
+  mainWindow.on('focus', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.moveTop();
+    }
+  });
+
+  mainWindow.on('restore', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.focus();
+      mainWindow.moveTop();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
     displayWindows.forEach(win => {
@@ -257,6 +270,20 @@ ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
     selectedDisplay = formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[0];
   }
 
+  // Auto-redirect to secondary display if target resolves to operator display and a secondary display exists
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const operatorDisplay = screen.getDisplayMatching(mainWindow.getBounds());
+    if (selectedDisplay && String(selectedDisplay.displayId) === String(operatorDisplay.id)) {
+      const secondaryDisplay = formattedDisplays.find(fd => String(fd.displayId) !== String(operatorDisplay.id));
+      if (secondaryDisplay) {
+        selectedDisplay = secondaryDisplay;
+        if (selectedDisplay.bounds) {
+          targetBounds = selectedDisplay.bounds;
+        }
+      }
+    }
+  }
+
   const canonicalDisplayId = selectedDisplay ? selectedDisplay.id : (displayId || `display-${primaryDisplay.id}`);
 
   // --- PROJECTOR WINDOW REUSE (DISPLAY-CENTRIC) ---
@@ -270,8 +297,15 @@ ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'CONNECTED' });
       }
-      existing.show();
-      existing.focus();
+      if (typeof existing.showInactive === 'function') {
+        existing.showInactive();
+      } else {
+        existing.show();
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.focus();
+        mainWindow.moveTop();
+      }
       return { success: true, status: 'CONNECTED', displayId: canonicalDisplayId, groupId, reused: true };
     }
   }
@@ -314,7 +348,7 @@ ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
     height: targetBounds.height,
     frame: false,
     fullscreen: false,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: false,
     backgroundColor: '#000000',
     webPreferences: {
@@ -347,8 +381,16 @@ ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
     win.setSize(targetBounds.width, targetBounds.height);
     win.setBounds(targetBounds);
     win.setFullScreen(true);
-    win.show();
-    win.focus();
+    if (typeof win.showInactive === 'function') {
+      win.showInactive();
+    } else {
+      win.show();
+    }
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus();
+    mainWindow.moveTop();
   }
 
   win.on('closed', () => {
@@ -356,6 +398,8 @@ ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
     displayRouteMap.delete(canonicalDisplayId);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
+      mainWindow.focus();
+      mainWindow.moveTop();
     }
   });
 
@@ -380,23 +424,28 @@ ipcMain.handle('projector:close', (event, { groupId, displayId }) => {
     }
   }
 
+  let result = { success: false, status: 'DISCONNECTED', message: 'Window not found' };
+
   if (targetDisplayId && displayWindows.has(targetDisplayId)) {
     const win = displayWindows.get(targetDisplayId);
     if (win && !win.isDestroyed()) win.close();
     displayWindows.delete(targetDisplayId);
     displayRouteMap.delete(targetDisplayId);
-    return { success: true, status: 'DISCONNECTED', displayId: targetDisplayId };
-  }
-
-  if (groupId && displayWindows.has(groupId)) {
+    result = { success: true, status: 'DISCONNECTED', displayId: targetDisplayId };
+  } else if (groupId && displayWindows.has(groupId)) {
     const win = displayWindows.get(groupId);
     if (win && !win.isDestroyed()) win.close();
     displayWindows.delete(groupId);
     displayRouteMap.delete(groupId);
-    return { success: true, status: 'DISCONNECTED' };
+    result = { success: true, status: 'DISCONNECTED' };
   }
 
-  return { success: false, status: 'DISCONNECTED', message: 'Window not found' };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus();
+    mainWindow.moveTop();
+  }
+
+  return result;
 });
 
 ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
@@ -446,7 +495,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
         height: matchedDisplay ? matchedDisplay.bounds.height : 1080,
         frame: false,
         fullscreen: false,
-        alwaysOnTop: true,
+        alwaysOnTop: false,
         skipTaskbar: false,
         backgroundColor: '#000000',
         webPreferences: {
@@ -478,8 +527,11 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
         win.setSize(matchedDisplay.bounds.width, matchedDisplay.bounds.height);
         win.setBounds(matchedDisplay.bounds);
         win.setFullScreen(true);
-        win.show();
-        win.focus();
+        if (typeof win.showInactive === 'function') {
+          win.showInactive();
+        } else {
+          win.show();
+        }
       }
 
       win.on('closed', () => {
@@ -487,6 +539,8 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
         displayRouteMap.delete(canonicalDisplayId);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
+          mainWindow.focus();
+          mainWindow.moveTop();
         }
       });
 
@@ -499,6 +553,11 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
 
       results.push({ displayId: canonicalDisplayId, groupId, action: 'opened' });
     }
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus();
+    mainWindow.moveTop();
   }
 
   return { success: true, results };

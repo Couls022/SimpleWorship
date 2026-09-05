@@ -98,34 +98,67 @@ export class PresentationContentResolver {
   }
 
   /**
-   * Resolves and hydrates binary fileBytes (such as PPTX) for an item that may have been stripped during IPC broadcast.
+   * Resolves and hydrates binary fileBytes (such as PPTX) or missing media URLs for items
+   * that may have been stripped during IPC/BroadcastChannel sync.
    */
   static async hydrateItemBinaryIfNeeded(item: PresentationItem | null | undefined): Promise<PresentationItem | null | undefined> {
     if (!item || !item.contentId) return item;
     
-    // Only PPTX needs hydration from broadcast currently
     const type = this.detectContentType(item);
-    if (type !== 'pptx') return item;
     
-    if (isValidPptxBinary(item.data?.fileBytes)) {
-      return item; // Already hydrated
-    }
-    
-    try {
-      const db = await getDB();
-      const asset = await db.get('assets', item.contentId);
-      
-      if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
-        return {
-          ...item,
-          data: {
-            ...item.data,
-            fileBytes: asset.data.fileBytes
-          }
-        };
+    // 1. PPTX Hydration
+    if (type === 'pptx') {
+      if (isValidPptxBinary(item.data?.fileBytes)) return item;
+      try {
+        const db = await getDB();
+        const asset = await db.get('assets', item.contentId);
+        if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
+          return {
+            ...item,
+            data: {
+              ...item.data,
+              fileBytes: asset.data.fileBytes
+            }
+          };
+        }
+      } catch (e) {
+        console.error('[PresentationContentResolver] Failed to hydrate PPTX binary:', e);
       }
-    } catch (e) {
-      console.error('[PresentationContentResolver] Failed to hydrate PPTX binary:', e);
+    }
+
+    // 2. Heavy Media (Video, Audio, Image) Asset URL Hydration
+    // If the URL is a blob: URL, it's invalid across windows. We must fetch the Blob from IDB and create a new local ObjectURL.
+    if (type === 'video' || type === 'audio' || type === 'image' || item.type === 'media') {
+      const currentUrl = item.data?.url || item.customBackgroundUrl;
+      const needsHydration = !currentUrl || currentUrl.startsWith('blob:');
+      
+      if (needsHydration && item.contentId) {
+        try {
+          const db = await getDB();
+          const asset = await db.get('assets', item.contentId);
+          if (asset) {
+            let hydratedUrl = asset.url;
+            if (asset.blob && (!asset.url || asset.url.startsWith('blob:'))) {
+              hydratedUrl = URL.createObjectURL(asset.blob);
+            }
+            
+            if (hydratedUrl) {
+              return {
+                ...item,
+                customBackgroundUrl: item.customBackgroundUrl ? hydratedUrl : item.customBackgroundUrl,
+                data: {
+                  ...item.data,
+                  url: item.data?.url ? hydratedUrl : item.data?.url,
+                  isVideo: asset.type === 'video' || asset.type === 'motion',
+                  isAudio: asset.type === 'audio',
+                }
+              };
+            }
+          }
+        } catch (e) {
+          console.error('[PresentationContentResolver] Failed to hydrate media asset URL:', e);
+        }
+      }
     }
     
     return item;

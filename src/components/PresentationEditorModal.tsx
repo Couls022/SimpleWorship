@@ -562,15 +562,17 @@ export function PresentationEditorModal({
   };
 
   const bgFileInputRef = useRef<HTMLInputElement>(null);
-  const handleBgFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBgFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      handleUpdateActiveSlide({ backgroundUrl: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { processAssetFile } = await import('../db/assets');
+      const newAsset = await processAssetFile(file);
+      useStore.getState().addAsset(newAsset);
+      handleUpdateActiveSlide({ backgroundUrl: newAsset.url });
+    } catch (err) {
+      console.error("Failed to process background file", err);
+    }
   };
 
   // Resizable Divider Event Handlers
@@ -686,33 +688,34 @@ export function PresentationEditorModal({
     }, (activeSlide.transition?.durationMs || 500) + 300);
   };
 
-  const handleLocalImageSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLocalImageSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target?.result as string;
-      if (dataUrl) {
-        const newObj: SlideObject = {
-          id: `obj-${Date.now()}-img`,
-          type: 'image',
-          imageUrl: dataUrl,
-          x: 360,
-          y: 200,
-          width: 800,
-          height: 480,
-          style: {
-            borderRadius: 8,
-            shadowEnabled: true,
-          },
-        };
-        const currentObjs = activeSlide.objects || [];
-        handleUpdateActiveSlideObjects([...currentObjs, newObj]);
-        setSelectedObjectIds([newObj.id]);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { processAssetFile } = await import('../db/assets');
+      const newAsset = await processAssetFile(file);
+      useStore.getState().addAsset(newAsset);
+      
+      const newObj: SlideObject = {
+        id: `obj-${Date.now()}-img`,
+        type: 'image',
+        imageUrl: newAsset.url,
+        x: 360,
+        y: 200,
+        width: 800,
+        height: 480,
+        style: {
+          borderRadius: 8,
+          shadowEnabled: true,
+        },
+      };
+      const currentObjs = activeSlide.objects || [];
+      handleUpdateActiveSlideObjects([...currentObjs, newObj]);
+      setSelectedObjectIds([newObj.id]);
+    } catch (err) {
+      console.error("Failed to process inserted image file", err);
+    }
     e.target.value = '';
   };
 

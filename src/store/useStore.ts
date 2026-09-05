@@ -787,25 +787,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   // LIVE Navigation & Controls
   goLiveNext: () => {
-    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings } = get();
+    const { activeControlGroupId, groupStates, activeSchedule, songsList, systemOptions, shortcutSettings } = get();
     if (!activeControlGroupId) return;
     const currentState = groupStates[activeControlGroupId] || defaultState;
-    const currentItemId = currentState.activeItemId;
 
-    let totalSlides = 999;
-    if (currentItemId) {
-      const scheduleItem = activeSchedule?.items?.find(i => i.id === currentItemId);
-      if (scheduleItem?.data?.slides?.length) {
-        totalSlides = scheduleItem.data.slides.length;
-      } else {
-        const song = songsList.find(s => s.id === currentItemId);
-        if (song?.sections?.length) {
-          totalSlides = song.sections.length;
-        } else if (song?.lyrics) {
-          totalSlides = song.lyrics.split(/\n\s*\n/).length;
-        }
-      }
-    }
+    const liveItem = PresentationCore.getActiveContent(activeSchedule, currentState, currentState.directLiveItem);
+    const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
+    const totalSlides = slides.length > 0 ? slides.length : 1;
 
     let nextIndex = currentState.activeSlideIndex + 1;
     if (nextIndex >= totalSlides) {
@@ -819,28 +807,16 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   goLivePrev: () => {
-    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings } = get();
+    const { activeControlGroupId, groupStates, activeSchedule, songsList, systemOptions, shortcutSettings } = get();
     if (!activeControlGroupId) return;
     const currentState = groupStates[activeControlGroupId] || defaultState;
-    const currentItemId = currentState.activeItemId;
 
     let prevIndex = currentState.activeSlideIndex - 1;
     if (prevIndex < 0) {
       if (shortcutSettings.wrapAroundSlides) {
-        let totalSlides = 1;
-        if (currentItemId) {
-          const scheduleItem = activeSchedule?.items?.find(i => i.id === currentItemId);
-          if (scheduleItem?.data?.slides?.length) {
-            totalSlides = scheduleItem.data.slides.length;
-          } else {
-            const song = songsList.find(s => s.id === currentItemId);
-            if (song?.sections?.length) {
-              totalSlides = song.sections.length;
-            } else if (song?.lyrics) {
-              totalSlides = song.lyrics.split(/\n\s*\n/).length;
-            }
-          }
-        }
+        const liveItem = PresentationCore.getActiveContent(activeSchedule, currentState, currentState.directLiveItem);
+        const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
+        const totalSlides = slides.length > 0 ? slides.length : 1;
         prevIndex = Math.max(0, totalSlides - 1);
       } else {
         prevIndex = 0;

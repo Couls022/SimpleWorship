@@ -3,16 +3,18 @@ import { cameraManager } from '../../src/core/CameraManager';
 
 describe('CameraManager', () => {
   beforeEach(() => {
-    // Reset singleton if necessary or mock navigator
-    (global as any).navigator = {
-      mediaDevices: {
+    // Reset singleton if necessary or mock navigator.mediaDevices safely in jsdom
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
         enumerateDevices: vi.fn().mockResolvedValue([
           { kind: 'videoinput', deviceId: 'cam1', label: 'Test Camera 1' },
           { kind: 'audioinput', deviceId: 'mic1', label: 'Test Mic 1' }
         ]),
         getUserMedia: vi.fn().mockResolvedValue({})
-      }
-    };
+      },
+      configurable: true,
+      writable: true
+    });
   });
 
   it('should only enumerate videoinput devices', async () => {

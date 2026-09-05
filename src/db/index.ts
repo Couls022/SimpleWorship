@@ -120,11 +120,27 @@ export const dbApi = {
   },
   async getAsset(id: string) {
     const db = await getDB();
-    return db.get('assets', id);
+    const asset = await db.get('assets', id);
+    if (asset && asset.blob && asset.url && asset.url.startsWith('blob:')) {
+      asset.url = URL.createObjectURL(asset.blob);
+      if (asset.thumbnailUrl && asset.thumbnailUrl.startsWith('blob:')) {
+        asset.thumbnailUrl = asset.url;
+      }
+    }
+    return asset;
   },
   async getAllAssets() {
     const db = await getDB();
-    return db.getAll('assets');
+    const assets = await db.getAll('assets');
+    return assets.map(a => {
+      if (a.blob && a.url && a.url.startsWith('blob:')) {
+        a.url = URL.createObjectURL(a.blob);
+        if (a.thumbnailUrl && a.thumbnailUrl.startsWith('blob:')) {
+          a.thumbnailUrl = a.url;
+        }
+      }
+      return a;
+    });
   },
   async deleteAsset(id: string) {
     const db = await getDB();

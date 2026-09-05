@@ -123,20 +123,26 @@ export default function MonitorPreviewCanvas({
   const activeItem = PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
 
   useEffect(() => {
-    if (activeItem?.type === 'presentation' && activeItem.contentId && !isValidPptxBinary(activeItem.data?.fileBytes)) {
+    if (!activeItem || !activeItem.contentId) return;
+
+    const needsPptxHydration = activeItem.type === 'presentation' && !isValidPptxBinary(activeItem.data?.fileBytes);
+    const currentUrl = activeItem.data?.url || activeItem.customBackgroundUrl;
+    const needsMediaHydration = (activeItem.type === 'media' || activeItem.type === 'video' || activeItem.type === 'audio' || activeItem.type === 'image') && (!currentUrl || currentUrl.startsWith('blob:'));
+
+    if (needsPptxHydration || needsMediaHydration) {
       PresentationContentResolver.hydrateItemBinaryIfNeeded(activeItem).then((hydratedItem) => {
-        if (hydratedItem && hydratedItem.data?.fileBytes) {
+        if (hydratedItem && hydratedItem !== activeItem) {
           useStore.setState((prev) => {
             const currentGroupState = prev.groupStates[groupId];
             if (!currentGroupState) return prev;
-            if (currentGroupState.activeItemId !== activeItem.id) return prev;
+            if (currentGroupState.activeItemId !== activeItem.id && currentGroupState.directLiveItem?.id !== activeItem.id) return prev;
 
             return {
               groupStates: {
                 ...prev.groupStates,
                 [groupId]: {
                   ...currentGroupState,
-                  directLiveItem: hydratedItem
+                  directLiveItem: currentGroupState.directLiveItem?.id === activeItem.id ? hydratedItem : currentGroupState.directLiveItem
                 }
               }
             };
@@ -144,7 +150,7 @@ export default function MonitorPreviewCanvas({
         }
       });
     }
-  }, [activeItem?.id, activeItem?.type, activeItem?.contentId, groupId]);
+  }, [activeItem?.id, activeItem?.type, activeItem?.contentId, activeItem?.data?.url, activeItem?.customBackgroundUrl, groupId]);
 
   // Resolve Content & Themes
   const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];

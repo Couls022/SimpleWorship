@@ -153,10 +153,10 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
 
   // If loading or switching slides, check off-screen canvas buffer first
   if (blocks.loading) {
-    if (cachedFrame?.dataUrl) {
+    if (cachedFrame?.objectUrl) {
       return (
         <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden select-none">
-          <img src={cachedFrame.dataUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
+          <img src={cachedFrame.objectUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
         </div>
       );
     }
@@ -180,10 +180,10 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
   }
 
   if (blocks.error || !blocks.canvasProps) {
-    if (cachedFrame?.dataUrl) {
+    if (cachedFrame?.objectUrl) {
       return (
         <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden select-none">
-          <img src={cachedFrame.dataUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
+          <img src={cachedFrame.objectUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
         </div>
       );
     }

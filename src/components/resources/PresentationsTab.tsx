@@ -48,9 +48,12 @@ export default function PresentationsTab() {
       setAnchorPresId(sorted[0].id);
     }
 
-    // Refresh any previously imported presentation to extract template styles
+    // Refresh any previously imported presentation to extract template styles or refresh stale blob URLs
     for (const pres of sorted) {
-      if (pres.data?.fileBytes && (!pres.data?.slides?.[0]?.backgroundColor || pres.data?.slides?.[0]?.backgroundColor === '#181b24')) {
+      const hasStaleBlobUrls = pres.data?.slides?.some(s => JSON.stringify(s).includes('blob:'));
+      const needsStyleUpgrade = !pres.data?.slides?.[0]?.backgroundColor || pres.data?.slides?.[0]?.backgroundColor === '#181b24';
+      
+      if (pres.data?.fileBytes && (hasStaleBlobUrls || needsStyleUpgrade)) {
         try {
           const blob = new Blob([pres.data.fileBytes]);
           const newSlides = await parsePptxOffline(blob);

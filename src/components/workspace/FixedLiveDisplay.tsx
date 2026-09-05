@@ -206,7 +206,52 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             </span>
           </div>
 
+          {/* Target Output Group Dropdown */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#1f2330] hover:bg-[#282d3e] border border-[#353a4e] text-xs font-bold text-gray-200 transition-colors cursor-pointer"
+              title="Select which output group this operator display monitors"
+            >
+              <Tv size={12} className="text-cyan-400" />
+              <span className="truncate max-w-[120px]">
+                {displayTargetId === 'follow-target' ? `Active: ${activeGroup?.name || 'Main'}` : activeGroup?.name || 'Output Group'}
+              </span>
+              <ChevronDown size={12} className="text-gray-400" />
+            </button>
 
+            {isDropdownOpen && (
+              <div 
+                className="absolute left-0 top-full mt-1 w-52 bg-[#181b24] border border-[#33384a] rounded-md shadow-2xl z-50 py-1 text-xs text-gray-200 animate-in fade-in zoom-in-95 duration-100"
+                onClick={() => setIsDropdownOpen(false)}
+              >
+                <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-[#2a2f42]">
+                  Operator Monitor Target
+                </div>
+                <button
+                  onClick={() => setDisplayTargetId('follow-target')}
+                  className={`w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-[#252a3a] transition-colors ${
+                    displayTargetId === 'follow-target' ? 'text-cyan-300 font-bold bg-[#1f2536]' : 'text-gray-300'
+                  }`}
+                >
+                  <span className="truncate">Follow Active Target ({activeGroup?.name})</span>
+                  {displayTargetId === 'follow-target' && <Check size={12} className="text-cyan-400 shrink-0" />}
+                </button>
+                {outputGroups.map((grp) => (
+                  <button
+                    key={grp.id}
+                    onClick={() => setDisplayTargetId(grp.id)}
+                    className={`w-full px-3 py-1.5 text-left flex items-center justify-between hover:bg-[#252a3a] transition-colors ${
+                      displayTargetId === grp.id ? 'text-cyan-300 font-bold bg-[#1f2536]' : 'text-gray-300'
+                    }`}
+                  >
+                    <span className="truncate">{grp.name} ({grp.role})</span>
+                    {displayTargetId === grp.id && <Check size={12} className="text-cyan-400 shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right: Aspect Tag + Popout Projector + Fullscreen + Settings */}
