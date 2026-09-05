@@ -19,6 +19,7 @@ import { isValidPptxBinary } from '../utils/pptxValidator';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 import { MediaStreamController } from '../core/MediaStreamController';
+import { dbApi } from '../db';
 import { TelemetryManager } from '../utils/TelemetryManager';
 
 interface ProjectorViewProps {
@@ -148,19 +149,20 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       const actItem = PresentationCore.getActiveContent(activeSchedule, pState, pState.directLiveItem);
       return !actItem;
     });
-  }, [orderedLiveGroupIds, groupStates, activeSchedule]);
+  }, [orderedLiveGroupIds, groupStates, activeSchedule, outputGroups]);
 
-  // Global blackout state (active if the winning target group is black or disabled)
+  // Global blackout state (active if the winning target group is black)
   const isBlackoutActive = React.useMemo(() => {
     if (orderedLiveGroupIds.length === 0) return true;
     const winningGroupId = orderedLiveGroupIds[orderedLiveGroupIds.length - 1];
     const winState = groupStates[winningGroupId];
-    if (winState && (winState.isBlack || !winState.isLiveEnabled)) {
+    if (winState && winState.isBlack) {
       return true;
     }
     return false;
   }, [orderedLiveGroupIds, groupStates]);
 
+  const baseGroupObj = outputGroups.find(g => g.id === orderedLiveGroupIds[0]) || outputGroups[0];
   const winningGroup = outputGroups.find(g => g.id === orderedLiveGroupIds[orderedLiveGroupIds.length - 1]) || outputGroups[0];
 
   return (
@@ -178,7 +180,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
             groupId={gId}
             displayId={displayId}
             isBaseLayer={isBaseLayer}
-            allLayersStandby={allLayersStandby}
             group={currentGroupObj}
             songsList={songsList}
             themesList={themesList}
@@ -187,6 +188,35 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
           />
         );
       })}
+
+      {/* Standby State (Global for display if all layers are standby) */}
+      <AnimatePresence>
+        {allLayersStandby && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center select-none bg-black/80 backdrop-blur-sm pointer-events-auto"
+          >
+            <div className="p-8 rounded-2xl bg-[#0b0e14]/90 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
+              <SimpleWorshipLogo size={56} showText={true} subtitle={baseGroupObj?.name || "Live Display Screen"} />
+              <div className="mt-5 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold tracking-wider">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span>STANDBY • LIVE MONITOR READY</span>
+              </div>
+              <p className="mt-3 text-xs text-gray-400 font-sans leading-relaxed">
+                Double-click any item in Schedule or click "GO LIVE" to project lyrics, scriptures, or media to this screen.
+              </p>
+              <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-gray-500 bg-black/40 px-3 py-1 rounded border border-white/5">
+                <span>Target: {baseGroupObj?.displayIds?.join(', ') || 'Monitor Output'}</span>
+                <span>•</span>
+                <span>{baseGroupObj?.name || orderedLiveGroupIds[0]}</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 2. Slide Annotation Layer */}
       {!isBlackoutActive && (
@@ -300,7 +330,6 @@ interface ProjectorLayerProps {
   groupId: string;
   displayId?: string;
   isBaseLayer: boolean;
-  allLayersStandby: boolean;
   group: any;
   songsList: any[];
   themesList: any[];
@@ -312,7 +341,6 @@ function ProjectorLayer({
   groupId, 
   displayId, 
   isBaseLayer, 
-  allLayersStandby, 
   group,
   songsList,
   themesList,
@@ -512,17 +540,24 @@ function ProjectorLayer({
   useEffect(() => {
     let isMounted = true;
     
+    // Synchronous fast path to prevent 1-frame flicker on images
+    if (activeItem?.contentId) {
+      const cachedBg = backgroundUrl && backgroundUrl.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
+      const cachedAudio = audioSrc && audioSrc.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
+      
+      if (cachedBg) setLocalBackgroundUrl(cachedBg);
+      if (cachedAudio) setLocalAudioSrc(cachedAudio);
+    }
+    
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
       if (!url || !url.startsWith('blob:') || !contentId) return url;
       try {
-        const { dbApi } = await import('../db');
-        // Fast path: try cache first
         const cachedUrl = dbApi.getCachedUrl(contentId);
         if (cachedUrl) return cachedUrl;
         
         // Slow path: hit IndexedDB
         const asset = await dbApi.getAsset(contentId);
-        if (asset?.url) return asset.url; // Uses the globally cached ObjectURL
+        if (asset?.url) return asset.url;
       } catch (e) {}
       return url;
     };
@@ -627,9 +662,10 @@ function ProjectorLayer({
 
   return (
     <div 
-      className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none"
+      className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none transition-opacity duration-300"
       style={{
         fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
+        opacity: presentationState.isLiveEnabled ? 1 : 0
       }}
     >
       {/* Background Media Layer (Only rendered if isBaseLayer is TRUE to allow transparent layering) */}
@@ -743,7 +779,6 @@ function ProjectorLayer({
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8">
           <audio
             ref={audioRef}
-            key={localAudioSrc}
             src={localAudioSrc}
             autoPlay
             loop={presentationState.isVideoLooping ?? true}
@@ -1083,35 +1118,6 @@ function ProjectorLayer({
           />
         </div>
       )}
-
-      {/* Standby State (Only rendered for base layer if all layers are standby) */}
-      <AnimatePresence>
-        {isBaseLayer && allLayersStandby && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center select-none bg-black/80 backdrop-blur-sm pointer-events-auto"
-          >
-            <div className="p-8 rounded-2xl bg-[#0b0e14]/90 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
-              <SimpleWorshipLogo size={56} showText={true} subtitle={group?.name || "Live Display Screen"} />
-              <div className="mt-5 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold tracking-wider">
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span>STANDBY • LIVE MONITOR READY</span>
-              </div>
-              <p className="mt-3 text-xs text-gray-400 font-sans leading-relaxed">
-                Double-click any item in Schedule or click "GO LIVE" to project lyrics, scriptures, or media to this screen.
-              </p>
-              <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-gray-500 bg-black/40 px-3 py-1 rounded border border-white/5">
-                <span>Target: {group?.displayIds?.join(', ') || 'Monitor Output'}</span>
-                <span>•</span>
-                <span>{group?.name || groupId}</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

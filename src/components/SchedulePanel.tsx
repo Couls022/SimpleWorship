@@ -195,6 +195,55 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     store.setRoutingRequest({ item, isNew: false, slideIndex });
   };
 
+  const handleGoLiveMultiple = (itemIds: string[]) => {
+    if (!activeSchedule?.items) return;
+    const selectedItems = activeSchedule.items.filter(it => itemIds.includes(it.id));
+    if (selectedItems.length === 0) return;
+    if (selectedItems.length === 1) {
+      handleGoLive(selectedItems[0], 0);
+      return;
+    }
+
+    // Build multi-slide presentation from the multiple selected items
+    const slides: any[] = [];
+    selectedItems.forEach((it, idx) => {
+      if (it.data?.slides && Array.isArray(it.data.slides)) {
+        slides.push(...it.data.slides);
+      } else {
+        const bgUrl = it.customBackgroundUrl || it.data?.url || it.data?.thumbnailUrl;
+        slides.push({
+          id: `multi-slide-${idx}-${it.id}`,
+          title: it.name,
+          text: it.data?.text || '',
+          backgroundUrl: bgUrl,
+          isVideo: it.type === 'video' || it.data?.isVideo === true,
+          assetId: it.contentId
+        });
+      }
+    });
+
+    const combinedItem: PresentationItem = {
+      id: `multi-live-${Date.now()}`,
+      type: 'presentation',
+      name: `Multi-Slide Live (${slides.length} slides)`,
+      notes: `${selectedItems.length} items combined`,
+      contentId: selectedItems[0]?.contentId || selectedItems[0]?.id || `content-${Date.now()}`,
+      customBackgroundUrl: slides[0]?.backgroundUrl,
+      data: {
+        format: 'MultiItemPresentation',
+        slides: slides
+      },
+      isExpanded: true
+    };
+
+    store.setRoutingRequest({ item: combinedItem, isNew: true, slideIndex: 0 });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Sent ${selectedItems.length} items (${slides.length} slides) live!` 
+      })
+    );
+  };
+
   const viewMenuRef = useRef<HTMLDivElement>(null);
 
   const handleSelectViewMode = (mode: ScheduleViewMode) => {
@@ -478,38 +527,44 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
           }
         }
 
-        if (parsed && parsed.item && parsed.source !== 'schedule') {
-          const newItem: PresentationItem = {
-            id: parsed.item.id || `item-${Date.now()}`,
-            type: parsed.item.type,
-            contentId: parsed.item.contentId,
-            name: parsed.item.name,
-            notes: parsed.item.notes,
-            themeId: parsed.item.themeId,
-            themeOverride: parsed.item.themeOverride,
-            customBackgroundUrl: parsed.item.customBackgroundUrl,
-            data: parsed.item.data,
-            isExpanded: true
-          };
+        if (parsed && (parsed.items || parsed.item) && parsed.source !== 'schedule') {
+          const rawItems = parsed.items ? parsed.items : [parsed.item];
+          const newItems: PresentationItem[] = rawItems.map((it: any, idx: number) => {
+            const newItem: PresentationItem = {
+              id: it.id || `item-${Date.now()}-${idx}`,
+              type: it.type,
+              contentId: it.contentId,
+              name: it.name,
+              notes: it.notes,
+              themeId: it.themeId,
+              themeOverride: it.themeOverride,
+              customBackgroundUrl: it.customBackgroundUrl,
+              data: it.data,
+              isExpanded: true
+            };
 
-          if (newItem.type === 'presentation') {
-            if (!isValidPptxBinary(newItem.data?.fileBytes)) {
-              newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
+            if (newItem.type === 'presentation') {
+              if (!isValidPptxBinary(newItem.data?.fileBytes)) {
+                newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
+              }
             }
-          }
+            return newItem;
+          });
 
           if (activeSchedule) {
             const currentItems = [...activeSchedule.items];
             const clampedPos = Math.max(0, Math.min(finalInsertIndex, currentItems.length));
-            currentItems.splice(clampedPos, 0, newItem);
+            currentItems.splice(clampedPos, 0, ...newItems);
             reorderSchedule(currentItems);
           } else {
-            addScheduleItem(newItem);
+            for (const item of newItems) {
+              addScheduleItem(item);
+            }
           }
 
           window.dispatchEvent(
             new CustomEvent('simpleworship:notify', { 
-              detail: `Added "${newItem.name}" to Schedule!` 
+              detail: newItems.length > 1 ? `Added ${newItems.length} items to Schedule!` : `Added "${newItems[0].name}" to Schedule!` 
             })
           );
           setDraggedIdx(null);
@@ -1298,6 +1353,19 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
           <div className="px-3 py-1 font-bold text-cyan-300 border-b border-[#2a2e3d] text-[11px] truncate">
             {contextMenu.item.name}
           </div>
+
+          {selectedScheduleItemIds.length > 1 && (
+            <button
+              onClick={() => {
+                handleGoLiveMultiple(selectedScheduleItemIds);
+                setContextMenu(null);
+              }}
+              className="w-full px-3 py-1.5 text-left bg-emerald-950/60 hover:bg-emerald-600 hover:text-white flex items-center gap-2 text-emerald-400 font-semibold border-b border-[#2a2e3d]"
+            >
+              <Play size={12} className="text-emerald-400 fill-emerald-400 shrink-0" />
+              <span>Go Live All Selected ({selectedScheduleItemIds.length})</span>
+            </button>
+          )}
 
           <button
             onClick={() => {

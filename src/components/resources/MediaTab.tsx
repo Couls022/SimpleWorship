@@ -16,7 +16,8 @@ import {
   Copy,
   GripVertical,
   LayoutGrid,
-  List
+  List,
+  X
 } from 'lucide-react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from '../ResizeHandle';
@@ -194,31 +195,96 @@ export default function MediaTab() {
     const itemId = `media-${Date.now()}`;
     const item = {
       id: itemId,
-      type: 'media' as const,
+      type: (asset.type === 'video' || asset.type === 'motion') ? ('video' as const) : (asset.type === 'audio' ? ('audio' as const) : ('image' as const)),
       contentId: asset.id,
       name: asset.name,
-      customBackgroundUrl: asset.url,
-      data: { url: asset.url, isVideo: asset.type === 'video' }
+      customBackgroundUrl: asset.type === 'image' ? asset.url : undefined,
+      data: { 
+        url: asset.url, 
+        isVideo: asset.type === 'video' || asset.type === 'motion',
+        isAudio: asset.type === 'audio',
+      }
     };
     store.setRoutingRequest({ item, isNew: true, slideIndex: 0 });
   };
 
-  // Drag-and-drop start handler
-  const handleDragStart = (e: React.DragEvent, asset: Asset) => {
-    const payload = {
-      type: 'media',
-      item: {
-        id: `media-${Date.now()}`,
-        type: 'media',
+  const handleSendMultipleToLive = (assets: Asset[]) => {
+    if (assets.length === 0) return;
+    if (assets.length === 1) {
+      handleSendToLive(assets[0]);
+      return;
+    }
+
+    const slideshowItem = {
+      id: `slideshow-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      type: 'presentation' as const,
+      name: `Image Slideshow (${assets.length} images)`,
+      notes: `${assets.length} photos`,
+      contentId: assets[0].id,
+      customBackgroundUrl: assets[0].url,
+      data: {
+        format: 'ImageSlideshow',
+        slides: assets.map((a, idx) => ({
+          id: `img-slide-${idx}-${a.id}`,
+          title: a.name,
+          text: '',
+          backgroundUrl: a.url,
+          isVideo: a.type === 'video' || a.type === 'motion',
+          assetId: a.id
+        }))
+      },
+      isExpanded: true
+    };
+
+    store.setRoutingRequest({ item: slideshowItem, isNew: true, slideIndex: 0 });
+    window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
+      detail: `Sent ${assets.length} images as slideshow to Live Output!` 
+    }));
+  };
+
+  const handleAddMultipleToSchedule = (assets: Asset[]) => {
+    if (assets.length === 0) return;
+    assets.forEach(asset => {
+      addScheduleItem({
+        type: (asset.type === 'video' || asset.type === 'motion') ? 'video' : (asset.type === 'audio' ? 'audio' : 'image'),
         contentId: asset.id,
         name: asset.name,
-        customBackgroundUrl: asset.url,
-        data: {
-          url: asset.url,
-          isVideo: asset.type === 'video'
+        customBackgroundUrl: asset.type === 'image' ? asset.url : undefined,
+        data: { 
+          url: asset.url, 
+          isVideo: asset.type === 'video' || asset.type === 'motion',
+          isAudio: asset.type === 'audio'
         }
+      });
+    });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Added ${assets.length} items to schedule!` 
+      })
+    );
+  };
+
+  // Drag-and-drop start handler supporting single and batch multi-drag
+  const handleDragStart = (e: React.DragEvent, asset: Asset) => {
+    const isMultiDrag = selectedAssetIds.includes(asset.id) && selectedAssetIds.length > 1;
+    const targetAssets = isMultiDrag 
+      ? safeAssetsList.filter(a => a && selectedAssetIds.includes(a.id))
+      : [asset];
+
+    const itemsPayload = targetAssets.map(a => ({
+      id: `media-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      type: (a.type === 'video' || a.type === 'motion') ? 'video' : (a.type === 'audio' ? 'audio' : 'image'),
+      contentId: a.id,
+      name: a.name,
+      customBackgroundUrl: a.type === 'image' ? a.url : undefined,
+      data: {
+        url: a.url,
+        isVideo: a.type === 'video' || a.type === 'motion',
+        isAudio: a.type === 'audio'
       }
-    };
+    }));
+
+    const payload = isMultiDrag ? { type: 'media', items: itemsPayload } : { type: 'media', item: itemsPayload[0] };
     const jsonStr = JSON.stringify(payload);
     e.dataTransfer.setData('application/json', jsonStr);
     e.dataTransfer.setData('application/x-simpleworship-item', jsonStr);
@@ -291,6 +357,41 @@ export default function MediaTab() {
         </div>
       </div>
 
+      {/* Multi-selection Banner */}
+      {selectedAssetIds.length > 1 && (
+        <div className="px-3 py-1 bg-indigo-950/90 border-b border-indigo-500/40 flex items-center justify-between text-xs shrink-0 animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-indigo-300">
+              {selectedAssetIds.length} media selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleSendMultipleToLive(filteredAssets.filter(a => selectedAssetIds.includes(a.id)))}
+              className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded flex items-center gap-1 shadow-xs text-[11px]"
+              title="Send all selected images as a slideshow live"
+            >
+              <Play size={11} className="fill-white" />
+              <span>Go Live (Slideshow)</span>
+            </button>
+            <button
+              onClick={() => handleAddMultipleToSchedule(filteredAssets.filter(a => selectedAssetIds.includes(a.id)))}
+              className="px-2 py-0.5 bg-[#252a38] hover:bg-[#32394d] text-cyan-300 font-medium rounded flex items-center gap-1 border border-[#3d455c] text-[11px]"
+            >
+              <Plus size={11} />
+              <span>Add All to Schedule</span>
+            </button>
+            <button
+              onClick={() => setSelectedAssetIds([])}
+              className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-white"
+              title="Clear Selection"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main View: Grid or List */}
       <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
         {filteredAssets.length === 0 ? (
@@ -320,7 +421,13 @@ export default function MediaTab() {
                   draggable={true}
                   onDragStart={(e) => handleDragStart(e, asset)}
                   onClick={(e) => handleAssetClick(e, asset)}
-                  onDoubleClick={() => handleAddToSchedule(asset)}
+                  onDoubleClick={() => {
+                    if (selectedAssetIds.length > 1) {
+                      handleSendMultipleToLive(filteredAssets.filter(a => selectedAssetIds.includes(a.id)));
+                    } else {
+                      handleSendToLive(asset);
+                    }
+                  }}
                   onContextMenu={(e) => handleContextMenu(e, asset)}
                   className={`flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing transition-colors text-xs select-none ${
                     isSelected
@@ -370,7 +477,13 @@ export default function MediaTab() {
                 draggable={true}
                 onDragStart={(e) => handleDragStart(e, asset)}
                 onClick={(e) => handleAssetClick(e, asset)}
-                onDoubleClick={() => handleAddToSchedule(asset)}
+                onDoubleClick={() => {
+                  if (selectedAssetIds.length > 1) {
+                    handleSendMultipleToLive(filteredAssets.filter(a => selectedAssetIds.includes(a.id)));
+                  } else {
+                    handleSendToLive(asset);
+                  }
+                }}
                 onContextMenu={(e) => handleContextMenu(e, asset)}
                 className={`group aspect-video rounded-lg border relative overflow-hidden cursor-grab active:cursor-grabbing transition-all flex flex-col justify-between p-2 ${
                   isSelected
@@ -452,19 +565,58 @@ export default function MediaTab() {
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
         >
           <div className="px-3 py-1 font-bold text-cyan-300 border-b border-[#2a2e3d] text-[11px] truncate">
-            {contextMenu.asset.name}
+            {selectedAssetIds.length > 1 ? `${selectedAssetIds.length} Media Selected` : contextMenu.asset.name}
           </div>
 
-          <button
-            onClick={() => {
-              handleAddToSchedule(contextMenu.asset);
-              setContextMenu(null);
-            }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2"
-          >
-            <Plus size={12} className="text-indigo-400" />
-            <span>Add to Schedule</span>
-          </button>
+          {selectedAssetIds.length > 1 ? (
+            <>
+              <button
+                onClick={() => {
+                  handleSendMultipleToLive(filteredAssets.filter(a => selectedAssetIds.includes(a.id)));
+                  setContextMenu(null);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-emerald-600 hover:text-white flex items-center gap-2 text-emerald-400 font-bold"
+              >
+                <Play size={12} className="fill-emerald-400" />
+                <span>Go Live as Slideshow ({selectedAssetIds.length})</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleAddMultipleToSchedule(filteredAssets.filter(a => selectedAssetIds.includes(a.id)));
+                  setContextMenu(null);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2"
+              >
+                <Plus size={12} className="text-indigo-400" />
+                <span>Add All ({selectedAssetIds.length}) to Schedule</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  handleAddToSchedule(contextMenu.asset);
+                  setContextMenu(null);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2"
+              >
+                <Plus size={12} className="text-indigo-400" />
+                <span>Add to Schedule</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleSendToLive(contextMenu.asset);
+                  setContextMenu(null);
+                }}
+                className="w-full px-3 py-1.5 text-left hover:bg-emerald-600 hover:text-white flex items-center gap-2 text-emerald-400 font-semibold"
+              >
+                <Play size={12} className="fill-emerald-400" />
+                <span>Go Live Directly</span>
+              </button>
+            </>
+          )}
 
           <div className="border-t border-[#2a2e3d] my-1"></div>
 

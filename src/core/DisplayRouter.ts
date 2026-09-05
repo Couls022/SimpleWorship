@@ -75,13 +75,11 @@ export function resolveDisplayAssignments(
   });
 
   for (const displayId of displayIdSet) {
-    // 1. Find all configured route groups targeting this physical display that are LIVE
-    const liveGroupsForDisplay = outputGroups.filter((g) => {
-      const isTargeting = routeTargetsDisplay(g, displayId);
-      const isLive = groupStates[g.id]?.isLiveEnabled;
-      return isTargeting && isLive;
+    // 1. Find all configured route groups targeting this physical display
+    const groupsForDisplay = outputGroups.filter((g) => {
+      return routeTargetsDisplay(g, displayId);
     });
-    const candidateGroupIds = liveGroupsForDisplay.map((g) => g.id);
+    const candidateGroupIds = groupsForDisplay.map((g) => g.id);
 
     // 2. Zero candidate routes
     if (candidateGroupIds.length === 0) {

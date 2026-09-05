@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Tv, 
   Monitor, 
@@ -13,7 +13,8 @@ import {
   Sparkles,
   ChevronRight,
   ExternalLink,
-  X
+  X,
+  Clock
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { OutputGroup } from '../../types';
@@ -40,6 +41,14 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
   } = store;
 
   const [configuringGroupId, setConfiguringGroupId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSelectRouter = (routerId: string, routerName: string) => {
     setActiveRouterId(routerId);
@@ -169,7 +178,7 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
       </div>
 
       {/* Right: Master Screen Quick Toggles & Active Status Indicator */}
-      <div className="flex items-center gap-2 shrink-0 ml-2">
+      <div className="flex items-center gap-3 shrink-0 ml-2 mr-2">
         {/* Settings Button (Output Groups) */}
         <button
           onClick={() => setConfiguringGroupId(outputGroups[0]?.id || 'group-1')}
@@ -179,6 +188,14 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
           <Settings size={13} />
           <span className="text-xs">Routes</span>
         </button>
+
+        <div className="w-px h-4 bg-[#2b3042]" />
+
+        {/* Real-time Clock */}
+        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-[11px] font-semibold bg-[#1a1d26] px-2 py-1 rounded border border-[#2c3244]">
+          <Clock size={11} className="text-cyan-500" />
+          <span>{currentTime}</span>
+        </div>
       </div>
 
       {/* Route Config Modal */}

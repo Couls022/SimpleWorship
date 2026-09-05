@@ -11,36 +11,6 @@ function formatAndEnsureDisplays(displays: any[]) {
     bounds: d.bounds || { x: idx * 1920, y: 0, width: 1920, height: 1080 }
   }));
 
-  // If there's only 1 screen detected (default in standard browsers),
-  // append Monitor 2 and Monitor 3 as virtual monitors so the user can easily test and configure multi-route projection.
-  if (formatted.length === 1) {
-    formatted.push({
-      label: 'Monitor 2',
-      name: 'Monitor 2',
-      isPrimary: false,
-      id: 'monitor-2',
-      displayId: 'monitor-2',
-      bounds: { x: 1920, y: 0, width: 1366, height: 768 }
-    });
-    formatted.push({
-      label: 'Monitor 3',
-      name: 'Monitor 3',
-      isPrimary: false,
-      id: 'monitor-3',
-      displayId: 'monitor-3',
-      bounds: { x: 3286, y: 0, width: 1920, height: 1080 }
-    });
-  } else if (formatted.length === 2) {
-    formatted.push({
-      label: 'Monitor 3',
-      name: 'Monitor 3',
-      isPrimary: false,
-      id: 'monitor-3',
-      displayId: 'monitor-3',
-      bounds: { x: 3286, y: 0, width: 1920, height: 1080 }
-    });
-  }
-
   // Ensure standard names/labels are consistent
   return formatted.map((scr) => {
     if (scr.isPrimary) {

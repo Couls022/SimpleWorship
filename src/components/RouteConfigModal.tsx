@@ -35,23 +35,6 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
     }
   }, [groupId]);
 
-  useEffect(() => {
-    // Automatically trigger visual display identification when entering 'Configure Output' mode
-    const triggerIdentify = async () => {
-      window.dispatchEvent(new CustomEvent('simpleworship:identify-displays'));
-      if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
-        try {
-          await window.electronAPI.identifyDisplays();
-        } catch (e) {
-          console.error("Auto identify displays failed:", e);
-        }
-      }
-    };
-    
-    const t = setTimeout(triggerIdentify, 200);
-    return () => clearTimeout(t);
-  }, []);
-
   if (!group) return null;
 
   // Available real screens
@@ -133,61 +116,6 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
         </div>
         
         <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-          {/* Panel Order & Position */}
-          <div className="bg-[#14151a] p-3 rounded-lg border border-[#2d313d]">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-gray-300">Workspace Sequence Position</span>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/60">
-                Position #{groupIndex + 1} of {outputGroups.length}
-              </span>
-            </div>
-            <p className="text-[11px] text-gray-400 mb-2">
-              You can drag panel headers directly in the live workspace or shift order below:
-            </p>
-            <div className="grid grid-cols-4 gap-1.5">
-              <button
-                type="button"
-                onClick={() => moveOutputGroup(groupId, 'first')}
-                disabled={isFirst}
-                className="px-2 py-1 bg-[#1f222b] hover:bg-[#2b303d] disabled:opacity-30 disabled:cursor-not-allowed text-[11px] text-gray-200 rounded border border-[#323644] flex items-center justify-center gap-1"
-                title="Move to first (leftmost)"
-              >
-                <ArrowLeft size={11} className="text-cyan-400" />
-                <span>First</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => moveOutputGroup(groupId, 'left')}
-                disabled={isFirst}
-                className="px-2 py-1 bg-[#1f222b] hover:bg-[#2b303d] disabled:opacity-30 disabled:cursor-not-allowed text-[11px] text-gray-200 rounded border border-[#323644] flex items-center justify-center gap-1"
-                title="Shift left"
-              >
-                <ChevronLeft size={12} className="text-cyan-400" />
-                <span>Left</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => moveOutputGroup(groupId, 'right')}
-                disabled={isLast}
-                className="px-2 py-1 bg-[#1f222b] hover:bg-[#2b303d] disabled:opacity-30 disabled:cursor-not-allowed text-[11px] text-gray-200 rounded border border-[#323644] flex items-center justify-center gap-1"
-                title="Shift right"
-              >
-                <span>Right</span>
-                <ChevronRight size={12} className="text-cyan-400" />
-              </button>
-              <button
-                type="button"
-                onClick={() => moveOutputGroup(groupId, 'last')}
-                disabled={isLast}
-                className="px-2 py-1 bg-[#1f222b] hover:bg-[#2b303d] disabled:opacity-30 disabled:cursor-not-allowed text-[11px] text-gray-200 rounded border border-[#323644] flex items-center justify-center gap-1"
-                title="Move to last (rightmost)"
-              >
-                <span>Last</span>
-                <ArrowRight size={11} className="text-cyan-400" />
-              </button>
-            </div>
-          </div>
-
           <div>
             <label className="block text-xs font-bold text-gray-300 mb-1">Route Name (Panel Name)</label>
             <input 
@@ -199,32 +127,31 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-300 mb-1">Theme</label>
-            <select
-              value={themeId}
-              onChange={e => setThemeId(e.target.value)}
-              className="w-full bg-[#141519] border border-[#323642] rounded px-3 py-2 text-sm text-gray-200"
-            >
-              {themesList.map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+            <label className="block text-xs font-bold text-gray-300 mb-2">Display Resolution / Aspect Ratio</label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { val: '16:9', label: '16:9 Widescreen', sub: '1920×1080 Full HD' },
+                { val: '4:3', label: '4:3 Standard', sub: '1024×768 Projector' },
+                { val: '1366x768', label: '16:9 HD', sub: '1366×768 Display' },
+                { val: '1280x720', label: '16:9 720p', sub: '1280×720 HD' },
+                { val: '16:10', label: '16:10 WUXGA', sub: '1920×1200' },
+                { val: 'options', label: 'Inherit Default', sub: 'From General Options' },
+              ].map(opt => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setAspectRatio(opt.val)}
+                  className={`text-left px-3 py-2 text-xs rounded border transition-colors ${
+                    aspectRatio === opt.val 
+                      ? 'bg-cyan-900/30 border-cyan-500 text-cyan-300 font-bold' 
+                      : 'bg-[#141519] border-[#323642] text-gray-300 hover:bg-[#1a1c23]'
+                  }`}
+                >
+                  <div className="truncate">{opt.label}</div>
+                  <div className="text-[10px] text-gray-500 truncate">{opt.sub}</div>
+                </button>
               ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-300 mb-1">Display Resolution / Aspect Ratio</label>
-            <select
-              value={aspectRatio}
-              onChange={e => setAspectRatio(e.target.value)}
-              className="w-full bg-[#141519] border border-[#323642] rounded px-3 py-2 text-sm text-gray-200"
-            >
-              <option value="16:9">16:9 Widescreen (1920×1080 Full HD)</option>
-              <option value="4:3">4:3 Standard Projector (1024×768)</option>
-              <option value="1366x768">16:9 HD Display (1366×768)</option>
-              <option value="1280x720">16:9 720p HD (1280×720)</option>
-              <option value="16:10">16:10 WUXGA (1920×1200 / 1280×800)</option>
-              <option value="options">Inherit from General Options (Selected Monitor)</option>
-            </select>
+            </div>
           </div>
 
           <div>

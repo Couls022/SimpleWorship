@@ -90,41 +90,7 @@ export class DisplayManager {
       ];
     }
 
-    // 4. Ensure we have at least 3 displays to select and route to
     const resultList = [...rawDisplays];
-    if (resultList.length === 1) {
-      resultList.push({
-        id: 'monitor-2',
-        name: 'Monitor 2',
-        bounds: { x: 1920, y: 0, width: 1366, height: 768 },
-        workArea: { x: 1920, y: 0, width: 1366, height: 768 },
-        scaleFactor: 1,
-        isPrimary: false,
-        isInternal: false,
-        connectionState: 'connected' as const,
-      });
-      resultList.push({
-        id: 'monitor-3',
-        name: 'Monitor 3',
-        bounds: { x: 3286, y: 0, width: 1920, height: 1080 },
-        workArea: { x: 3286, y: 0, width: 1920, height: 1080 },
-        scaleFactor: 1,
-        isPrimary: false,
-        isInternal: false,
-        connectionState: 'connected' as const,
-      });
-    } else if (resultList.length === 2) {
-      resultList.push({
-        id: 'monitor-3',
-        name: 'Monitor 3',
-        bounds: { x: 3286, y: 0, width: 1920, height: 1080 },
-        workArea: { x: 3286, y: 0, width: 1920, height: 1080 },
-        scaleFactor: 1,
-        isPrimary: false,
-        isInternal: false,
-        connectionState: 'connected' as const,
-      });
-    }
 
     // Ensure standard names are consistent
     const formatted = resultList.map((d) => {

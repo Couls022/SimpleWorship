@@ -28,7 +28,6 @@ import OptionsDialog from './options/OptionsDialog';
 import CenterShortcutSettingsModal from './CenterShortcutSettingsModal';
 import QuickSongSearchModal from './QuickSongSearchModal';
 import TargetSelectionModal from './TargetSelectionModal';
-import SystemStatusBar from './SystemStatusBar';
 import SystemDiagnosticsModal from './SystemDiagnosticsModal';
 import NewScheduleModal from './NewScheduleModal';
 import OpenScheduleModal from './OpenScheduleModal';
@@ -402,12 +401,6 @@ export default function ModeratorView() {
             setEditingScheduleItem(item);
           }
         }}
-      />
-
-      {/* System Status Bar */}
-      <SystemStatusBar 
-        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)} 
-        onOpenShortcuts={() => setIsShortcutsOpen(true)} 
       />
 
       {/* 3. Draggable / Floating Windows Layer */}

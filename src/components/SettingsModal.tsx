@@ -171,18 +171,23 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                           </button>
                         )}
                       </div>
-                      <select
-                        value={assignedDisplayId || ''}
-                        onChange={(e) => updateOutputGroup(g.id, { displayIds: e.target.value ? [e.target.value] : [] })}
-                        className="bg-[#0f1013] border border-[#323642] rounded px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 max-w-sm"
-                      >
-                        <option value="">No dedicated display assigned (Windowed)</option>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <button
+                          onClick={() => updateOutputGroup(g.id, { displayIds: [] })}
+                          className={`px-2 py-1 text-[10px] font-bold rounded border ${!assignedDisplayId ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                        >
+                          Windowed (No Display)
+                        </button>
                         {screenPermissionGranted && screens.map((screen, idx) => (
-                          <option key={screen.label || idx} value={screen.label}>
+                          <button
+                            key={screen.label || idx}
+                            onClick={() => updateOutputGroup(g.id, { displayIds: [screen.label || ''] })}
+                            className={`px-2 py-1 text-[10px] font-bold rounded border ${assignedDisplayId === screen.label ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                          >
                             Display {idx + 1}: {screen.label || `Unknown (${screen.width}x${screen.height})`} {screen.isPrimary ? '(Primary)' : ''}
-                          </option>
+                          </button>
                         ))}
-                      </select>
+                      </div>
                     </div>
                   </div>
                 );
@@ -212,31 +217,39 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
               <div>
                 <label className="text-gray-400 block mb-1 font-semibold">Role</label>
-                <select
-                  value={newGroupRole}
-                  onChange={(e) => setNewGroupRole(e.target.value as any)}
-                  className="w-full bg-[#141519] border border-[#323642] rounded px-2.5 py-1 text-xs text-gray-100 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="primary">Primary (Congregation)</option>
-                  <option value="confidence">Confidence Monitor (Stage)</option>
-                  <option value="broadcast">Broadcast / Lower-Thirds</option>
-                  <option value="lobby">Lobby / Overflow</option>
-                </select>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { val: 'primary', label: 'Primary' },
+                    { val: 'confidence', label: 'Confidence' },
+                    { val: 'broadcast', label: 'Broadcast' },
+                    { val: 'lobby', label: 'Lobby' }
+                  ].map(r => (
+                    <button
+                      key={r.val}
+                      type="button"
+                      onClick={() => setNewGroupRole(r.val as any)}
+                      className={`px-2 py-1 text-[10px] font-bold rounded border ${newGroupRole === r.val ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
                 <label className="text-gray-400 block mb-1 font-semibold">Assigned Theme</label>
-                <select
-                  value={newGroupThemeId}
-                  onChange={(e) => setNewGroupThemeId(e.target.value)}
-                  className="w-full bg-[#141519] border border-[#323642] rounded px-2.5 py-1 text-xs text-gray-100 focus:outline-none focus:border-indigo-500"
-                >
+                <div className="grid grid-cols-2 gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
                   {themesList.map((t) => (
-                    <option key={t.id} value={t.id}>
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setNewGroupThemeId(t.id)}
+                      className={`px-2 py-1 text-[10px] font-bold truncate rounded border text-left ${newGroupThemeId === t.id ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                    >
                       {t.name}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
 
@@ -287,32 +300,38 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
               <div>
                 <label className="text-gray-400 block mb-1 font-semibold text-xs">Easing Function</label>
-                <select
-                  value={systemOptions.mainOutput.transitions.easing || 'easeInOut'}
-                  onChange={(e) => {
-                    const easing = e.target.value;
-                    updateSystemOptions((opts) => ({
-                      ...opts,
-                      mainOutput: {
-                        ...opts.mainOutput,
-                        transitions: {
-                          ...opts.mainOutput.transitions,
-                          easing
-                        }
-                      }
-                    }));
-                  }}
-                  className="w-full bg-[#0f1013] border border-[#323642] rounded px-2.5 py-1.5 text-xs text-gray-100 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="easeInOut">Ease In Out (Smooth)</option>
-                  <option value="easeIn">Ease In (Accelerate)</option>
-                  <option value="easeOut">Ease Out (Decelerate)</option>
-                  <option value="linear">Linear (Constant)</option>
-                  <option value="circIn">Circ In</option>
-                  <option value="circOut">Circ Out</option>
-                  <option value="backIn">Back In</option>
-                  <option value="backOut">Back Out</option>
-                </select>
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                  {[
+                    { val: 'easeInOut', label: 'Ease In Out' },
+                    { val: 'easeIn', label: 'Ease In' },
+                    { val: 'easeOut', label: 'Ease Out' },
+                    { val: 'linear', label: 'Linear' },
+                    { val: 'circIn', label: 'Circ In' },
+                    { val: 'circOut', label: 'Circ Out' },
+                    { val: 'backIn', label: 'Back In' },
+                    { val: 'backOut', label: 'Back Out' }
+                  ].map(e => (
+                    <button
+                      key={e.val}
+                      type="button"
+                      onClick={() => {
+                        updateSystemOptions((opts) => ({
+                          ...opts,
+                          mainOutput: {
+                            ...opts.mainOutput,
+                            transitions: {
+                              ...opts.mainOutput.transitions,
+                              easing: e.val
+                            }
+                          }
+                        }));
+                      }}
+                      className={`px-2 py-1 text-[10px] font-bold rounded border ${systemOptions.mainOutput.transitions.easing === e.val ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                    >
+                      {e.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
+import { dbApi } from '../db';
 import { Sparkles, Music, Volume2 } from 'lucide-react';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import { OutputGroup, PresentationState, SystemOptions } from '../types';
@@ -126,6 +127,8 @@ export default function MonitorPreviewCanvas({
     timestamp: Date.now(),
     isLiveEnabled: false,
   } as PresentationState);
+  
+  const isLiveOff = !presentationState.isLiveEnabled;
 
   const activeItem = PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
 
@@ -352,11 +355,18 @@ export default function MonitorPreviewCanvas({
   useEffect(() => {
     let isMounted = true;
     
+    // Synchronous fast path to prevent 1-frame flicker on images
+    if (activeItem?.contentId) {
+      const cachedBg = backgroundUrl && backgroundUrl.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
+      const cachedAudio = audioSrc && audioSrc.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
+      
+      if (cachedBg) setLocalBackgroundUrl(cachedBg);
+      if (cachedAudio) setLocalAudioSrc(cachedAudio);
+    }
+    
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
       if (!url || !url.startsWith('blob:') || !contentId) return url;
       try {
-        const { dbApi } = await import('../db');
-        // Fast path: try cache first
         const cachedUrl = dbApi.getCachedUrl(contentId);
         if (cachedUrl) return cachedUrl;
         
@@ -637,7 +647,6 @@ export default function MonitorPreviewCanvas({
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 select-none">
               <audio
                 ref={audioRef}
-                key={localAudioSrc}
                 src={localAudioSrc}
                 autoPlay
                 loop={presentationState.isVideoLooping ?? true}
@@ -925,7 +934,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Standby State (When no content or slide is currently live and not in logo mode and not Live On) */}
-          {!currentSlide && !presentationState.isBlack && !presentationState.isClear && !presentationState.showLogo && !presentationState.isLiveEnabled && (
+          {!currentSlide && !presentationState.isBlack && !presentationState.isClear && !presentationState.showLogo && isLiveOff && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6 text-center select-none bg-black">
               <div className="p-8 rounded-2xl bg-black/50 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
                 <SimpleWorshipLogo size={56} showText={true} subtitle={group?.name || "Live Display Screen"} />
@@ -1063,10 +1072,31 @@ export default function MonitorPreviewCanvas({
 
           {/* Clear State - Text is already hidden above, keep clean display */}
 
-          {/* Blackout Overlay */}
-          {presentationState.isBlack && (
-            <div className="absolute inset-0 z-50 bg-black transition-opacity duration-200" />
-          )}
+          {/* Live Off Content Hider (z-15) */}
+          <AnimatePresence>
+            {isLiveOff && !presentationState.isBlack && !presentationState.showLogo && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="absolute inset-0 z-15 bg-black" 
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Master Blackout Overlay (z-50) */}
+          <AnimatePresence>
+            {presentationState.isBlack && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="absolute inset-0 z-50 bg-black" 
+              />
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Resolution & Ratio Indicator Tag */}
