@@ -63,12 +63,13 @@ export function resolveDisplayAssignments(
   });
 
   for (const displayId of displayIdSet) {
-    // 1. Find all configured route groups targeting this physical display
-    const configuredGroupsForDisplay = outputGroups.filter((g) => {
-      return routeTargetsDisplay(g, displayId);
+    // 1. Find all configured route groups targeting this physical display that are LIVE
+    const liveGroupsForDisplay = outputGroups.filter((g) => {
+      const isTargeting = routeTargetsDisplay(g, displayId);
+      const isLive = groupStates[g.id]?.isLiveEnabled;
+      return isTargeting && isLive;
     });
-
-    const candidateGroupIds = configuredGroupsForDisplay.map((g) => g.id);
+    const candidateGroupIds = liveGroupsForDisplay.map((g) => g.id);
 
     // 2. Zero candidate routes
     if (candidateGroupIds.length === 0) {
@@ -92,13 +93,13 @@ export function resolveDisplayAssignments(
 
     // 4. Multiple candidate routes target this physical display
     // ACTIVE ROUTE OVERLAY PRIORITY:
-    // If the currently active target router panel (activeControlGroupId) targets this display,
+    // If the currently active target router panel (activeControlGroupId) targets this display AND IS LIVE,
     // it OVERLAYS and TAKES DISPLAY PRIORITY on this monitor!
     let winningGroupId: string | null = null;
     if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId)) {
       winningGroupId = activeControlGroupId;
     } else {
-      // Otherwise, fallback to the first configured route targeting this display
+      // Otherwise, fallback to the first LIVE route targeting this display
       winningGroupId = candidateGroupIds[0];
     }
 

@@ -82,32 +82,10 @@ export default function ModeratorView() {
   }, []);
 
   // Proactive Caching Mechanism for PPTX Binary Data
-  // When a PPTX presentation is added to the schedule without its binary fileBytes,
-  // we immediately fetch it from IndexedDB and update the schedule item.
-  // This drastically reduces latency when the item later goes live.
+  // Removed proactive PPTX hydration to prevent heavy binary data in the global state.
+  // PptxRenderOverlay now dynamically fetches binaries when needed.
   useEffect(() => {
-    const items = store.activeSchedule?.items || [];
-    items.forEach(async (item) => {
-      if (
-        item.type === 'presentation' && 
-        item.contentId && 
-        !isValidPptxBinary(item.data?.fileBytes)
-      ) {
-        try {
-          const hydratedItem = await PresentationContentResolver.hydrateItemBinaryIfNeeded(item);
-          if (hydratedItem && isValidPptxBinary(hydratedItem.data?.fileBytes)) {
-            store.updateScheduleItem(item.id, {
-              data: {
-                ...item.data,
-                fileBytes: hydratedItem.data.fileBytes
-              }
-            });
-          }
-        } catch (error) {
-          console.error('[ProactiveCache] Failed to proactively cache PPTX binary for item:', item.id, error);
-        }
-      }
-    });
+    // Keep the dependency array but no-op, or just remove the effect contents.
   }, [store.activeSchedule?.items]);
 
   useEffect(() => {
@@ -123,9 +101,68 @@ export default function ModeratorView() {
       }
     };
 
+    const handleIdentifyDisplays = () => {
+      // Check if Electron is handling it natively. If not, show browser fallback.
+      if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
+        return; // Handled natively by Electron
+      }
+
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed';
+      overlay.style.top = '0';
+      overlay.style.left = '0';
+      overlay.style.width = '100vw';
+      overlay.style.height = '100vh';
+      overlay.style.zIndex = '999999';
+      overlay.style.backgroundColor = 'rgba(10, 11, 14, 0.45)';
+      overlay.style.display = 'flex';
+      overlay.style.alignItems = 'center';
+      overlay.style.justifyContent = 'center';
+      overlay.style.pointerEvents = 'none';
+      overlay.style.transition = 'opacity 0.5s ease';
+      
+      const card = document.createElement('div');
+      card.style.background = 'rgba(18, 19, 23, 0.95)';
+      card.style.border = '2px solid #06b6d4';
+      card.style.boxShadow = '0 10px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(6, 182, 212, 0.3)';
+      card.style.borderRadius = '16px';
+      card.style.padding = '40px 60px';
+      card.style.textAlign = 'center';
+      
+      const num = document.createElement('div');
+      num.style.fontSize = '140px';
+      num.style.fontWeight = '900';
+      num.style.color = '#06b6d4';
+      num.style.lineHeight = '1';
+      num.style.margin = '0';
+      num.style.textShadow = '0 0 20px rgba(6, 182, 212, 0.4)';
+      num.textContent = '1';
+      
+      const label = document.createElement('div');
+      label.style.fontSize = '16px';
+      label.style.fontWeight = '700';
+      label.style.color = '#94a3b8';
+      label.style.textTransform = 'uppercase';
+      label.style.letterSpacing = '2px';
+      label.style.marginTop = '10px';
+      label.textContent = `${window.innerWidth}x${window.innerHeight} Primary (Browser Preview)`;
+      
+      card.appendChild(num);
+      card.appendChild(label);
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      
+      setTimeout(() => {
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 500);
+      }, 2500);
+    };
+
     window.addEventListener('simpleworship:notify', handleNotification);
+    window.addEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
     return () => {
       window.removeEventListener('simpleworship:notify', handleNotification);
+      window.removeEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
     };
   }, [loadAllData, resetLayout]);
 

@@ -28,6 +28,15 @@ export async function savePresentation(
     }
   } else if (existingFileBytes && isValidPptxBinary(existingFileBytes)) {
     fileBuffer = existingFileBytes instanceof ArrayBuffer ? existingFileBytes : existingFileBytes.buffer;
+  } else if (existingId) {
+    // Attempt to recover existing file bytes if not explicitly provided
+    const existingAsset = await db.get('assets', existingId);
+    if (existingAsset?.data?.fileBytes && isValidPptxBinary(existingAsset.data.fileBytes)) {
+      fileBuffer = existingAsset.data.fileBytes;
+      if (existingAsset.hash) {
+        hash = existingAsset.hash;
+      }
+    }
   }
 
   const asset: Asset = {
@@ -50,7 +59,14 @@ export async function savePresentation(
 export async function getAllPresentations(): Promise<Asset[]> {
   const db = await getDB();
   const allAssets = await db.getAllFromIndex('assets', 'by-type', 'document');
-  return allAssets;
+  // Strip heavy fileBytes to prevent massive memory consumption when listing presentations
+  return allAssets.map(asset => {
+    if (asset.data && asset.data.fileBytes) {
+      const { fileBytes, ...restData } = asset.data;
+      return { ...asset, data: restData };
+    }
+    return asset;
+  });
 }
 
 export async function deletePresentation(id: string): Promise<void> {

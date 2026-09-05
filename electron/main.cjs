@@ -164,18 +164,102 @@ ipcMain.handle('window:close', () => {
 // NATIVE IPC HANDLERS
 // -------------------------------------------------------------
 
-function getFormattedDisplays() {
+const { exec } = require('child_process');
+
+function getWindowsMonitorNames() {
+  return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      return resolve([]);
+    }
+    
+    // WmiMonitorID contains ManufacturerName and UserFriendlyName as character code arrays.
+    // Convert them to ASCII string characters and join them.
+    const cmd = `powershell -NoProfile -Command "Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorID | ForEach-Object { $m = [System.Text.Encoding]::ASCII.GetString($_.ManufacturerName -notmatch 0).Trim(); $n = [System.Text.Encoding]::ASCII.GetString($_.UserFriendlyName -notmatch 0).Trim(); Write-Output \\"\\$m|\\$n\\" }"`;
+    
+    exec(cmd, { timeout: 2000 }, (err, stdout) => {
+      if (err) {
+        // Fallback: query Win32_DesktopMonitor
+        const cmdFallback = `powershell -NoProfile -Command "Get-CimInstance Win32_DesktopMonitor | ForEach-Object { Write-Output (\\"\\" + $_.MonitorManufacturer + \\"|\\" + $_.Name) }"`;
+        exec(cmdFallback, { timeout: 2000 }, (err2, stdout2) => {
+          if (err2 || !stdout2) {
+            return resolve([]);
+          }
+          const lines = stdout2.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          const monitors = lines.map(line => {
+            const parts = line.split('|');
+            return { brand: parts[0] || '', model: parts[1] || '' };
+          });
+          resolve(monitors);
+        });
+        return;
+      }
+      
+      if (!stdout) return resolve([]);
+      const lines = stdout.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const monitors = lines.map(line => {
+        const parts = line.split('|');
+        return { brand: parts[0] || '', model: parts[1] || '' };
+      });
+      resolve(monitors);
+    });
+  });
+}
+
+const MANUFACTURER_MAP = {
+  'SAM': 'Samsung',
+  'DEL': 'Dell',
+  'SEC': 'Samsung',
+  'ACR': 'Acer',
+  'GSM': 'LG',
+  'LGD': 'LG',
+  'PHL': 'Philips',
+  'HPQ': 'HP',
+  'BEN': 'BenQ',
+  'SON': 'Sony',
+  'NEC': 'NEC',
+  'ASU': 'ASUS',
+  'AOC': 'AOC',
+  'LEN': 'Lenovo',
+  'MSI': 'MSI',
+  'APP': 'Apple',
+  'HWP': 'HP',
+  'HEW': 'HP'
+};
+
+async function getFormattedDisplays() {
   const displays = screen.getAllDisplays();
   const primaryDisplay = screen.getPrimaryDisplay();
+  const winMonitors = await getWindowsMonitorNames();
 
   return displays.map((d, index) => {
     const isPrimary = d.id === primaryDisplay.id;
-    const name = isPrimary ? `Monitor ${index + 1} (Primary)` : `Monitor ${index + 1} (Secondary)`;
+    
+    let brand = '';
+    let model = '';
+    let displayName = '';
+
+    if (winMonitors && winMonitors[index]) {
+      const wm = winMonitors[index];
+      const mfg = (wm.brand || '').toUpperCase().trim();
+      brand = MANUFACTURER_MAP[mfg] || mfg;
+      model = (wm.model || '').trim();
+    }
+
+    if (brand || model) {
+      displayName = `${brand} ${model}`.trim();
+    } else {
+      displayName = isPrimary ? `Primary Monitor` : `Monitor ${index + 1}`;
+    }
+
+    if (!displayName) {
+      displayName = `Generic Display ${index + 1}`;
+    }
+
     return {
       id: `display-${d.id}`,
       displayId: d.id,
-      name: name,
-      label: name,
+      name: displayName,
+      label: `${displayName} (${d.bounds.width}x${d.bounds.height})`,
       bounds: d.bounds,
       workArea: d.workArea,
       scaleFactor: d.scaleFactor,
@@ -186,15 +270,15 @@ function getFormattedDisplays() {
 }
 
 // Display Enumeration
-ipcMain.handle('display:get-all', () => {
-  return getFormattedDisplays();
+ipcMain.handle('display:get-all', async () => {
+  return await getFormattedDisplays();
 });
 
 // Display Hot-Plug & Metrics Monitoring
 app.whenReady().then(() => {
-  const notifyDisplaysChanged = () => {
+  const notifyDisplaysChanged = async () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      const displays = getFormattedDisplays();
+      const displays = await getFormattedDisplays();
       mainWindow.webContents.send('displays:changed', displays);
       mainWindow.webContents.send('display:changed', { type: 'metrics-changed', displays });
     }
@@ -257,10 +341,10 @@ function resolveTargetDisplay(displayId, formattedDisplays) {
 }
 
 // Projector Management (Display-Centric)
-ipcMain.handle('projector:open', (event, { groupId, displayId, bounds }) => {
+ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) => {
   if (!groupId) return { success: false, status: 'DISCONNECTED', error: 'groupId is required' };
 
-  const formattedDisplays = getFormattedDisplays();
+  const formattedDisplays = await getFormattedDisplays();
   const primaryDisplay = screen.getPrimaryDisplay();
 
   let targetBounds = bounds;
@@ -451,7 +535,7 @@ ipcMain.handle('projector:close', (event, { groupId, displayId }) => {
 ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
   if (!Array.isArray(assignments)) return { success: false, error: 'assignments must be an array' };
 
-  const formattedDisplays = getFormattedDisplays();
+  const formattedDisplays = await getFormattedDisplays();
   const results = [];
 
   for (const item of assignments) {
@@ -587,6 +671,116 @@ ipcMain.handle('projector:get-status', (event, { groupId, displayId }) => {
     }
   }
   return { status: 'DISCONNECTED' };
+});
+
+// Native Display Identifier overlay creator
+ipcMain.handle('display:identify', async () => {
+  const displays = screen.getAllDisplays();
+  
+  displays.forEach((d, index) => {
+    const { x, y, width, height } = d.bounds;
+    
+    // Create a temporary borderless overlay window
+    const win = new BrowserWindow({
+      x,
+      y,
+      width,
+      height,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      focusable: false,
+      enableLargerThanScreen: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(10, 11, 14, 0.45);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            user-select: none;
+          }
+          .card {
+            background: rgba(18, 19, 23, 0.95);
+            border: 2px solid #06b6d4;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(6, 182, 212, 0.3);
+            border-radius: 16px;
+            padding: 40px 60px;
+            text-align: center;
+            animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          }
+          .number {
+            font-size: 140px;
+            font-weight: 900;
+            color: #06b6d4;
+            line-height: 1;
+            margin: 0;
+            text-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+          }
+          .label {
+            font-size: 16px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 10px;
+          }
+          @keyframes popIn {
+            0% { transform: scale(0.85); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+          .fade-out {
+            animation: fadeOut 0.5s ease-out forwards;
+          }
+          @keyframes fadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div id="card" class="card">
+          <div class="number">${index + 1}</div>
+          <div class="label">${d.bounds.width}x${d.bounds.height} ${d.id === screen.getPrimaryDisplay().id ? 'Primary' : 'Secondary'}</div>
+        </div>
+        <script>
+          setTimeout(() => {
+            document.body.classList.add('fade-out');
+          }, 2500);
+        </script>
+      </body>
+      </html>
+    `;
+
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+    win.setIgnoreMouseEvents(true);
+
+    // Destroy after 3.2 seconds
+    setTimeout(() => {
+      if (!win.isDestroyed()) {
+        win.destroy();
+      }
+    }, 3200);
+  });
+
+  return { success: true };
 });
 
 // Native File Pickers

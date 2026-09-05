@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('projector:error', handler);
   },
   syncProjectorDisplays: (assignments) => ipcRenderer.invoke('projector:sync-displays', { assignments }),
+  identifyDisplays: () => ipcRenderer.invoke('display:identify'),
   saveSwsFile: (defaultName, data) => ipcRenderer.invoke('file:save-sws', { defaultName, data }),
   openSwsFile: () => ipcRenderer.invoke('file:open-sws'),
   readSwsFromPath: (filePath) => ipcRenderer.invoke('file:read-sws-path', filePath),

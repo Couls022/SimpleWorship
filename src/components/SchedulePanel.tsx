@@ -347,21 +347,6 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
             if (!isValidPptxBinary(newItem.data?.fileBytes)) {
               newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
             }
-            if (newItem.contentId) {
-              const cid = newItem.contentId;
-              const nid = newItem.id;
-              import('../db').then(async ({ getDB }) => {
-                try {
-                  const db = await getDB();
-                  const asset = await db.get('assets', cid);
-                  if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
-                    updateScheduleItem(nid, {
-                      data: { ...(newItem.data || {}), fileBytes: asset.data.fileBytes }
-                    });
-                  }
-                } catch {}
-              });
-            }
           }
 
           if (activeSchedule) {
@@ -480,7 +465,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
               }`}
             >
               <Calendar size={11} className="shrink-0" />
-              <span className="truncate">Schedule</span>
+              <span className="truncate hidden xl:inline">Schedule</span>
               {activeSchedule && (
                 <span className="text-[9px] bg-[#2a2e3a] px-1 rounded-full text-gray-300 shrink-0 font-mono ml-0.5">
                   {activeSchedule.items.length}
@@ -498,7 +483,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
               }`}
             >
               <BookOpen size={11} className="shrink-0" />
-              <span className="truncate">Scriptures</span>
+              <span className="truncate hidden xl:inline">Scriptures</span>
             </button>
 
             <button
@@ -511,7 +496,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
               }`}
             >
               <Music size={11} className="shrink-0" />
-              <span className="truncate">Songs</span>
+              <span className="truncate hidden xl:inline">Songs</span>
             </button>
 
             <button
@@ -524,7 +509,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
               }`}
             >
               <FileText size={11} className="shrink-0" />
-              <span className="truncate">Presentations</span>
+              <span className="truncate hidden xl:inline">Presentations</span>
             </button>
 
             <button
@@ -537,7 +522,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
               }`}
             >
               <Camera size={11} className="shrink-0" />
-              <span className="truncate">Cameras</span>
+              <span className="truncate hidden xl:inline">Cameras</span>
             </button>
           </div>
 

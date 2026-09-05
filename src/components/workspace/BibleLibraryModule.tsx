@@ -181,7 +181,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
     }
     closeTimeoutRef.current = setTimeout(() => {
       setIsChapterDropdownOpen(false);
-    }, 180);
+    }, 300);
   };
 
   const handleSelectChapter = (ch: number) => {

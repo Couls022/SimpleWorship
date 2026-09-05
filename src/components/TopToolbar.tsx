@@ -446,7 +446,6 @@ export default function TopToolbar({
                 <div 
                   className="relative group"
                   onMouseEnter={() => setActiveSubmenu('new')}
-                  onMouseLeave={() => setActiveSubmenu(null)}
                 >
                   <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left">
                     <span className="flex items-center gap-1.5">
@@ -525,7 +524,6 @@ export default function TopToolbar({
                 <div 
                   className="relative group"
                   onMouseEnter={() => { setActiveSubmenu('recent'); loadRecentSchedules(); }}
-                  onMouseLeave={() => setActiveSubmenu(null)}
                 >
                   <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left">
                     <span className="flex items-center gap-1.5">
@@ -1042,7 +1040,7 @@ export default function TopToolbar({
                   +
                 </div>
               </div>
-              <span className="text-[10px] font-bold tracking-wide uppercase select-none">New</span>
+              <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">New</span>
             </button>
             <button 
               onClick={(e) => {
@@ -1118,7 +1116,7 @@ export default function TopToolbar({
               <div className="w-6 h-6 rounded bg-cyan-600/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-xs shrink-0">
                 <FolderOpen size={14} />
               </div>
-              <span className="text-[10px] font-bold tracking-wide uppercase select-none">Open</span>
+              <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Open</span>
             </button>
             <button 
               onClick={(e) => {
@@ -1193,7 +1191,7 @@ export default function TopToolbar({
             <div className="w-6 h-6 rounded bg-blue-700/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shadow-xs shrink-0">
               <Save size={14} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Save</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Save</span>
           </button>
 
           <div className="w-px h-6 bg-[#3d424e] mx-1"></div>
@@ -1209,7 +1207,7 @@ export default function TopToolbar({
             <div className="w-6 h-6 rounded-full bg-emerald-600/30 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shadow-xs shrink-0">
               <Film size={14} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Media</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Media</span>
           </button>
 
           {/* QUICK SEARCH BUTTON */}
@@ -1221,7 +1219,7 @@ export default function TopToolbar({
             <div className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300 shadow-xs shrink-0">
               <Search size={14} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Search</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Search</span>
           </button>
 
           {/* REMOTE BUTTON */}
@@ -1233,7 +1231,7 @@ export default function TopToolbar({
             <div className="w-6 h-6 rounded bg-purple-700/30 border border-purple-400/40 flex items-center justify-center text-purple-300 shadow-xs shrink-0">
               <Radio size={14} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Remote</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Remote</span>
           </button>
         </div>
 
@@ -1259,7 +1257,7 @@ export default function TopToolbar({
               }`}>
                 <Bell size={13} />
               </div>
-              <span className="text-[10px] font-bold tracking-wide uppercase select-none">Alerts</span>
+              <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Alerts</span>
             </button>
             <button 
               onClick={onOpenAlerts}
@@ -1285,7 +1283,7 @@ export default function TopToolbar({
             }`}>
               <ImageIcon size={12} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Logo</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Logo</span>
           </button>
 
           {/* BLACK */}
@@ -1303,7 +1301,7 @@ export default function TopToolbar({
             }`}>
               <Square size={10} className="fill-black text-black" />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Black</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Black</span>
           </button>
 
           {/* CLEAR */}
@@ -1321,7 +1319,7 @@ export default function TopToolbar({
             }`}>
               <EyeOff size={12} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Clear</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Clear</span>
           </button>
 
           {/* DRAW / ANNOTATION */}
@@ -1339,7 +1337,7 @@ export default function TopToolbar({
             }`}>
               <Pen size={12} />
             </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden md:inline pr-1">Draw</span>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Draw</span>
           </button>
 
           {/* MASTER LIVE COLOR BARS SWITCH */}
@@ -1362,7 +1360,7 @@ export default function TopToolbar({
               <div className="h-full w-[3.4px] bg-rose-600"></div>
               <div className="h-full w-[3.4px] bg-blue-700"></div>
             </div>
-            <span className={`text-[10px] font-bold tracking-wide uppercase select-none pr-1 ${activeControlState?.isLiveEnabled ? 'text-cyan-300 font-extrabold animate-pulse' : 'text-gray-400'}`}>
+            <span className={`text-[10px] font-bold tracking-wide uppercase select-none pr-1 hidden min-[1150px]:inline ${activeControlState?.isLiveEnabled ? 'text-cyan-300 font-extrabold animate-pulse' : 'text-gray-400'}`}>
               {activeControlState?.isLiveEnabled ? 'Live On' : 'Live'}
             </span>
           </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useScreens } from '../hooks/useScreens';
@@ -105,8 +106,8 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={onClose}>
       <div 
         className="bg-[#1a1c23] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -312,6 +313,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { motion, AnimatePresence } from 'motion/react';
 import { PresentationCore } from '../core/PresentationCore';
@@ -11,6 +11,7 @@ import { PresentationState } from '../types';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
 import { resolveDisplayAssignments } from '../core/DisplayRouter';
 import { DisplayManager } from '../core/DisplayManager';
+import { useScreens } from '../hooks/useScreens';
 import CameraLiveRenderer from './CameraLiveRenderer';
 import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
@@ -30,31 +31,40 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const { groupStates, activeSchedule, songsList, themesList, outputGroups, alert, loadAllData, systemOptions, activeControlGroupId } = store;
   const [routedGroupId, setRoutedGroupId] = React.useState<string>(initialGroupId);
   
-  const mediaControllerRef = useRef<MediaStreamController | null>(null);
-  if (!mediaControllerRef.current) {
-    mediaControllerRef.current = new MediaStreamController();
-  }
-  const mediaController = mediaControllerRef.current;
-  const [managedVideoSrc, setManagedVideoSrc] = React.useState<string | null>(null);
+  const { screens } = useScreens();
+  const [identifyActive, setIdentifyActive] = React.useState(false);
 
   useEffect(() => {
+    let timer: any;
+    const handleLocalIdentify = () => {
+      setIdentifyActive(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setIdentifyActive(false);
+      }, 3000);
+    };
+
+    window.addEventListener('simpleworship:identify-displays', handleLocalIdentify);
     return () => {
-      mediaController.dispose();
+      window.removeEventListener('simpleworship:identify-displays', handleLocalIdentify);
+      clearTimeout(timer);
     };
   }, []);
 
   useEffect(() => {
     loadAllData();
 
-    // Listen to physical display route change notifications from Electron or window events
     const cleanupRouteListener = DisplayManager.listenToProjectorRouteChanged((data) => {
       if (!displayId || data.displayId === displayId) {
         setRoutedGroupId(data.groupId);
       }
     });
 
-    // Subscribe to cross-window BroadcastChannel and Storage events for real-time live synchronization
     const unsubscribe = subscribeToBroadcast((msg) => {
+      if (msg.type === 'IDENTIFY_DISPLAYS') {
+        setIdentifyActive(true);
+        setTimeout(() => setIdentifyActive(false), 3000);
+      }
       if (msg.type === 'GROUP_STATES_UPDATE' || msg.type === 'GO_LIVE') {
         if (msg.data && msg.data.groupStates) {
           useStore.setState((prev) => ({
@@ -82,22 +92,229 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       cleanupRouteListener();
       unsubscribe();
     };
-  }, [displayId]);
+  }, [displayId, loadAllData]);
 
-  // Dynamically resolve route for this physical display based on active operator priority
-  const activeGroupId = React.useMemo(() => {
-    if (displayId && outputGroups.length > 0) {
-      const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
-      const match = assignments.get(displayId);
-      if (match?.assignedGroupId) {
-        return match.assignedGroupId;
-      }
+  // Find index of this screen in screens list to show the accurate monitor index tag
+  const screenIndex = React.useMemo(() => {
+    if (!displayId) return 1;
+    const matchIdx = screens.findIndex(
+      (scr: any) =>
+        scr.label === displayId ||
+        scr.name === displayId ||
+        scr.id === displayId ||
+        scr.displayId === displayId
+    );
+    if (matchIdx !== -1) return matchIdx + 1;
+    
+    if (displayId.toLowerCase().includes('foldback')) return 3;
+    if (displayId.toLowerCase().includes('alternate')) return 2;
+    return 1;
+  }, [screens, displayId]);
+
+  // Resolves the ordered array of live groups targeting this physical display
+  const orderedLiveGroupIds = React.useMemo(() => {
+    if (!displayId || outputGroups.length === 0) return [routedGroupId || initialGroupId];
+    const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
+    const match = assignments.get(displayId);
+    if (!match || match.liveGroupIds.length === 0) {
+      return [routedGroupId || initialGroupId];
     }
-    return routedGroupId || initialGroupId;
+    
+    // Stacking Priority: Sort so that the activeControlGroupId (the active panel being operated) is ALWAYS last
+    // (meaning it renders on the very top of the stacking order in the React DOM)
+    const list = [...match.liveGroupIds];
+    if (activeControlGroupId && list.includes(activeControlGroupId)) {
+      const filtered = list.filter(id => id !== activeControlGroupId);
+      return [...filtered, activeControlGroupId];
+    }
+    return list;
   }, [displayId, outputGroups, groupStates, activeControlGroupId, routedGroupId, initialGroupId]);
 
-  const group = outputGroups.find(g => g.id === activeGroupId) || outputGroups[0];
-  const presentationState = groupStates[activeGroupId] || ({
+  // Check if all layers targeting this display are currently in standby/empty
+  const allLayersStandby = React.useMemo(() => {
+    return orderedLiveGroupIds.every(gId => {
+      const pState = groupStates[gId];
+      if (!pState) return true;
+      if (pState.isLiveEnabled) return false; // If the group is Live On, it is active and NOT in standby!
+      if (pState.showLogo || pState.isClear || pState.isBlack) return false;
+      const actItem = PresentationCore.getActiveContent(activeSchedule, pState, pState.directLiveItem);
+      return !actItem;
+    });
+  }, [orderedLiveGroupIds, groupStates, activeSchedule]);
+
+  // Global blackout state (active if the winning target group is black or disabled)
+  const isBlackoutActive = React.useMemo(() => {
+    if (orderedLiveGroupIds.length === 0) return true;
+    const winningGroupId = orderedLiveGroupIds[orderedLiveGroupIds.length - 1];
+    const winState = groupStates[winningGroupId];
+    if (winState && (winState.isBlack || !winState.isLiveEnabled)) {
+      return true;
+    }
+    return false;
+  }, [orderedLiveGroupIds, groupStates]);
+
+  const winningGroup = outputGroups.find(g => g.id === orderedLiveGroupIds[orderedLiveGroupIds.length - 1]) || outputGroups[0];
+
+  return (
+    <div 
+      data-canvas-preview="true"
+      className="w-screen h-screen overflow-hidden relative bg-black select-none projector-canvas"
+    >
+      {/* 1. Multi-Layer Transparent Presentation Stacking */}
+      {orderedLiveGroupIds.map((gId, index) => {
+        const isBaseLayer = index === 0;
+        const currentGroupObj = outputGroups.find(g => g.id === gId) || outputGroups[0];
+        return (
+          <ProjectorLayer
+            key={gId}
+            groupId={gId}
+            displayId={displayId}
+            isBaseLayer={isBaseLayer}
+            allLayersStandby={allLayersStandby}
+            group={currentGroupObj}
+            songsList={songsList}
+            themesList={themesList}
+            systemOptions={systemOptions}
+            activeSchedule={activeSchedule}
+          />
+        );
+      })}
+
+      {/* 2. Slide Annotation Layer */}
+      {!isBlackoutActive && (
+        <SlideAnnotationLayer 
+          interactive={false} 
+          className="z-35"
+        />
+      )}
+
+      {/* 3. Marquee Alert Banner Overlay */}
+      {alert.active && !isBlackoutActive && (
+        <div 
+          className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
+          style={{
+            bottom: alert.position === 'bottom' ? 0 : 'auto',
+            top: alert.position === 'top' ? 0 : 'auto',
+            backgroundColor: alert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
+            color: alert.textColor || '#FACC15',
+          }}
+        >
+          <div className="text-lg md:text-xl font-bold whitespace-nowrap animate-marquee flex items-center gap-3">
+            <span className="px-2.5 py-0.5 rounded bg-amber-500 text-black text-sm font-black uppercase tracking-wider">
+              ALERT
+            </span>
+            <span>{alert.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Nursery Alert Badge Overlay */}
+      {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (
+        <div 
+          className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
+            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
+            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Left' ? 'bottom-6 left-6' :
+            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Right' ? 'bottom-6 right-6' : 'top-6 right-6'
+          }`}
+          style={{
+            backgroundColor: systemOptions?.mainOutput?.alerts?.nursery?.backgroundColor || '#FF0000',
+            color: systemOptions?.mainOutput?.alerts?.nursery?.font?.color || '#FFFFFF',
+            fontSize: `${Math.min(32, systemOptions?.mainOutput?.alerts?.nursery?.font?.maxSize || 32)}px`,
+            fontFamily: systemOptions?.mainOutput?.alerts?.nursery?.font?.family || 'Tahoma, sans-serif'
+          }}
+        >
+          <span className="text-xs uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded text-white font-mono">NURSERY</span>
+          <span>{alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
+        </div>
+      )}
+
+      {/* 5. Master Black Screen curtain */}
+      <AnimatePresence>
+        {isBlackoutActive && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute inset-0 z-50 bg-black"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 6. Visual Identification Overlay for connected monitors */}
+      <AnimatePresence>
+        {identifyActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="absolute inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm select-none pointer-events-none"
+          >
+            <motion.div
+              initial={{ scale: 0.85, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.85, y: 10 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+              className={`p-10 rounded-2xl border-2 text-center shadow-2xl bg-[#0e1015]/95 backdrop-blur-md max-w-sm ${
+                displayId?.toLowerCase().includes('foldback')
+                  ? 'border-amber-500 shadow-amber-950/45'
+                  : displayId?.toLowerCase().includes('alternate')
+                  ? 'border-purple-500 shadow-purple-950/45'
+                  : 'border-cyan-500 shadow-cyan-950/45'
+              }`}
+            >
+              <div className="text-[130px] font-black leading-none font-mono tracking-tight text-white select-none">
+                {screenIndex}
+              </div>
+              <div className="mt-3 text-sm font-extrabold uppercase tracking-widest text-gray-300">
+                {displayId?.toLowerCase().includes('foldback')
+                  ? 'Foldback / Stage Output'
+                  : displayId?.toLowerCase().includes('alternate')
+                  ? 'Alternate Output'
+                  : 'Main Worship Output'}
+              </div>
+              <div className="mt-2 text-xs font-mono text-cyan-400">
+                {window.innerWidth} × {window.innerHeight} Pixels
+              </div>
+              <div className="mt-4 px-3 py-1.5 rounded bg-black/50 text-[10px] text-gray-400 font-sans tracking-wide">
+                Active Display Target: {displayId || 'Primary Display'}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+interface ProjectorLayerProps {
+  groupId: string;
+  displayId?: string;
+  isBaseLayer: boolean;
+  allLayersStandby: boolean;
+  group: any;
+  songsList: any[];
+  themesList: any[];
+  systemOptions: any;
+  activeSchedule: any;
+}
+
+function ProjectorLayer({ 
+  groupId, 
+  displayId, 
+  isBaseLayer, 
+  allLayersStandby, 
+  group,
+  songsList,
+  themesList,
+  systemOptions,
+  activeSchedule
+}: ProjectorLayerProps) {
+  const store = useStore();
+  const { groupStates } = store;
+  
+  const presentationState = groupStates[groupId] || ({
     activeScheduleId: null,
     activeItemId: null,
     activeSlideIndex: 0,
@@ -115,43 +332,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     presentationState.directLiveItem
   );
 
-  // Fallback Asset Binary & Media URL Hydration
-  // Resolves race conditions and storage limitations by independently fetching 
-  // durable binary or media sources from IndexedDB if stripped from broadcast payload.
-  useEffect(() => {
-    if (!activeItem || !activeItem.contentId) return;
-
-    const needsPptxHydration = activeItem.type === 'presentation' && !isValidPptxBinary(activeItem.data?.fileBytes);
-    const currentUrl = activeItem.data?.url || activeItem.customBackgroundUrl;
-    // MediaStreamController now handles videos, so only hydrate images and audio
-    const needsMediaHydration = (activeItem.type === 'media' || activeItem.type === 'audio' || activeItem.type === 'image') && (!currentUrl || currentUrl.startsWith('blob:')) && PresentationContentResolver.detectContentType(activeItem) !== 'video';
-
-    if (needsPptxHydration || needsMediaHydration) {
-      PresentationContentResolver.hydrateItemBinaryIfNeeded(activeItem).then((hydratedItem) => {
-        if (hydratedItem && hydratedItem !== activeItem) {
-          useStore.setState((prev) => {
-            const currentGroupState = prev.groupStates[activeGroupId];
-            if (!currentGroupState) return prev;
-            if (currentGroupState.activeItemId !== activeItem.id && currentGroupState.directLiveItem?.id !== activeItem.id) return prev;
-
-            return {
-              groupStates: {
-                ...prev.groupStates,
-                [activeGroupId]: {
-                  ...currentGroupState,
-                  directLiveItem: currentGroupState.directLiveItem?.id === activeItem.id ? hydratedItem : currentGroupState.directLiveItem
-                  // If it's part of schedule, we don't mutate the schedule directly here.
-                  // But since `directLiveItem` is what Projector renders for ad-hoc, it works for ad-hoc. 
-                  // If it's a schedule item, wait, the `directLiveItem` takes precedence.
-                }
-              }
-            };
-          });
-        }
-      });
-    }
-  }, [activeItem?.id, activeItem?.type, activeItem?.contentId, activeItem?.data?.url, activeItem?.customBackgroundUrl, activeGroupId]);
-
   const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
   const currentSlide = slides[presentationState.activeSlideIndex] || null;
 
@@ -159,7 +339,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const fadeDuration = (transitionSettings.duration || 500) / 1000;
   const fadeEasing = (transitionSettings.easing || 'easeInOut') as any;
 
-  // Track slide index for direction-aware transitions (e.g. push-left vs push-right)
+  // Direction-aware push animations
   const prevSlideIndexRef = useRef(0);
   const currentSlideIndex = presentationState?.activeSlideIndex || 0;
   const isForward = currentSlideIndex >= prevSlideIndexRef.current;
@@ -171,7 +351,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const activeTransition = SlideTransitionManager.resolveTransition(currentSlide, systemOptions);
   const motionConfig = SlideTransitionManager.getMotionConfig(activeTransition, isForward);
 
-  // Resolve Theme specifically for this output group and content
   const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
   const groupTheme = themesList.find(t => t.id === group?.themeId);
   const typeTheme = themesList.find(t => t.type === activeItem?.type);
@@ -306,6 +485,62 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     }
   }
 
+  const [localBackgroundUrl, setLocalBackgroundUrl] = useState<string>('');
+  const [localAudioSrc, setLocalAudioSrc] = useState<string>('');
+  const [managedVideoSrc, setManagedVideoSrc] = useState<string | null>(null);
+
+  const mediaControllerRef = useRef<MediaStreamController | null>(null);
+  if (!mediaControllerRef.current) {
+    mediaControllerRef.current = new MediaStreamController();
+  }
+  const mediaController = mediaControllerRef.current;
+
+  useEffect(() => {
+    return () => {
+      mediaController.dispose();
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let createdBgUrl: string | null = null;
+    let createdAudioUrl: string | null = null;
+    
+    const resolveUrl = async (url: string, contentId?: string): Promise<{ resolved: string, created: boolean }> => {
+      if (!url || !url.startsWith('blob:') || !contentId) return { resolved: url, created: false };
+      try {
+        const { getDB } = await import('../db');
+        const db = await getDB();
+        const asset = await db.get('assets', contentId);
+        if (asset?.blob) return { resolved: URL.createObjectURL(asset.blob), created: true };
+      } catch (e) {}
+      return { resolved: url, created: false };
+    };
+
+    resolveUrl(backgroundUrl, activeItem?.contentId).then(res => {
+      if (isMounted) {
+        setLocalBackgroundUrl(res.resolved);
+        if (res.created) createdBgUrl = res.resolved;
+      } else if (res.created) {
+        URL.revokeObjectURL(res.resolved);
+      }
+    });
+    resolveUrl(audioSrc, activeItem?.contentId).then(res => {
+      if (isMounted) {
+        setLocalAudioSrc(res.resolved);
+        if (res.created) createdAudioUrl = res.resolved;
+      } else if (res.created) {
+        URL.revokeObjectURL(res.resolved);
+      }
+    });
+
+    return () => { 
+      isMounted = false; 
+      if (createdBgUrl) URL.revokeObjectURL(createdBgUrl);
+      if (createdAudioUrl) URL.revokeObjectURL(createdAudioUrl);
+    };
+  }, [backgroundUrl, audioSrc, activeItem?.contentId]);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -371,7 +606,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     presentationState.isVideoMuted,
     presentationState.isVideoLooping,
     presentationState.videoVolume,
-    audioSrc
+    localAudioSrc
   ]);
 
   useEffect(() => {
@@ -390,59 +625,59 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
   return (
     <div 
-      data-canvas-preview="true"
-      className="w-screen h-screen overflow-hidden relative bg-black select-none projector-canvas"
+      className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none"
       style={{
         fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
-        background: isGradient ? gradientVal : (resolvedStyles.backgroundColor || '#000000'),
       }}
     >
-      {/* Background Media Layer */}
-      <div className="absolute inset-0 z-0">
-        {isVideo && (managedVideoSrc || videoSrc) ? (
-          <video
-            ref={videoRef}
-            key={managedVideoSrc || videoSrc}
-            src={managedVideoSrc || videoSrc}
-            autoPlay
-            loop={presentationState.isVideoLooping ?? true}
-            muted={presentationState.isVideoMuted ?? false}
-            playsInline
-            className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
-            style={{ 
-              filter: contentType === 'video'
-                ? 'none'
-                : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
-            }}
-          />
-        ) : backgroundUrl ? (
-          <div
-            className="w-full h-full bg-cover bg-center transition-all duration-300"
-            style={{ 
-              backgroundImage: `url(${backgroundUrl})`,
-              filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
-            }}
-          />
-        ) : isGradient ? (
-          <div className="w-full h-full" style={{ background: gradientVal }} />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-black" />
-        )}
+      {/* Background Media Layer (Only rendered if isBaseLayer is TRUE to allow transparent layering) */}
+      {isBaseLayer && (
+        <div className="absolute inset-0 z-0 pointer-events-auto">
+          {isVideo && (managedVideoSrc || videoSrc) ? (
+            <video
+              ref={videoRef}
+              key={managedVideoSrc || videoSrc}
+              src={managedVideoSrc || videoSrc}
+              autoPlay
+              loop={presentationState.isVideoLooping ?? true}
+              muted={presentationState.isVideoMuted ?? false}
+              playsInline
+              className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
+              style={{ 
+                filter: contentType === 'video'
+                  ? 'none'
+                  : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
+              }}
+            />
+          ) : localBackgroundUrl ? (
+            <div
+              className="w-full h-full bg-cover bg-center transition-all duration-300"
+              style={{ 
+                backgroundImage: `url(${localBackgroundUrl})`,
+                filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
+              }}
+            />
+          ) : isGradient ? (
+            <div className="w-full h-full" style={{ background: gradientVal }} />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-[#0e121a] via-[#151a26] to-[#0b0d12]" />
+          )}
 
-        {/* Dimmer / Tint Overlay */}
-        {contentType !== 'video' && (
-          <div 
-            className="absolute inset-0"
-            style={{
-              backgroundColor: (isLogoMode ? logoStyles.backgroundOverlayColor : resolvedStyles.backgroundOverlayColor) || '#000000',
-              opacity: (isLogoMode ? logoStyles.backgroundOverlayOpacity : resolvedStyles.backgroundOverlayOpacity) ?? 0.35
-            }}
-          />
-        )}
-      </div>
+          {/* Dimmer / Tint Overlay */}
+          {contentType !== 'video' && (
+            <div 
+              className="absolute inset-0"
+              style={{
+                backgroundColor: (isLogoMode ? logoStyles.backgroundOverlayColor : resolvedStyles.backgroundOverlayColor) || '#000000',
+                opacity: (isLogoMode ? logoStyles.backgroundOverlayOpacity : resolvedStyles.backgroundOverlayOpacity) ?? 0.35
+              }}
+            />
+          )}
+        </div>
+      )}
 
       {/* Top Corner Labels (Song Section Corner Badge or Scripture Reference) */}
-      {currentSlide?.title && !presentationState.showLogo && (
+      {currentSlide && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && (
         <>
           {/* Scripture Top Corner */}
           {showReference && (
@@ -491,11 +726,11 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       )}
 
       {/* Foreground Crisp Image Layer */}
-      {contentType === 'image' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && backgroundUrl && (
+      {contentType === 'image' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && localBackgroundUrl && (
         <div className="absolute inset-0 z-10 flex items-center justify-center p-0 animate-fade-in">
           <img 
             className="w-full h-full object-contain" 
-            src={backgroundUrl} 
+            src={localBackgroundUrl} 
             alt={activeItem?.name || 'Image'}
             referrerPolicy="no-referrer"
           />
@@ -504,17 +739,16 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
       {/* Foreground Audio Presentation Layer */}
       {contentType === 'audio' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 select-none">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8">
           <audio
             ref={audioRef}
-            key={audioSrc}
-            src={audioSrc}
+            key={localAudioSrc}
+            src={localAudioSrc}
             autoPlay
             loop={presentationState.isVideoLooping ?? true}
             muted={presentationState.isVideoMuted ?? false}
           />
           <div className="p-8 rounded-2xl bg-[#0e111a]/95 backdrop-blur-md border border-cyan-500/20 flex flex-col items-center w-full max-w-xl shadow-2xl relative overflow-hidden">
-            {/* Decorative pulsing animated radar rings */}
             {presentationState.isVideoPlaying !== false && (
               <div className="absolute -inset-10 flex items-center justify-center pointer-events-none opacity-20">
                 <div className="w-[300px] h-[300px] rounded-full border border-cyan-500 animate-ping absolute" style={{ animationDuration: '3s' }} />
@@ -522,25 +756,18 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
               </div>
             )}
             
-            {/* Music vinyl disk icon or stylized audio waveform */}
             <div className="relative w-32 h-32 flex items-center justify-center mb-6">
-              {/* Glowing ambient ring */}
               <div className={`absolute inset-0 rounded-full bg-cyan-500/10 blur-xl transition-all duration-1000 ${presentationState.isVideoPlaying !== false ? 'scale-125 opacity-100' : 'scale-90 opacity-50'}`} />
-              
-              {/* Spinning/pulsing vinyl record or music visualizer */}
               <div className={`w-28 h-28 rounded-full bg-gradient-to-tr from-[#161b26] to-[#0f131c] border-4 border-[#252f44] shadow-2xl flex items-center justify-center relative ${presentationState.isVideoPlaying !== false ? 'animate-spin' : ''}`} style={{ animationDuration: '8s' }}>
-                {/* Record grooves */}
                 <div className="absolute inset-2 rounded-full border border-dashed border-gray-700/40" />
                 <div className="absolute inset-4 rounded-full border border-[#1b2333]" />
                 <div className="absolute inset-6 rounded-full border border-dashed border-gray-700/20" />
                 <div className="absolute inset-8 rounded-full border border-[#1b2333]" />
-                {/* Record label */}
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-600 to-cyan-400 border border-cyan-300/30 flex items-center justify-center shadow-inner z-10">
                   <div className="w-3 h-3 rounded-full bg-[#0a0b0e]" />
                 </div>
               </div>
 
-              {/* Pulsing visualizer bars overlapping the disc */}
               <div className="absolute -bottom-2 flex items-end justify-center gap-1.5 h-10 px-4 bg-black/60 backdrop-blur-md border border-[#232d3f] rounded-full z-20">
                 {[1, 2, 3, 4, 5, 6].map((i) => {
                   const delays = ['0s', '0.2s', '0.4s', '0.1s', '0.3s', '0.5s'];
@@ -573,7 +800,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
               <span>{presentationState.isVideoPlaying !== false ? 'STREAMING ACTIVE' : 'STREAM MUTED'}</span>
             </p>
 
-            {/* Progress Indicators */}
             <div className="mt-5 w-full flex items-center justify-between gap-3 text-[11px] font-mono text-cyan-400/80 bg-black/30 px-4 py-2 rounded-lg border border-white/5 shadow-inner">
               <div className="flex items-center gap-1.5">
                 <span>PROGRESS:</span>
@@ -591,43 +817,34 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
       {/* Slide Content Layer */}
       <AnimatePresence>
-        {/* Presentation (PowerPoint / Deck) Slide Layer */}
+        {/* Presentation Slide Layer */}
         {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && (
           <motion.div 
-            key={isValidPptxBinary(activeItem?.data?.fileBytes) ? `pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}` : `pptx-${currentSlide.id || presentationState.activeSlideIndex}`}
+            key={`pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}`}
             initial={motionConfig.initial}
             animate={motionConfig.animate}
             exit={motionConfig.exit}
             transition={motionConfig.transition}
             className="absolute inset-0 z-10 w-full h-full overflow-hidden"
           >
-            {isValidPptxBinary(activeItem?.data?.fileBytes) ? (
-              <PptxRenderOverlay
-                fileBytes={activeItem?.data?.fileBytes}
-                activeSlideIndex={presentationState.activeSlideIndex || 0}
-                fallbackContent={
-                  <PresentationSlideView 
-                    slide={currentSlide}
-                    slideIndex={presentationState.activeSlideIndex || 0}
-                    totalSlides={slides.length}
-                    mode="full"
-                    themeStyles={resolvedStyles}
-                  />
-                }
-              />
-            ) : (
-              <PresentationSlideView 
-                slide={currentSlide}
-                slideIndex={presentationState.activeSlideIndex || 0}
-                totalSlides={slides.length}
-                mode="full"
-                themeStyles={resolvedStyles}
-              />
-            )}
+            <PptxRenderOverlay
+              fileBytes={activeItem?.data?.fileBytes}
+              contentId={activeItem?.contentId}
+              activeSlideIndex={presentationState.activeSlideIndex || 0}
+              fallbackContent={
+                <PresentationSlideView 
+                  slide={currentSlide}
+                  slideIndex={presentationState.activeSlideIndex || 0}
+                  totalSlides={slides.length}
+                  mode="full"
+                  themeStyles={resolvedStyles}
+                />
+              }
+            />
           </motion.div>
         )}
 
-        {/* Worship Text Slide Content Layer (Song, Bible, Announcement) */}
+        {/* Worship Text Slide Content Layer */}
         {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && (
           <motion.div 
             key={currentSlide.id || presentationState.activeSlideIndex}
@@ -642,7 +859,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
               className={ThemeEngine.getCardStyle(resolvedStyles).className}
               style={ThemeEngine.getCardStyle(resolvedStyles).style}
             >
-              {/* Verse / Chorus Label or Scripture Reference Header (Before Each Slide) */}
               {currentSlide.title && (
                 (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
                 (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')
@@ -733,7 +949,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
                 );
               })()}
 
-              {/* Footer: Scripture Reference (After Each Slide) */}
+              {/* Footer: Scripture Reference */}
               {activeItem?.type === 'bible' && showReference && refLocation === 'After Each Slide' && currentSlide.title && (
                 <div 
                   className="mt-6 pt-2 font-bold max-w-full opacity-90"
@@ -752,8 +968,8 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         )}
       </AnimatePresence>
 
-      {/* Bottom Corner Labels (Song Section Corner Badge or Scripture Reference) */}
-      {currentSlide?.title && (
+      {/* Bottom Corner Labels */}
+      {currentSlide && !presentationState.showLogo && !presentationState.isClear && !presentationState.isBlack && (
         <>
           {/* Scripture Bottom Corner */}
           {showReference && (
@@ -801,8 +1017,8 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         </>
       )}
 
-      {/* Copyright Notice Overlay (Positioned according to copyrightPosition) */}
-      {showCopyright && !presentationState.showLogo && (
+      {/* Copyright Notice Overlay */}
+      {showCopyright && !presentationState.showLogo && !presentationState.isClear && !presentationState.isBlack && (
         <div 
           className={`absolute z-20 px-3 py-1 bg-black/40 backdrop-blur-sm rounded border border-white/5 max-w-xl ${
             copyrightPos === 'Bottom Right' ? 'bottom-6 right-8 text-right' :
@@ -820,7 +1036,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       {/* Master Logo Splash Mode or Theme Watermark */}
       {!presentationState.isBlack && (
         presentationState.showLogo ? (
-          (logoStyles.logoUrl && logoStyles.logoUrl !== backgroundUrl) ? (
+          (logoStyles.logoUrl && logoStyles.logoUrl !== localBackgroundUrl) ? (
             <div className="absolute inset-0 z-30 flex items-center justify-center p-12 pointer-events-none">
               <img
                 src={logoStyles.logoUrl}
@@ -850,34 +1066,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         ) : null
       )}
 
-      {/* Slide Annotation Layer (Semi-transparent vector overlay that persists across slide transitions) */}
-      {!presentationState.isBlack && (
-        <SlideAnnotationLayer 
-          interactive={false} 
-          className="z-35"
-        />
-      )}
-
-      {/* Marquee Alert Banner Overlay */}
-      {alert.active && !presentationState.isBlack && (
-        <div 
-          className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
-          style={{
-            bottom: alert.position === 'bottom' ? 0 : 'auto',
-            top: alert.position === 'top' ? 0 : 'auto',
-            backgroundColor: alert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
-            color: alert.textColor || '#FACC15',
-          }}
-        >
-          <div className="text-lg md:text-xl font-bold whitespace-nowrap animate-marquee flex items-center gap-3">
-            <span className="px-2.5 py-0.5 rounded bg-amber-500 text-black text-sm font-black uppercase tracking-wider">
-              ALERT
-            </span>
-            <span>{alert.message}</span>
-          </div>
-        </div>
-      )}
-
       {/* Camera Live Renderer */}
       {activeItem?.type === 'camera' && activeItem.data?.deviceId && (
         <div 
@@ -895,50 +1083,17 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         </div>
       )}
 
-      {/* Nursery Alert Badge Overlay */}
-      {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !presentationState.isBlack && (
-        <div 
-          className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
-            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
-            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Left' ? 'bottom-6 left-6' :
-            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Right' ? 'bottom-6 right-6' : 'top-6 right-6'
-          }`}
-          style={{
-            backgroundColor: systemOptions?.mainOutput?.alerts?.nursery?.backgroundColor || '#FF0000',
-            color: systemOptions?.mainOutput?.alerts?.nursery?.font?.color || '#FFFFFF',
-            fontSize: `${Math.min(32, systemOptions?.mainOutput?.alerts?.nursery?.font?.maxSize || 32)}px`,
-            fontFamily: systemOptions?.mainOutput?.alerts?.nursery?.font?.family || 'Tahoma, sans-serif'
-          }}
-        >
-          <span className="text-xs uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded text-white font-mono">NURSERY</span>
-          <span>{alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
-        </div>
-      )}
-
-      {/* Black Screen Layer */}
+      {/* Standby State (Only rendered for base layer if all layers are standby) */}
       <AnimatePresence>
-        {(presentationState.isBlack || !presentationState.isLiveEnabled) && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: fadeDuration, ease: fadeEasing }}
-            className="absolute inset-0 z-50 bg-black"
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Standby State (When no content or slide is currently live and not in logo/black/clear mode) */}
-      <AnimatePresence>
-        {!currentSlide && !presentationState.isBlack && !presentationState.isClear && !presentationState.showLogo && (
+        {isBaseLayer && allLayersStandby && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center select-none bg-black/80 backdrop-blur-sm"
+            className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center select-none bg-black/80 backdrop-blur-sm pointer-events-auto"
           >
-            <div className="p-8 rounded-2xl bg-black/70 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
+            <div className="p-8 rounded-2xl bg-[#0b0e14]/90 backdrop-blur-md border border-white/10 flex flex-col items-center max-w-lg shadow-2xl">
               <SimpleWorshipLogo size={56} showText={true} subtitle={group?.name || "Live Display Screen"} />
               <div className="mt-5 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-sm font-bold tracking-wider">
                 <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
@@ -950,7 +1105,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
               <div className="mt-3 flex items-center gap-2 text-[11px] font-mono text-gray-500 bg-black/40 px-3 py-1 rounded border border-white/5">
                 <span>Target: {group?.displayIds?.join(', ') || 'Monitor Output'}</span>
                 <span>•</span>
-                <span>{group?.name || activeGroupId}</span>
+                <span>{group?.name || groupId}</span>
               </div>
             </div>
           </motion.div>

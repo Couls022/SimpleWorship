@@ -737,6 +737,7 @@ declare global {
       }>;
       onProjectorRouteChanged?: (callback: (data: { displayId: string; groupId: string }) => void) => () => void;
       onProjectorError?: (callback: (data: { displayId: string; error: string; code?: string }) => void) => () => void;
+      identifyDisplays?: () => Promise<{ success: boolean }>;
       saveSwsFile?: (defaultName: string, data: Uint8Array | number[]) => Promise<{ canceled: boolean; filePath?: string }>;
       openSwsFile?: () => Promise<{ canceled: boolean; filePath?: string; data?: ArrayBuffer | Uint8Array }>;
       readSwsFromPath?: (filePath: string) => Promise<{ canceled: boolean; filePath?: string; data?: ArrayBuffer | Uint8Array; error?: string }>;

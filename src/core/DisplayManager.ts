@@ -429,7 +429,7 @@ export class DisplayManager {
           displayName,
           groupIds,
           groupNames,
-          message: `Display conflict: ${groupNames.join(' and ')} are both targeting "${displayName}". A physical monitor cannot project two fullscreen outputs simultaneously.`,
+          message: `Multi-Route Overlay: ${groupNames.join(' and ')} are both targeting "${displayName}". Content will layer and stack transparently on top of each other for multi-panel projection.`,
         });
       }
     }

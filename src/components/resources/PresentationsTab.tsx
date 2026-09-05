@@ -53,12 +53,17 @@ export default function PresentationsTab() {
       const hasStaleBlobUrls = pres.data?.slides?.some(s => JSON.stringify(s).includes('blob:'));
       const needsStyleUpgrade = !pres.data?.slides?.[0]?.backgroundColor || pres.data?.slides?.[0]?.backgroundColor === '#181b24';
       
-      if (pres.data?.fileBytes && (hasStaleBlobUrls || needsStyleUpgrade)) {
+      if ((hasStaleBlobUrls || needsStyleUpgrade)) {
         try {
-          const blob = new Blob([pres.data.fileBytes]);
-          const newSlides = await parsePptxOffline(blob);
-          if (newSlides && newSlides.length > 0) {
-            await savePresentation(pres.name, newSlides, blob, pres.id, pres.data?.fileBytes);
+          const { getDB } = await import('../../db');
+          const db = await getDB();
+          const fullAsset = await db.get('assets', pres.id);
+          if (fullAsset?.data?.fileBytes) {
+            const blob = new Blob([fullAsset.data.fileBytes]);
+            const newSlides = await parsePptxOffline(blob);
+            if (newSlides && newSlides.length > 0) {
+              await savePresentation(pres.name, newSlides, blob, pres.id, fullAsset.data.fileBytes);
+            }
           }
         } catch (e) {
           console.warn('[PresentationsTab] Upgrade presentation parse error:', e);

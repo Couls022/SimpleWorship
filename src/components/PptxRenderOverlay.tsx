@@ -2,11 +2,12 @@ import '../utils/initPptxViewer';
 import React, { useEffect, useRef, useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import { SlideCanvas, useViewerBuildingBlocks, PowerPointViewerHandle } from 'pptx-react-viewer';
 import 'pptx-react-viewer/styles';
-import { toValidPptxUint8Array } from '../utils/pptxValidator';
+import { toValidPptxUint8Array, isValidPptxBinary } from '../utils/pptxValidator';
 import { useOffscreenPptxCache } from '../utils/initPptxViewer';
 
 interface PptxRenderOverlayProps {
-  fileBytes: Uint8Array | ArrayBuffer | any;
+  fileBytes?: Uint8Array | ArrayBuffer | any;
+  contentId?: string;
   activeSlideIndex: number;
   fallbackContent?: ReactNode;
 }
@@ -207,16 +208,32 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
   );
 };
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = ({ fileBytes, activeSlideIndex, fallbackContent }) => {
-  const validBytes = useMemo(() => toValidPptxUint8Array(fileBytes), [fileBytes]);
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = ({ fileBytes, contentId, activeSlideIndex, fallbackContent }) => {
+  const [localBytes, setLocalBytes] = useState<Uint8Array | null>(null);
 
-  if (!validBytes) {
+  useEffect(() => {
+    let isMounted = true;
+    if (fileBytes && isValidPptxBinary(fileBytes)) {
+      setLocalBytes(toValidPptxUint8Array(fileBytes));
+    } else if (contentId) {
+      import('../db').then(({ getDB }) => {
+        getDB().then(db => db.get('assets', contentId)).then(asset => {
+          if (isMounted && asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
+            setLocalBytes(toValidPptxUint8Array(asset.data.fileBytes));
+          }
+        }).catch(e => console.error('[PptxRenderOverlay] Error loading PPTX from DB', e));
+      });
+    }
+    return () => { isMounted = false; };
+  }, [fileBytes, contentId]);
+
+  if (!localBytes) {
     return fallbackContent ? <>{fallbackContent}</> : null;
   }
 
   return (
     <PptxErrorBoundary fallback={fallbackContent}>
-      <PptxViewerInner bytes={validBytes} activeSlideIndex={activeSlideIndex} fallbackContent={fallbackContent} />
+      <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} fallbackContent={fallbackContent} />
     </PptxErrorBoundary>
   );
 };

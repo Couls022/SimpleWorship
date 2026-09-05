@@ -113,7 +113,7 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
                 </span>
 
                 {/* Clean Target Text Label (No Dropdown Arrow) */}
-                <span className={`truncate max-w-[180px] tracking-wide text-[11px] font-bold ${
+                <span className={`truncate max-w-[90px] sm:max-w-[180px] tracking-wide text-[11px] font-bold ${
                   isTargeted ? 'text-cyan-100 font-bold' : 'text-gray-300'
                 }`}>
                   Target: {targetGroup?.name || 'Output Group'}
@@ -163,7 +163,7 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
             title="Create a new Router Panel"
           >
             <Plus size={12} />
-            <span className="hidden sm:inline">Add Panel</span>
+            <span className="hidden md:inline">Add Panel</span>
           </button>
         </div>
       </div>

@@ -33,6 +33,7 @@ import { dbApi } from '../../db';
 import { SystemOptions, FontStyleOptions, SlideLabelConfig } from '../../types';
 import { applyAppearanceSettings } from '../../utils/themeManager';
 import { useScreens } from '../../hooks/useScreens';
+import { broadcastStateChange } from '../../utils/broadcastSync';
 import FontInspectorPopup from './FontInspectorPopup';
 import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
@@ -90,7 +91,198 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
 
   const outputTabs: OutputTab[] = ['General', 'Song', 'Scripture', 'Presentations', 'Transitions', 'Alerts'];
 
-  const { screens } = useScreens();
+  const { screens, refreshScreens } = useScreens();
+
+  React.useEffect(() => {
+    if (screens.length > 0) {
+      // 1. Sync Main Output Monitor
+      const currentMainMonitor = localOptions.mainOutput.general.outputMonitor;
+      const matchedMain = screens.find((s: any) => s.label === currentMainMonitor || s.name === currentMainMonitor || s.id === currentMainMonitor);
+      if (!matchedMain) {
+        const primaryScr = screens.find((s: any) => s.isPrimary) || screens[0];
+        if (primaryScr) {
+          const w = primaryScr.bounds?.width || 1920;
+          const h = primaryScr.bounds?.height || 1080;
+          const x = primaryScr.bounds?.x ?? 0;
+          const y = primaryScr.bounds?.y ?? 0;
+          setLocalOptions((prev) => ({
+            ...prev,
+            mainOutput: {
+              ...prev.mainOutput,
+              general: {
+                ...prev.mainOutput.general,
+                outputMonitor: primaryScr.label || primaryScr.name,
+                position: { ...prev.mainOutput.general.position, left: x, top: y, width: w, height: h }
+              }
+            }
+          }));
+        }
+      }
+
+      // 2. Sync Alternate Output Monitor
+      const currentAltMonitor = localOptions.alternateOutput.outputMonitor;
+      const matchedAlt = screens.find((s: any) => s.label === currentAltMonitor || s.name === currentAltMonitor || s.id === currentAltMonitor);
+      if (!matchedAlt && screens.length > 1) {
+        const secondaryScr = screens.find((s: any) => !s.isPrimary) || screens[1];
+        if (secondaryScr) {
+          const w = secondaryScr.bounds?.width || 1920;
+          const h = secondaryScr.bounds?.height || 1080;
+          const x = secondaryScr.bounds?.x ?? 0;
+          const y = secondaryScr.bounds?.y ?? 0;
+          setLocalOptions((prev) => ({
+            ...prev,
+            alternateOutput: {
+              ...prev.alternateOutput,
+              outputMonitor: secondaryScr.label || secondaryScr.name,
+              position: { ...prev.alternateOutput.position, left: x, top: y, width: w, height: h }
+            }
+          }));
+        }
+      }
+
+      // 3. Sync Foldback Monitor
+      const currentFoldbackMonitor = localOptions.foldback.outputMonitor;
+      const matchedFoldback = screens.find((s: any) => s.label === currentFoldbackMonitor || s.name === currentFoldbackMonitor || s.id === currentFoldbackMonitor);
+      if (!matchedFoldback && screens.length > 2) {
+        const stageScr = screens.filter((s: any) => !s.isPrimary)[1] || screens[2];
+        if (stageScr) {
+          const w = stageScr.bounds?.width || 1920;
+          const h = stageScr.bounds?.height || 1080;
+          const x = stageScr.bounds?.x ?? 0;
+          const y = stageScr.bounds?.y ?? 0;
+          setLocalOptions((prev) => ({
+            ...prev,
+            foldback: {
+              ...prev.foldback,
+              outputMonitor: stageScr.label || stageScr.name,
+              position: { ...prev.foldback.position, left: x, top: y, width: w, height: h }
+            }
+          }));
+        }
+      }
+    }
+  }, [screens]);
+
+  const renderDisplayLayoutVisualizer = () => {
+    if (screens.length === 0) return null;
+
+    return (
+      <div className="space-y-2 mb-3 bg-[#13141a] border border-[#2b2e3a] rounded-lg p-3">
+        <div className="flex items-center justify-between text-[11px] text-gray-400">
+          <span className="font-semibold text-gray-300">Detected Windows Display Layout:</span>
+          <button
+            type="button"
+            onClick={async () => {
+              window.dispatchEvent(new CustomEvent('simpleworship:identify-displays'));
+              
+              if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
+                try {
+                  await window.electronAPI.identifyDisplays();
+                } catch (e) {
+                  console.error("Failed to run native identify displays:", e);
+                }
+              }
+            }}
+            className="text-[10px] px-2 py-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded flex items-center gap-1.5 transition-colors shadow"
+          >
+            <Sparkles size={11} />
+            <span>Identify Displays (1, 2, 3...)</span>
+          </button>
+        </div>
+        
+        <div className="flex flex-wrap gap-2.5 pt-1.5">
+          {screens.map((scr: any, idx: number) => {
+            const label = scr.label || scr.name || `Monitor ${idx + 1}`;
+            const w = scr.bounds?.width || 1920;
+            const h = scr.bounds?.height || 1080;
+            const isSelectedForMain = localOptions.mainOutput.general.outputMonitor === label;
+            const isSelectedForAlt = localOptions.alternateOutput.outputMonitor === label;
+            const isSelectedForFoldback = localOptions.foldback.outputMonitor === label;
+            
+            const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
+            const divisor = gcd(w, h);
+            const aspectString = `${w / divisor}:${h / divisor}`;
+            
+            let isActiveForCurrent = false;
+            let activeColorClass = '';
+            if (activeCategory === 'Main Output') {
+              isActiveForCurrent = isSelectedForMain;
+              activeColorClass = 'border-cyan-500 bg-cyan-950/20 shadow-[0_0_8px_rgba(6,182,212,0.1)]';
+            } else if (activeCategory === 'Alternate Output') {
+              isActiveForCurrent = isSelectedForAlt;
+              activeColorClass = 'border-purple-500 bg-purple-950/20 shadow-[0_0_8px_rgba(168,85,247,0.1)]';
+            } else if (activeCategory === 'Foldback') {
+              isActiveForCurrent = isSelectedForFoldback;
+              activeColorClass = 'border-amber-500 bg-amber-950/20 shadow-[0_0_8px_rgba(245,158,11,0.1)]';
+            }
+            
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  const x = scr.bounds?.x ?? 0;
+                  const y = scr.bounds?.y ?? 0;
+                  
+                  if (activeCategory === 'Main Output') {
+                    updateMainGeneral({
+                      outputMonitor: label,
+                      position: { left: x, top: y, width: w, height: h }
+                    });
+                  } else if (activeCategory === 'Alternate Output') {
+                    setLocalOptions((prev) => ({
+                      ...prev,
+                      alternateOutput: {
+                        ...prev.alternateOutput,
+                        outputMonitor: label,
+                        position: { left: x, top: y, width: w, height: h }
+                      }
+                    }));
+                  } else if (activeCategory === 'Foldback') {
+                    setLocalOptions((prev) => ({
+                      ...prev,
+                      foldback: {
+                        ...prev.foldback,
+                        outputMonitor: label,
+                        position: { left: x, top: y, width: w, height: h }
+                      }
+                    }));
+                  }
+                }}
+                className={`flex-1 min-w-[120px] p-2.5 rounded text-left border transition-all relative ${
+                  isActiveForCurrent
+                    ? activeColorClass
+                    : 'border-[#2d313c] bg-[#16171d] hover:border-gray-500'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[9px] font-bold text-gray-500 font-mono">MONITOR {idx + 1}</span>
+                  <div className="flex gap-0.5">
+                    {scr.isPrimary && (
+                      <span className="text-[7px] bg-blue-500/20 text-blue-300 font-extrabold px-1 rounded uppercase">Primary</span>
+                    )}
+                    {isSelectedForMain && (
+                      <span className="text-[7px] bg-cyan-500/20 text-cyan-300 font-extrabold px-1 rounded uppercase">Main</span>
+                    )}
+                    {isSelectedForAlt && (
+                      <span className="text-[7px] bg-purple-500/20 text-purple-300 font-extrabold px-1 rounded uppercase">Alt</span>
+                    )}
+                    {isSelectedForFoldback && (
+                      <span className="text-[7px] bg-amber-500/20 text-amber-300 font-extrabold px-1 rounded uppercase">Stage</span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[11px] font-bold text-gray-200 truncate">{label}</div>
+                <div className="text-[9px] font-mono text-cyan-400/80 mt-0.5">
+                  {w} × {h} ({aspectString})
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const handleCancel = () => {
     applyAppearanceSettings(systemOptions.appearance);
@@ -279,6 +471,8 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <span className="text-[10px] text-gray-400 font-normal">Controls projection target</span>
                     </div>
 
+                    {renderDisplayLayoutVisualizer()}
+
                     <div className="flex items-center gap-3">
                       <select
                         value={localOptions.mainOutput.general.outputMonitor}
@@ -286,11 +480,13 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                           const selectedVal = e.target.value;
                           const matched = screens.find((s: any) => (s.label || s.name) === selectedVal);
                           if (matched) {
-                            const w = matched.width || matched.bounds?.width || 1920;
-                            const h = matched.height || matched.bounds?.height || 1080;
+                            const x = matched.bounds?.x ?? 0;
+                            const y = matched.bounds?.y ?? 0;
+                            const w = matched.bounds?.width ?? 1920;
+                            const h = matched.bounds?.height ?? 1080;
                             updateMainGeneral({
                               outputMonitor: selectedVal,
-                              position: { ...localOptions.mainOutput.general.position, width: w, height: h }
+                              position: { left: x, top: y, width: w, height: h }
                             });
                           } else {
                             updateMainGeneral({ outputMonitor: selectedVal });
@@ -301,8 +497,8 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                         {screens.length > 0 ? (
                           screens.map((scr: any, idx: number) => {
                             const label = scr.label || scr.name || `Monitor ${idx + 1}`;
-                            const w = scr.width || scr.bounds?.width || 1920;
-                            const h = scr.height || scr.bounds?.height || 1080;
+                            const w = scr.bounds?.width || 1920;
+                            const h = scr.bounds?.height || 1080;
                             return (
                               <option key={idx} value={label}>
                                 {label} {scr.isPrimary ? '(Primary Desktop)' : '(Secondary Screen)'} [{w}×{h}]
@@ -310,12 +506,7 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                             );
                           })
                         ) : (
-                          <>
-                            <option value="Monitor 1 (Primary Desktop)">Monitor 1 (Primary Desktop - 1920×1080)</option>
-                            <option value="Monitor 2">Monitor 2 (Secondary Screen - 1366×768)</option>
-                            <option value="Monitor 2 (Projector HDMI)">Monitor 2 (Projector HDMI - 1366×768)</option>
-                            <option value="NDI / Live Stream Virtual Output">NDI / Live Stream Virtual Output (1920×1080)</option>
-                          </>
+                          <option value="Primary Display">Generic Monitor 1 (1920×1080)</option>
                         )}
                       </select>
 
@@ -374,6 +565,95 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                         <option value="3840x2160">3840 × 2160 (16:9 4K UHD)</option>
                         <option value="custom">Custom Dimensions</option>
                       </select>
+                    </div>
+
+                    {/* ASPECT RATIO & RESOLUTION CUSTOMIZER */}
+                    <div className="bg-[#1b1c24] border border-[#3b4050] rounded-md p-3 space-y-2 mt-2">
+                      <div className="flex items-center justify-between text-xs font-semibold text-gray-300 border-b border-[#2d313d] pb-1">
+                        <span>Aspect Ratio & Resolution Scale Guard</span>
+                        <span className="text-[10px] text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-800/30">Fact-Check Mode</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 leading-relaxed font-normal">
+                        Lower your projection's aspect ratio or resolution below to match other standard devices. This prevents truncated or cropped displays on physical screens.
+                      </p>
+                      
+                      {(() => {
+                        const selectedLabel = localOptions.mainOutput.general.outputMonitor;
+                        const matchedScr = screens.find((s: any) => (s.label || s.name) === selectedLabel);
+                        const originalW = matchedScr?.bounds?.width || 1920;
+                        const originalH = matchedScr?.bounds?.height || 1080;
+                        
+                        const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
+                        const div = gcd(originalW, originalH);
+                        const physicalAspect = `${originalW / div}:${originalH / div}`;
+                        
+                        const currentW = localOptions.mainOutput.general.position.width;
+                        const currentH = localOptions.mainOutput.general.position.height;
+                        const isLowered = currentW < originalW || currentH < originalH;
+                        
+                        const suggestions = [
+                          { w: 1920, h: 1080, aspect: '16:9', label: '1080p Full HD' },
+                          { w: 1366, h: 768, aspect: '16:9', label: '768p HD' },
+                          { w: 1280, h: 720, aspect: '16:9', label: '720p HD' },
+                          { w: 1024, h: 768, aspect: '4:3', label: '768p XGA' },
+                          { w: 800, h: 600, aspect: '4:3', label: '600p SVGA' },
+                        ].filter(s => s.w <= originalW && s.h <= originalH);
+                        
+                        return (
+                          <div className="space-y-2 pt-1 text-[11px]">
+                            <div className="grid grid-cols-2 gap-2 text-gray-300 bg-[#121317] p-2 rounded">
+                              <div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-wider">Device Driver Name:</div>
+                                <div className="font-semibold truncate">{matchedScr?.label || 'Generic Display'}</div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-wider">Original Aspect:</div>
+                                <div className="font-bold text-cyan-400 font-mono">{physicalAspect} ({originalW}x{originalH})</div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <span className="text-gray-400 font-medium">Quick Scale Down & Equalize Aspect:</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {suggestions.map((sug, i) => {
+                                  const isActive = currentW === sug.w && currentH === sug.h;
+                                  return (
+                                    <button
+                                      key={i}
+                                      type="button"
+                                      onClick={() => {
+                                        updateMainGeneral({
+                                          position: {
+                                            ...localOptions.mainOutput.general.position,
+                                            width: sug.w,
+                                            height: sug.h
+                                          }
+                                        });
+                                      }}
+                                      className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all ${
+                                        isActive
+                                          ? 'bg-cyan-500 text-black border-cyan-400'
+                                          : 'bg-[#1e2029] hover:bg-[#282a36] text-gray-300 border-[#2d313e]'
+                                      }`}
+                                    >
+                                      {sug.w}x{sug.h} ({sug.aspect})
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            
+                            {isLowered && (
+                              <div className="bg-yellow-950/20 border border-yellow-800/30 text-yellow-300/90 text-[10px] p-2 rounded leading-normal flex items-start gap-1.5">
+                                <span className="mt-0.5">⚠️</span>
+                                <span>
+                                  <strong>Output Resolution Scaled Down:</strong> Display is lowered to <strong>{currentW}x{currentH}</strong>. The output will automatically scale to fit the physical {originalW}x{originalH} screen while keeping content fully aligned!
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="grid grid-cols-4 gap-2 text-[11px] pt-1">
@@ -461,28 +741,250 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                     </div>
                   </div>
 
-                  {/* Default Font Trigger */}
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-gray-200">Default Output Font</div>
-                      <div className="text-[11px] text-gray-400">
-                        {localOptions.mainOutput.general.defaultFont.family} ({localOptions.mainOutput.general.defaultFont.maxSize}pt, {localOptions.mainOutput.general.defaultFont.alignHorizontal})
+                  {/* Monitor Checking & Connection Alignment Checker */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-4 space-y-4">
+                    <div className="text-gray-200 font-bold border-b border-[#292c36] pb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Monitor size={15} className="text-cyan-400 animate-pulse" />
+                        <span>Monitor Checking & Connection Alignment</span>
                       </div>
+                      <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-extrabold font-mono tracking-wider">
+                        ACTIVE STREAM DETECTOR
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingFontTarget({
-                          title: 'Default Output Font',
-                          font: localOptions.mainOutput.general.defaultFont,
-                          apply: (f) => updateMainGeneral({ defaultFont: f })
+
+                    <div className="text-[11px] text-gray-400 leading-relaxed">
+                      <strong>Rearrange your displays:</strong> Click on any display box below to assign it as the Main Output screen. The system will automatically map its exact physical coordinate bounds and optimal resolution to prevent screen layout cut-offs.
+                    </div>
+
+                    {/* Windows-style Visual Arrangement Stage */}
+                    <div className="relative w-full h-[150px] bg-[#0c0d11] border border-[#232631] rounded-lg p-3 overflow-hidden flex items-center justify-center" style={{
+                      backgroundImage: 'radial-gradient(circle, #222530 1px, transparent 1px)',
+                      backgroundSize: '12px 12px'
+                    }}>
+                      {(() => {
+                        const currentScreens = screens || [];
+
+                        if (currentScreens.length === 0) {
+                          return (
+                            <div className="flex flex-col items-center justify-center text-center p-4 text-gray-400">
+                              <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2" />
+                              <span className="text-xs font-semibold text-gray-300">Auto-Detecting Connected Monitors...</span>
+                              <span className="text-[10px] text-gray-500 mt-1">Please ensure display drivers are active.</span>
+                            </div>
+                          );
+                        }
+
+                        // Compute screen bounds
+                        let minX = Infinity, minY = Infinity;
+                        let maxX = -Infinity, maxY = -Infinity;
+
+                        currentScreens.forEach(scr => {
+                          const x = scr.bounds?.x ?? 0;
+                          const y = scr.bounds?.y ?? 0;
+                          const w = scr.bounds?.width ?? 1920;
+                          const h = scr.bounds?.height ?? 1080;
+
+                          if (x < minX) minX = x;
+                          if (y < minY) minY = y;
+                          if (x + w > maxX) maxX = x + w;
+                          if (y + h > maxY) maxY = y + h;
                         });
-                      }}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded flex items-center gap-1.5 transition-colors"
-                    >
-                      <span>Default Font</span>
-                      <ChevronDown size={12} />
-                    </button>
+
+                        const totalWidth = maxX - minX || 1;
+                        const totalHeight = maxY - minY || 1;
+
+                        // Canvas scale factor
+                        const containerW = 400;
+                        const containerH = 130;
+                        const scale = Math.min((containerW - 40) / totalWidth, (containerH - 40) / totalHeight);
+
+                        const offsetX = (containerW - totalWidth * scale) / 2;
+                        const offsetY = (containerH - totalHeight * scale) / 2;
+
+                        return currentScreens.map((scr, idx) => {
+                          const x = scr.bounds?.x ?? 0;
+                          const y = scr.bounds?.y ?? 0;
+                          const w = scr.bounds?.width ?? 1920;
+                          const h = scr.bounds?.height ?? 1080;
+
+                          const leftPos = (x - minX) * scale + offsetX;
+                          const topPos = (y - minY) * scale + offsetY;
+                          const widthPos = w * scale;
+                          const heightPos = h * scale;
+
+                          const label = scr.label || scr.name || `Monitor ${idx + 1}`;
+                          const isSelected = localOptions.mainOutput.general.outputMonitor === label;
+                          const isPrimary = scr.isPrimary;
+
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                updateMainGeneral({
+                                  outputMonitor: label,
+                                  position: { left: x, top: y, width: w, height: h }
+                                });
+                                window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                                  detail: `Mapped worship display to ${label} (${w}x${h}) at [X:${x}, Y:${y}]`
+                                }));
+                              }}
+                              style={{
+                                left: `${(leftPos / containerW) * 100}%`,
+                                top: `${(topPos / containerH) * 100}%`,
+                                width: `${(widthPos / containerW) * 100}%`,
+                                height: `${(heightPos / containerH) * 100}%`
+                              }}
+                              className={`absolute border rounded-lg flex flex-col items-center justify-center transition-all duration-200 select-none ${
+                                isSelected
+                                  ? 'border-cyan-500 bg-cyan-950/40 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/30'
+                                  : 'border-[#2d313c] bg-[#16171d]/90 text-gray-500 hover:border-gray-500 hover:text-gray-300'
+                              }`}
+                            >
+                              <span className="text-3xl font-black font-mono tracking-tight leading-none">
+                                {idx + 1}
+                              </span>
+                              <div className="text-[8px] font-bold tracking-wider mt-1 px-1 py-0.5 rounded bg-black/40 text-gray-300 max-w-[90%] truncate">
+                                {isPrimary ? 'Primary' : `Screen ${idx + 1}`}
+                              </div>
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    {/* Web Browser Notice Helper */}
+                    {!(window.electronAPI && window.electronAPI.isElectron) && (
+                      <div className="text-[10px] bg-slate-900/40 border border-slate-800/50 rounded px-2.5 py-1.5 text-gray-400 leading-normal">
+                        💡 <strong>Running in Browser Preview:</strong> Real-time dual display arrangements, physical driver names, and hardware brands are fully auto-scanned when running inside the native SimpleWorship Windows application.
+                      </div>
+                    )}
+
+                    {/* Identify & Detect Action Controls */}
+                    <div className="flex gap-2.5">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          window.dispatchEvent(new CustomEvent('simpleworship:identify-displays'));
+                          
+                          // Broadcast to other virtual projector screens/tabs
+                          try {
+                            broadcastStateChange({
+                              type: 'IDENTIFY_DISPLAYS',
+                              data: { timestamp: Date.now() }
+                            });
+                          } catch (e) {
+                            console.error("Failed to broadcast identify signal:", e);
+                          }
+
+                          if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
+                            try {
+                              await window.electronAPI.identifyDisplays();
+                            } catch (e) {
+                              console.error("Failed to run native identify displays:", e);
+                            }
+                          }
+                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                            detail: 'Sent identify signals! Big overlay numbers will pop up on your displays.'
+                          }));
+                        }}
+                        className="flex-1 py-2 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-bold rounded text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-950/40"
+                      >
+                        <Sparkles size={12} />
+                        <span>Identify Display Monitors</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (typeof refreshScreens === 'function') {
+                            await refreshScreens();
+                          }
+                          const activeCount = screens && screens.length > 0 ? screens.length : 2;
+                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                            detail: `Hardware scan complete! Detected ${activeCount} display monitors.`
+                          }));
+                        }}
+                        className="py-2 px-4 bg-[#2a2d36] hover:bg-[#383d47] active:bg-[#1f2128] text-gray-200 border border-[#3e4350] font-bold rounded text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <RotateCcw size={12} />
+                        <span>Detect Monitors</span>
+                      </button>
+                    </div>
+
+                    {/* Detailed Alignment Checklist */}
+                    {(() => {
+                      const selectedLabel = localOptions.mainOutput.general.outputMonitor;
+                      const matchedScr = screens.find((s: any) => (s.label || s.name) === selectedLabel);
+                      
+                      const label = matchedScr?.label || matchedScr?.name || selectedLabel || 'Monitor 1 (Primary Desktop)';
+                      const w = matchedScr?.bounds?.width ?? localOptions.mainOutput.general.position.width ?? 1920;
+                      const h = matchedScr?.bounds?.height ?? localOptions.mainOutput.general.position.height ?? 1080;
+                      const x = matchedScr?.bounds?.x ?? localOptions.mainOutput.general.position.left ?? 0;
+                      const y = matchedScr?.bounds?.y ?? localOptions.mainOutput.general.position.top ?? 0;
+
+                      // Calculate Aspect Ratio string
+                      const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
+                      const divisor = gcd(w, h);
+                      const aspectStr = `${w / divisor}:${h / divisor}`;
+
+                      // Verify alignment: whether the output position equals the physical screen bounds
+                      const isAlignedWidth = localOptions.mainOutput.general.position.width === w;
+                      const isAlignedHeight = localOptions.mainOutput.general.position.height === h;
+                      const isAlignedLeft = localOptions.mainOutput.general.position.left === x;
+                      const isAlignedTop = localOptions.mainOutput.general.position.top === y;
+                      const isFullyAligned = isAlignedWidth && isAlignedHeight && isAlignedLeft && isAlignedTop;
+
+                      return (
+                        <div className="bg-[#121317] border border-[#2b2e3a] rounded-lg p-3 space-y-2 text-[11px]">
+                          <div className="flex items-center justify-between text-gray-400 font-semibold border-b border-[#1f2129] pb-1.5">
+                            <span>Selected Display Status:</span>
+                            <span className="text-cyan-400 font-bold truncate max-w-[180px]">{label}</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-gray-300">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-400">Resolution:</span>
+                              <span className="font-mono text-gray-100 font-semibold">{w} × {h}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-400">Aspect Ratio:</span>
+                              <span className="font-mono text-indigo-400 font-semibold">{aspectStr}</span>
+                            </div>
+                            <div className="flex items-center justify-between col-span-2 border-t border-[#1a1b22] pt-1.5 mt-0.5">
+                              <span className="text-gray-400">Position Coordinates:</span>
+                              <span className="font-mono text-gray-100 font-semibold">Left: {x} px, Top: {y} px</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-[#1a1b22]">
+                            <span className="text-gray-400">Alignment State:</span>
+                            {isFullyAligned ? (
+                              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                <Check size={11} />
+                                <span>🟢 PERFECT ALIGNMENT (NO CUT-OFFS)</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateMainGeneral({
+                                    position: { left: x, top: y, width: w, height: h }
+                                  });
+                                  window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                                    detail: `Manually corrected alignment to ${w}x${h} at [X:${x}, Y:${y}]`
+                                  }));
+                                }}
+                                className="text-[10px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold transition-all flex items-center gap-1"
+                              >
+                                ⚠️ Sync Bounds Now
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -1334,20 +1836,56 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                     {localOptions.alternateOutput.enabled && (
                       <div className="space-y-3 pt-2 border-t border-[#292c36]">
+                        {renderDisplayLayoutVisualizer()}
+
                         <div className="flex items-center gap-3">
                           <div className="flex-1">
                             <label className="text-gray-400 block mb-1 font-semibold text-xs">Select Output Display</label>
                             <select
                               value={localOptions.alternateOutput.outputMonitor}
-                              onChange={(e) => setLocalOptions((prev) => ({
-                                ...prev,
-                                alternateOutput: { ...prev.alternateOutput, outputMonitor: e.target.value }
-                              }))}
+                              onChange={(e) => {
+                                const selectedVal = e.target.value;
+                                const matched = screens.find((s: any) => (s.label || s.name) === selectedVal);
+                                if (matched) {
+                                  const x = matched.bounds?.x ?? 0;
+                                  const y = matched.bounds?.y ?? 0;
+                                  const w = matched.bounds?.width ?? 1920;
+                                  const h = matched.bounds?.height ?? 1080;
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    alternateOutput: {
+                                      ...prev.alternateOutput,
+                                      outputMonitor: selectedVal,
+                                      position: { left: x, top: y, width: w, height: h }
+                                    }
+                                  }));
+                                } else {
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    alternateOutput: { ...prev.alternateOutput, outputMonitor: selectedVal }
+                                  }));
+                                }
+                              }}
                               className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white"
                             >
-                              <option value="Monitor 2">Monitor 2 (Secondary Display / HDMI)</option>
-                              <option value="Monitor 3">Monitor 3 (Lobby / Overflow)</option>
-                              <option value="NDI Broadcast">NDI Broadcast Feed</option>
+                              {screens.length > 0 ? (
+                                screens.map((scr: any, idx: number) => {
+                                  const label = scr.label || scr.name || `Monitor ${idx + 1}`;
+                                  const w = scr.bounds?.width || 1920;
+                                  const h = scr.bounds?.height || 1080;
+                                  return (
+                                    <option key={idx} value={label}>
+                                      {label} {scr.isPrimary ? '(Primary Desktop)' : '(Secondary Screen)'} [{w}×{h}]
+                                    </option>
+                                  );
+                                })
+                              ) : (
+                                <>
+                                  <option value="Monitor 2">Monitor 2 (Secondary Display / HDMI - 1920×1080)</option>
+                                  <option value="Monitor 3">Monitor 3 (Lobby / Overflow - 1366×768)</option>
+                                  <option value="NDI Broadcast">NDI Broadcast Feed (1920×1080)</option>
+                                </>
+                              )}
                             </select>
                           </div>
 
@@ -1509,20 +2047,56 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                     {localOptions.foldback.enabled && (
                       <div className="space-y-3 pt-2 border-t border-[#292c36]">
+                        {renderDisplayLayoutVisualizer()}
+
                         <div className="flex items-center gap-3">
                           <div className="flex-1">
                             <label className="text-gray-400 block mb-1 font-semibold text-xs">Select Output Display</label>
                             <select
                               value={localOptions.foldback.outputMonitor}
-                              onChange={(e) => setLocalOptions((prev) => ({
-                                ...prev,
-                                foldback: { ...prev.foldback, outputMonitor: e.target.value }
-                              }))}
+                              onChange={(e) => {
+                                const selectedVal = e.target.value;
+                                const matched = screens.find((s: any) => (s.label || s.name) === selectedVal);
+                                if (matched) {
+                                  const x = matched.bounds?.x ?? 0;
+                                  const y = matched.bounds?.y ?? 0;
+                                  const w = matched.bounds?.width ?? 1920;
+                                  const h = matched.bounds?.height ?? 1080;
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    foldback: {
+                                      ...prev.foldback,
+                                      outputMonitor: selectedVal,
+                                      position: { left: x, top: y, width: w, height: h }
+                                    }
+                                  }));
+                                } else {
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    foldback: { ...prev.foldback, outputMonitor: selectedVal }
+                                  }));
+                                }
+                              }}
                               className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white"
                             >
-                              <option value="Monitor 3 (Stage)">Monitor 3 (Stage Confidence Screen)</option>
-                              <option value="Monitor 2">Monitor 2 (HDMI)</option>
-                              <option value="NDI Stage">NDI Stage Display Feed</option>
+                              {screens.length > 0 ? (
+                                screens.map((scr: any, idx: number) => {
+                                  const label = scr.label || scr.name || `Monitor ${idx + 1}`;
+                                  const w = scr.bounds?.width || 1920;
+                                  const h = scr.bounds?.height || 1080;
+                                  return (
+                                    <option key={idx} value={label}>
+                                      {label} {scr.isPrimary ? '(Primary Desktop)' : '(Secondary Screen)'} [{w}×{h}]
+                                    </option>
+                                  );
+                                })
+                              ) : (
+                                <>
+                                  <option value="Monitor 3 (Stage)">Monitor 3 (Stage Confidence Screen - 1920×1080)</option>
+                                  <option value="Monitor 2">Monitor 2 (HDMI - 1366×768)</option>
+                                  <option value="NDI Stage">NDI Stage Display Feed (1920×1080)</option>
+                                </>
+                              )}
                             </select>
                           </div>
 

@@ -261,21 +261,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             if (!isValidPptxBinary(newItem.data?.fileBytes)) {
               newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
             }
-            if (newItem.contentId) {
-              const cid = newItem.contentId;
-              const nid = newItem.id;
-              import('../db').then(async ({ getDB }) => {
-                try {
-                  const db = await getDB();
-                  const asset = await db.get('assets', cid);
-                  if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
-                    store.updateScheduleItem(nid, {
-                      data: { ...(newItem.data || {}), fileBytes: asset.data.fileBytes }
-                    });
-                  }
-                } catch {}
-              });
-            }
           }
           if (payload.source !== 'schedule') {
             store.addScheduleItem(newItem);

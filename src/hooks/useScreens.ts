@@ -40,13 +40,42 @@ export function useScreens() {
       if ('getScreenDetails' in window) {
         navigator.permissions
           .query({ name: 'window-management' as PermissionName })
-          .then((result) => {
+          .then(async (result) => {
             if (result.state === 'granted') {
               setPermissionGranted(true);
               fetchScreens();
+            } else {
+              // Fallback to basic display
+              const displays = await DisplayManager.getDisplays();
+              setScreens(displays.map(d => ({
+                label: d.name,
+                isPrimary: d.isPrimary,
+                id: d.id,
+                displayId: d.displayId,
+                bounds: d.bounds
+              })));
             }
           })
-          .catch(console.error);
+          .catch(async () => {
+            const displays = await DisplayManager.getDisplays();
+            setScreens(displays.map(d => ({
+              label: d.name,
+              isPrimary: d.isPrimary,
+              id: d.id,
+              displayId: d.displayId,
+              bounds: d.bounds
+            })));
+          });
+      } else {
+        // Fallback for other browsers (Firefox, Safari, etc.)
+        const displays = await DisplayManager.getDisplays();
+        setScreens(displays.map(d => ({
+          label: d.name,
+          isPrimary: d.isPrimary,
+          id: d.id,
+          displayId: d.displayId,
+          bounds: d.bounds
+        })));
       }
     }
 
@@ -108,5 +137,5 @@ export function useScreens() {
     }
   };
 
-  return { screens, permissionGranted, requestAccess };
+  return { screens, permissionGranted, requestAccess, refreshScreens: fetchScreens };
 }
