@@ -38,21 +38,27 @@ export function resolveGroupResolution(
     return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
   }
 
-  // 2. Check if group has explicit aspectRatio presets
-  if (group?.aspectRatio === '4:3' || group?.aspectRatio === '1024x768') {
-    return { width: 1024, height: 768, aspectRatio: 4 / 3, aspectLabel: '4:3', margins: defaultMargins };
-  }
-  if (group?.aspectRatio === '16:10' || group?.aspectRatio === '1920x1200') {
-    return { width: 1920, height: 1200, aspectRatio: 16 / 10, aspectLabel: '16:10', margins: defaultMargins };
-  }
-  if (group?.aspectRatio === '1366x768') {
-    return { width: 1366, height: 768, aspectRatio: 1366 / 768, aspectLabel: '16:9', margins: defaultMargins };
-  }
-  if (group?.aspectRatio === '1280x720') {
-    return { width: 1280, height: 720, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
-  }
-  if (group?.aspectRatio === '16:9' || group?.aspectRatio === '1920x1080') {
-    return { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
+  // 2. Check if group has explicit aspectRatio presets or custom resolution strings (e.g., '1366x768', '1920x1080', '1280x720', '1024x768')
+  if (group?.aspectRatio && group.aspectRatio !== 'options' && group.aspectRatio !== 'auto') {
+    if (group.aspectRatio.includes('x')) {
+      const parts = group.aspectRatio.split('x');
+      const w = parseInt(parts[0], 10);
+      const h = parseInt(parts[1], 10);
+      if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
+        const ratio = w / h;
+        const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
+        return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
+      }
+    }
+    if (group.aspectRatio === '4:3') {
+      return { width: 1024, height: 768, aspectRatio: 4 / 3, aspectLabel: '4:3', margins: defaultMargins };
+    }
+    if (group.aspectRatio === '16:10') {
+      return { width: 1920, height: 1200, aspectRatio: 16 / 10, aspectLabel: '16:10', margins: defaultMargins };
+    }
+    if (group.aspectRatio === '16:9') {
+      return { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
+    }
   }
 
   // 3. If group is 'confidence' (Foldback) and foldback options has custom position:

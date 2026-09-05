@@ -35,7 +35,8 @@ import {
   BookOpen,
   Film,
   Trash2,
-  Pen
+  Pen,
+  Plus
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -763,19 +764,84 @@ export default function TopToolbar({
 
             {activeMenu === 'View' && (
               <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl z-50 text-[11px] py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  Live Output Panels
+                <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Live Output Panels</span>
+                  <span className="text-[9px] font-mono text-cyan-400">({store.routerPanels.length})</span>
                 </div>
-                {[1, 2].map((num) => (
+
+                {store.routerPanels.map((router, index) => {
+                  const isSelected = store.activeRouterId === router.routerId;
+                  const targetGroup = store.outputGroups.find(g => g.id === router.targetOutputGroupId);
+                  return (
+                    <div
+                      key={router.routerId}
+                      className="w-full flex items-center justify-between px-3 py-1 hover:bg-[#323744] text-left group/panel"
+                    >
+                      <button
+                        onClick={() => {
+                          store.setActiveRouterId(router.routerId);
+                          setActiveMenu(null);
+                        }}
+                        className="flex-1 flex items-center gap-1.5 truncate text-gray-200 hover:text-white"
+                      >
+                        <span className="text-[10px] text-gray-500 font-mono">R-{index + 1}</span>
+                        <span className="truncate">{targetGroup?.name || `Target: Display ${index + 1}`}</span>
+                        {isSelected && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
+                      </button>
+
+                      {store.routerPanels.length > 1 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            store.removeRouterPanel(router.routerId);
+                          }}
+                          className="p-1 text-gray-500 hover:text-rose-400 opacity-0 group-hover/panel:opacity-100 transition-opacity ml-1"
+                          title={`Remove Router Panel R-${index + 1}`}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className="flex items-center gap-1 px-3 py-1 mt-0.5">
                   <button
-                    key={`panel-count-${num}`}
-                    onClick={() => { store.setLivePanelCount(num); setActiveMenu(null); }}
-                    className="w-full flex items-center justify-between px-3 py-1 hover:bg-[#323744] hover:text-white text-left"
+                    onClick={() => {
+                      const nextIndex = store.routerPanels.length + 1;
+                      const targetGroup = store.outputGroups[(nextIndex - 1) % store.outputGroups.length] || store.outputGroups[0];
+                      store.addRouterPanel({
+                        routerId: `router-${Date.now()}`,
+                        targetOutputGroupId: targetGroup?.id || 'group-congregation',
+                        active: true,
+                        visible: true,
+                        focused: true
+                      });
+                      setActiveMenu(null);
+                    }}
+                    className="flex-1 text-left py-0.5 text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 text-[11px]"
                   >
-                    <span>{num} {num === 1 ? 'Panel (Main Sanctuary)' : 'Panels Multi-View'}</span>
-                    {store.outputGroups.length === num && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
+                    <Plus size={12} />
+                    <span>+ Add Panel</span>
                   </button>
-                ))}
+
+                  {store.routerPanels.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const lastRouter = store.routerPanels[store.routerPanels.length - 1];
+                        if (lastRouter) {
+                          store.removeRouterPanel(lastRouter.routerId);
+                        }
+                        setActiveMenu(null);
+                      }}
+                      className="py-0.5 px-2 text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 text-[11px]"
+                      title="Remove last Router Panel"
+                    >
+                      <Minus size={12} />
+                      <span>- Remove Panel</span>
+                    </button>
+                  )}
+                </div>
                 <div className="border-t border-[#3b404d] my-1"></div>
                 
                 <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">

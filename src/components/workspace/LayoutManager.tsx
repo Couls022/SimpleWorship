@@ -115,7 +115,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
         minSize={20}
       >
         <div className="h-full w-full overflow-hidden flex">
-          <FixedLiveDisplay />
+          <FixedLiveDisplay forcedGroupId={effectiveTargetGroupId} />
         </div>
       </Panel>
     </PanelGroup>

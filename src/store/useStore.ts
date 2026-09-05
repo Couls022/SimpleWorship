@@ -383,11 +383,61 @@ export const useStore = create<AppState>((set, get) => ({
   ],
   activeRouterId: 'router-1',
   addRouterPanel: (panel) => set((state) => {
-    const panels = [...state.routerPanels, panel];
+    let targetGroupId = panel.targetOutputGroupId;
+    let newGroups = [...state.outputGroups];
+    let newGroupStates = { ...state.groupStates };
+
+    // Find which output groups are currently targeted by existing router panels
+    const assignedGroupIds = new Set(state.routerPanels.map(p => p.targetOutputGroupId).filter(Boolean));
+
+    // If targetGroupId is not specified or already taken, find an unassigned group or create a new dedicated one
+    if (!targetGroupId || assignedGroupIds.has(targetGroupId)) {
+      const unassignedGroup = state.outputGroups.find(g => !assignedGroupIds.has(g.id));
+      if (unassignedGroup) {
+        targetGroupId = unassignedGroup.id;
+      } else {
+        const count = state.outputGroups.length + 1;
+        const createdGroupId = `group-output-${Date.now()}`;
+        const newGroup: OutputGroup = {
+          id: createdGroupId,
+          name: count === 2 ? 'Scripture / Stage Monitor' : `Live Output Panel ${count}`,
+          role: count === 2 ? 'confidence' : 'broadcast',
+          themeId: count === 2 ? 'theme-scripture' : 'theme-global',
+          displayIds: [],
+          isBlack: false,
+          isClear: false,
+          showLogo: true
+        };
+        newGroups.push(newGroup);
+        newGroupStates[createdGroupId] = {
+          ...defaultState,
+          activeItemId: count === 2 ? 'item-gen-1' : null,
+          activeSlideIndex: 0,
+          isLiveEnabled: true,
+          timestamp: Date.now()
+        };
+        dbApi.saveOutputGroup(newGroup);
+        targetGroupId = createdGroupId;
+      }
+    }
+
+    const updatedPanel: RouterPanelState = {
+      ...panel,
+      targetOutputGroupId: targetGroupId
+    };
+
+    const panels = state.routerPanels.map(p => ({
+      ...p,
+      active: p.routerId === updatedPanel.routerId
+    }));
+    panels.push(updatedPanel);
+
     return {
+      outputGroups: newGroups,
+      groupStates: newGroupStates,
       routerPanels: panels,
-      activeRouterId: panel.routerId,
-      activeControlGroupId: panel.targetOutputGroupId
+      activeRouterId: updatedPanel.routerId,
+      activeControlGroupId: targetGroupId
     };
   }),
   removeRouterPanel: (id) => set((state) => {
@@ -591,8 +641,8 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   
   groupStates: {
-    'group-congregation': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
-    'group-stage': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: true },
+    'group-stage': { ...defaultState, activeItemId: 'item-gen-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: true },
   },
   setGroupState: (groupId, newState) => {
     set((state) => {

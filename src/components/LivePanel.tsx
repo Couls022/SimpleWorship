@@ -424,29 +424,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           </div>
 
           <span className="text-xs font-bold text-gray-200 tracking-wide uppercase flex items-center gap-2">
-            <span className={isTargetedGroup ? 'text-cyan-300 font-extrabold' : 'text-indigo-400'}>Router {routerId?.replace('router-', '') || '1'}</span>
-            
-            <select
-              value={groupId}
-              onChange={(e) => {
-                if (routerId) {
-                  store.updateRouterPanel(routerId, { targetOutputGroupId: e.target.value });
-                  if (store.activeRouterId === routerId) {
-                    store.setActiveControlGroupId(e.target.value);
-                  }
-                }
-              }}
-              className="bg-[#1e2026] text-xs text-gray-300 border border-[#3b4152] rounded py-0.5 px-1 outline-none cursor-pointer"
-            >
-              {outputGroups.map(g => (
-                <option key={g.id} value={g.id}>
-                  Target: {g.name}
-                </option>
-              ))}
-            </select>
-            
-            <span className="opacity-50 mx-1">•</span> 
-            <span className="truncate max-w-[150px]">{liveItem?.name || 'No Content'}</span>
+            <span className="truncate max-w-[220px]">{liveItem?.name || 'No Content'}</span>
           </span>
         </div>
 

@@ -32,6 +32,7 @@ import { useStore } from '../../store/useStore';
 import { dbApi } from '../../db';
 import { SystemOptions, FontStyleOptions, SlideLabelConfig } from '../../types';
 import { applyAppearanceSettings } from '../../utils/themeManager';
+import { useScreens } from '../../hooks/useScreens';
 import FontInspectorPopup from './FontInspectorPopup';
 import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
@@ -89,6 +90,8 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
 
   const outputTabs: OutputTab[] = ['General', 'Song', 'Scripture', 'Presentations', 'Transitions', 'Alerts'];
 
+  const { screens } = useScreens();
+
   const handleCancel = () => {
     applyAppearanceSettings(systemOptions.appearance);
     onClose();
@@ -97,6 +100,20 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
   const handleApply = () => {
     updateSystemOptions(localOptions);
     applyAppearanceSettings(localOptions.appearance);
+
+    // Bi-directionally sync with active output group(s)
+    const pos = localOptions.mainOutput?.general?.position;
+    if (pos && pos.width > 0 && pos.height > 0) {
+      const primaryGroup = store.outputGroups[0];
+      if (primaryGroup) {
+        store.updateOutputGroup(primaryGroup.id, {
+          aspectRatio: `${pos.width}x${pos.height}`,
+          customResolution: { width: pos.width, height: pos.height },
+          displayIds: localOptions.mainOutput.general.outputMonitor ? [localOptions.mainOutput.general.outputMonitor] : primaryGroup.displayIds
+        });
+      }
+    }
+
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Options saved successfully' }));
   };
 
@@ -265,13 +282,41 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                     <div className="flex items-center gap-3">
                       <select
                         value={localOptions.mainOutput.general.outputMonitor}
-                        onChange={(e) => updateMainGeneral({ outputMonitor: e.target.value })}
+                        onChange={(e) => {
+                          const selectedVal = e.target.value;
+                          const matched = screens.find((s: any) => (s.label || s.name) === selectedVal);
+                          if (matched) {
+                            const w = matched.width || matched.bounds?.width || 1920;
+                            const h = matched.height || matched.bounds?.height || 1080;
+                            updateMainGeneral({
+                              outputMonitor: selectedVal,
+                              position: { ...localOptions.mainOutput.general.position, width: w, height: h }
+                            });
+                          } else {
+                            updateMainGeneral({ outputMonitor: selectedVal });
+                          }
+                        }}
                         className="flex-1 bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white"
                       >
-                        <option value="Monitor 1 (Primary Desktop)">Monitor 1 (Primary Desktop)</option>
-                        <option value="Monitor 1 (Secondary)">Monitor 1 (Secondary Screen - Recommended)</option>
-                        <option value="Monitor 2 (Projector HDMI)">Monitor 2 (Projector HDMI)</option>
-                        <option value="NDI / Live Stream Virtual Output">NDI / Live Stream Virtual Output</option>
+                        {screens.length > 0 ? (
+                          screens.map((scr: any, idx: number) => {
+                            const label = scr.label || scr.name || `Monitor ${idx + 1}`;
+                            const w = scr.width || scr.bounds?.width || 1920;
+                            const h = scr.height || scr.bounds?.height || 1080;
+                            return (
+                              <option key={idx} value={label}>
+                                {label} {scr.isPrimary ? '(Primary Desktop)' : '(Secondary Screen)'} [{w}×{h}]
+                              </option>
+                            );
+                          })
+                        ) : (
+                          <>
+                            <option value="Monitor 1 (Primary Desktop)">Monitor 1 (Primary Desktop - 1920×1080)</option>
+                            <option value="Monitor 2">Monitor 2 (Secondary Screen - 1366×768)</option>
+                            <option value="Monitor 2 (Projector HDMI)">Monitor 2 (Projector HDMI - 1366×768)</option>
+                            <option value="NDI / Live Stream Virtual Output">NDI / Live Stream Virtual Output (1920×1080)</option>
+                          </>
+                        )}
                       </select>
 
                       <button

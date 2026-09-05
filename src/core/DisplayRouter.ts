@@ -63,16 +63,15 @@ export function resolveDisplayAssignments(
   });
 
   for (const displayId of displayIdSet) {
-    // 1. Find all LIVE routes targeting this display
-    const liveGroupsForDisplay: OutputGroup[] = outputGroups.filter((g) => {
-      const isLive = groupStates[g.id]?.isLiveEnabled === true;
-      return isLive && routeTargetsDisplay(g, displayId);
+    // 1. Find all configured route groups targeting this physical display
+    const configuredGroupsForDisplay = outputGroups.filter((g) => {
+      return routeTargetsDisplay(g, displayId);
     });
 
-    const liveGroupIds = liveGroupsForDisplay.map((g) => g.id);
+    const candidateGroupIds = configuredGroupsForDisplay.map((g) => g.id);
 
-    // 2. Zero live routes
-    if (liveGroupIds.length === 0) {
+    // 2. Zero candidate routes
+    if (candidateGroupIds.length === 0) {
       result.set(displayId, {
         displayId,
         assignedGroupId: null,
@@ -81,29 +80,32 @@ export function resolveDisplayAssignments(
       continue;
     }
 
-    // 3. Exactly one live route
-    if (liveGroupIds.length === 1) {
+    // 3. Exactly one candidate route
+    if (candidateGroupIds.length === 1) {
       result.set(displayId, {
         displayId,
-        assignedGroupId: liveGroupIds[0],
-        liveGroupIds,
+        assignedGroupId: candidateGroupIds[0],
+        liveGroupIds: candidateGroupIds,
       });
       continue;
     }
 
-    // 4. Multiple live routes -> Active Route Priority
+    // 4. Multiple candidate routes target this physical display
+    // ACTIVE ROUTE OVERLAY PRIORITY:
+    // If the currently active target router panel (activeControlGroupId) targets this display,
+    // it OVERLAYS and TAKES DISPLAY PRIORITY on this monitor!
     let winningGroupId: string | null = null;
-    if (activeControlGroupId && liveGroupIds.includes(activeControlGroupId)) {
+    if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId)) {
       winningGroupId = activeControlGroupId;
     } else {
-      // Deterministic priority: first configured live group
-      winningGroupId = liveGroupIds[0];
+      // Otherwise, fallback to the first configured route targeting this display
+      winningGroupId = candidateGroupIds[0];
     }
 
     result.set(displayId, {
       displayId,
       assignedGroupId: winningGroupId,
-      liveGroupIds,
+      liveGroupIds: candidateGroupIds,
     });
   }
 
