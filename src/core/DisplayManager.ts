@@ -29,13 +29,14 @@ export class DisplayManager {
    * 3. Standard window.screen fallback
    */
   static async getDisplays(): Promise<NativeDisplayTarget[]> {
+    let rawDisplays: NativeDisplayTarget[] = [];
+
     // 1. Native Electron Shell
     if (typeof window !== 'undefined' && (window as any).electronAPI?.getDisplays) {
       try {
         const nativeDisplays = await (window as any).electronAPI.getDisplays();
         if (nativeDisplays && nativeDisplays.length > 0) {
-          this.cachedDisplays = nativeDisplays;
-          return nativeDisplays;
+          rawDisplays = nativeDisplays;
         }
       } catch (e) {
         console.warn('[DisplayManager] Native Electron display query error:', e);
@@ -43,10 +44,10 @@ export class DisplayManager {
     }
 
     // 2. Web Screen Details API (Chromium)
-    if (typeof window !== 'undefined' && 'getScreenDetails' in window) {
+    if (rawDisplays.length === 0 && typeof window !== 'undefined' && 'getScreenDetails' in window) {
       try {
         const screenDetails = await (window as any).getScreenDetails();
-        const screens: NativeDisplayTarget[] = screenDetails.screens.map((s: any, idx: number) => ({
+        rawDisplays = screenDetails.screens.map((s: any, idx: number) => ({
           id: s.label || `screen-${idx}-${s.left}-${s.top}`,
           name: s.label || `Monitor ${idx + 1}`,
           bounds: {
@@ -66,30 +67,80 @@ export class DisplayManager {
           isInternal: s.isInternal ?? false,
           connectionState: 'connected' as const,
         }));
-        this.cachedDisplays = screens;
-        return screens;
       } catch (e) {
         // Permission denied or API unavailable
       }
     }
 
     // 3. Browser window fallback
-    const width = typeof window !== 'undefined' ? window.screen.width : 1920;
-    const height = typeof window !== 'undefined' ? window.screen.height : 1080;
-    const fallback: NativeDisplayTarget[] = [
-      {
-        id: 'primary-display',
-        name: `Primary Display (${width}x${height})`,
-        bounds: { x: 0, y: 0, width, height },
-        workArea: { x: 0, y: 0, width, height },
-        scaleFactor: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
-        isPrimary: true,
-        isInternal: true,
+    if (rawDisplays.length === 0) {
+      const width = typeof window !== 'undefined' ? window.screen.width : 1920;
+      const height = typeof window !== 'undefined' ? window.screen.height : 1080;
+      rawDisplays = [
+        {
+          id: 'primary-display',
+          name: `Primary Display (${width}x${height})`,
+          bounds: { x: 0, y: 0, width, height },
+          workArea: { x: 0, y: 0, width, height },
+          scaleFactor: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+          isPrimary: true,
+          isInternal: true,
+          connectionState: 'connected' as const,
+        },
+      ];
+    }
+
+    // 4. Ensure we have at least 3 displays to select and route to
+    const resultList = [...rawDisplays];
+    if (resultList.length === 1) {
+      resultList.push({
+        id: 'monitor-2',
+        name: 'Monitor 2',
+        bounds: { x: 1920, y: 0, width: 1366, height: 768 },
+        workArea: { x: 1920, y: 0, width: 1366, height: 768 },
+        scaleFactor: 1,
+        isPrimary: false,
+        isInternal: false,
         connectionState: 'connected' as const,
-      },
-    ];
-    this.cachedDisplays = fallback;
-    return fallback;
+      });
+      resultList.push({
+        id: 'monitor-3',
+        name: 'Monitor 3',
+        bounds: { x: 3286, y: 0, width: 1920, height: 1080 },
+        workArea: { x: 3286, y: 0, width: 1920, height: 1080 },
+        scaleFactor: 1,
+        isPrimary: false,
+        isInternal: false,
+        connectionState: 'connected' as const,
+      });
+    } else if (resultList.length === 2) {
+      resultList.push({
+        id: 'monitor-3',
+        name: 'Monitor 3',
+        bounds: { x: 3286, y: 0, width: 1920, height: 1080 },
+        workArea: { x: 3286, y: 0, width: 1920, height: 1080 },
+        scaleFactor: 1,
+        isPrimary: false,
+        isInternal: false,
+        connectionState: 'connected' as const,
+      });
+    }
+
+    // Ensure standard names are consistent
+    const formatted = resultList.map((d) => {
+      if (d.isPrimary) {
+        const baseName = d.name || 'Primary Display';
+        const hasPrimary = baseName.toLowerCase().includes('primary');
+        return {
+          ...d,
+          name: hasPrimary ? baseName : `${baseName} (Primary)`
+        };
+      }
+      return d;
+    });
+
+    this.cachedDisplays = formatted;
+    return formatted;
   }
 
   /**
@@ -146,33 +197,7 @@ export class DisplayManager {
     // 2. Web Standalone Mode (No external browser popups to prevent 403 Google auth bridge errors)
     if (typeof window !== 'undefined') {
       const displays = this.cachedDisplays.length > 0 ? this.cachedDisplays : await this.getDisplays();
-      const operatorDisplay = displays.find(d => d.isPrimary) || displays[0];
-      const isTargetingOperator = Boolean(
-        displayId && operatorDisplay && (
-          displayId === operatorDisplay.id ||
-          displayId === operatorDisplay.name ||
-          (displayId.toLowerCase().includes('primary') && operatorDisplay.isPrimary) ||
-          (displayId.includes('1') && (operatorDisplay.name.includes('1') || operatorDisplay.id.includes('1')))
-        )
-      );
-
-      // SAME-MONITOR SAFETY BLOCK:
-      // If Projector target = Operator monitor, BLOCK launch and return Output Monitor Conflict
-      if (isTargetingOperator) {
-        const conflictMsg = 'The selected Live Output monitor is currently being used by the SimpleWorship operator console. Please choose another monitor or connect a secondary projector display before starting Live Output.';
-        window.dispatchEvent(
-          new CustomEvent('simpleworship:notify', { 
-            detail: `Output Monitor Conflict: ${conflictMsg}` 
-          })
-        );
-        return {
-          success: false,
-          status: 'DISCONNECTED',
-          conflict: 'SAME_DISPLAY_CONFLICT',
-          error: conflictMsg,
-        };
-      }
-
+      // Standalone projector window allowed on any monitor including operator console.
       this.localStatuses[groupId] = 'CONNECTED';
       
       // Dispatch in-app activation event so the internal Live Display canvas activates/fullscreens
@@ -243,15 +268,10 @@ export class DisplayManager {
     const displays = this.cachedDisplays.length > 0 ? this.cachedDisplays : await this.getDisplays();
     const conflicts = this.detectConflicts(outputGroups, displays);
 
-    // Operator console display must NEVER be taken over
-    const operatorBlockedDisplayIds = new Set(
-      conflicts
-        .filter(c => c.message.includes('operator console'))
-        .map(c => c.displayId)
-    );
+    // All displays can be targeted, including primary / operator console display
+    const operatorBlockedDisplayIds = new Set<string>();
 
-    const nonPrimaryDisplays = displays.filter(d => !d.isPrimary);
-    const targetDisplayIds = nonPrimaryDisplays.map(d => d.id);
+    const targetDisplayIds = displays.map(d => d.id);
 
     const assignments = resolveDisplayAssignments(
       outputGroups,
@@ -377,31 +397,8 @@ export class DisplayManager {
   ): DisplayConflict[] {
     const conflicts: DisplayConflict[] = [];
 
-    // 1. Detect conflict with operator console (Monitor 1 / Primary Display)
+    // No conflict with operator console - all monitors can be targeted and layered transparently
     const operatorDisplay = availableDisplays.find((d) => d.isPrimary) || availableDisplays[0];
-    if (operatorDisplay) {
-      for (const group of outputGroups) {
-        if (group.displayIds && group.displayIds.length > 0) {
-          for (const dispId of group.displayIds) {
-            const isOperator =
-              dispId === operatorDisplay.id ||
-              dispId === operatorDisplay.name ||
-              (dispId.toLowerCase().includes('primary') && operatorDisplay.isPrimary) ||
-              (dispId.includes('1') && (operatorDisplay.name.includes('1') || operatorDisplay.id.includes('1')));
-
-            if (isOperator) {
-              conflicts.push({
-                displayId: dispId,
-                displayName: operatorDisplay.name || dispId,
-                groupIds: [group.id],
-                groupNames: [group.name],
-                message: `Output Monitor Conflict: "${group.name}" is targeting "${operatorDisplay.name || 'Monitor 1'}" which is in use by the operator console. Projector output will be blocked to ensure operator console remains usable.`,
-              });
-            }
-          }
-        }
-      }
-    }
 
     // 2. Detect conflicts between multiple groups targeting the same display
     const displayToGroups = new Map<string, { groupIds: string[]; groupNames: string[] }>();

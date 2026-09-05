@@ -238,21 +238,31 @@ async function getFormattedDisplays() {
     let model = '';
     let displayName = '';
 
-    if (winMonitors && winMonitors[index]) {
+    // 1. Use Electron's native screen label (the actual Friendly Name from Windows settings)
+    if (d.label) {
+      displayName = d.label.trim();
+    }
+
+    // 2. Enhance or fall back to powershell WMI info if native label is missing or generic
+    const isGeneric = !displayName || 
+                      displayName.toLowerCase().includes('generic') || 
+                      displayName.toLowerCase().includes('display') || 
+                      displayName.toLowerCase().includes('monitor');
+                      
+    if (isGeneric && winMonitors && winMonitors[index]) {
       const wm = winMonitors[index];
       const mfg = (wm.brand || '').toUpperCase().trim();
       brand = MANUFACTURER_MAP[mfg] || mfg;
       model = (wm.model || '').trim();
+      
+      if (brand || model) {
+        displayName = `${brand} ${model}`.trim();
+      }
     }
 
-    if (brand || model) {
-      displayName = `${brand} ${model}`.trim();
-    } else {
-      displayName = isPrimary ? `Primary Monitor` : `Monitor ${index + 1}`;
-    }
-
+    // 3. Fallback to generic names if still empty
     if (!displayName) {
-      displayName = `Generic Display ${index + 1}`;
+      displayName = isPrimary ? `Primary Monitor` : `Monitor ${index + 1}`;
     }
 
     return {
@@ -317,24 +327,32 @@ function resolveTargetDisplay(displayId, formattedDisplays) {
   );
   if (match) return match;
 
-  // 2. Case-insensitive / partial match
+  // 2. Case-insensitive / partial match (excluding loose numeric substrings)
   match = formattedDisplays.find(fd =>
     fd.id.toLowerCase() === idLower ||
     String(fd.displayId).toLowerCase() === idLower ||
+    fd.name.toLowerCase() === idLower ||
+    fd.label.toLowerCase() === idLower ||
     fd.name.toLowerCase().includes(idLower) ||
     fd.label.toLowerCase().includes(idLower)
   );
   if (match) return match;
 
-  // 3. Fallbacks
-  if (idLower.includes('2') || idLower.includes('secondary')) {
+  // 3. Normalized positional fallbacks
+  // "monitor-1", "primary-display", "primary monitor" or index 0 matches primary
+  if (idLower.includes('primary') || idLower.includes('monitor-1') || idLower === 'monitor 1') {
+    return formattedDisplays.find(fd => fd.isPrimary) || formattedDisplays[0];
+  }
+
+  // "monitor-2", "secondary" or index 1 matches the first non-primary display
+  if (idLower.includes('monitor-2') || idLower === 'monitor 2' || idLower.includes('secondary') || idLower.includes('alternate')) {
     return formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[1] || formattedDisplays[0];
   }
-  if (idLower.includes('3')) {
-    return formattedDisplays.filter(fd => !fd.isPrimary)[1] || formattedDisplays[2] || formattedDisplays[0];
-  }
-  if (idLower.includes('1') || idLower.includes('primary')) {
-    return formattedDisplays.find(fd => fd.isPrimary) || formattedDisplays[0];
+
+  // "monitor-3", "foldback", "stage" or index 2 matches the second non-primary display
+  if (idLower.includes('monitor-3') || idLower === 'monitor 3' || idLower.includes('foldback') || idLower.includes('stage') || idLower.includes('tertiary')) {
+    const nonPrimary = formattedDisplays.filter(fd => !fd.isPrimary);
+    return nonPrimary[1] || formattedDisplays[2] || formattedDisplays[0];
   }
 
   return null;

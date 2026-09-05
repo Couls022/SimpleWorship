@@ -98,11 +98,19 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const screenIndex = React.useMemo(() => {
     if (!displayId) return 1;
     const matchIdx = screens.findIndex(
-      (scr: any) =>
-        scr.label === displayId ||
-        scr.name === displayId ||
-        scr.id === displayId ||
-        scr.displayId === displayId
+      (scr: any, sIdx: number) => {
+        const sLabel = String(scr.label || scr.name || scr.id || '').toLowerCase().trim();
+        const targetId = String(displayId).toLowerCase().trim();
+        if (!sLabel || !targetId) return false;
+        if (sLabel === targetId || sLabel.includes(targetId) || targetId.includes(sLabel)) return true;
+
+        // Smart positional index fallbacks
+        if (targetId.includes('primary') && scr.isPrimary) return true;
+        if ((targetId.includes('2') || targetId.includes('secondary') || targetId.includes('alternate')) && sIdx === 1) return true;
+        if ((targetId.includes('3') || targetId.includes('foldback') || targetId.includes('stage')) && sIdx === 2) return true;
+
+        return false;
+      }
     );
     if (matchIdx !== -1) return matchIdx + 1;
     

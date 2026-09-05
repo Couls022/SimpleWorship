@@ -45,7 +45,7 @@ export default function PrintScheduleModal({ onClose }: PrintScheduleModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
         className="w-full max-w-2xl bg-[#1c1e26] border border-[#353b4c] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-gray-200 select-none animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}

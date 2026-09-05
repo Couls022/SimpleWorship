@@ -1,6 +1,7 @@
 import { PresentationState, Schedule, PresentationItem, Slide, Song, ScriptureVerse, SystemOptions } from '../types';
 import { defaultSongs } from '../db/seedData';
 import { formatScriptureReference, formatScriptureText } from '../utils/scriptureFormatter';
+import { PresentationContentResolver } from './PresentationContentResolver';
 
 export class PresentationCore {
   static getActiveContent(
@@ -285,7 +286,14 @@ export class PresentationCore {
           { id: 'p3', title: 'Slide 3', text: 'Closing Prayer & Blessing', backgroundUrl: item.customBackgroundUrl }
         ];
       }
-    } else if (item.type === 'audio' || (item.type === 'media' && item.data?.type === 'audio')) {
+    } else if (
+      item.type === 'audio' ||
+      item.data?.isAudio === true ||
+      item.data?.type === 'audio' ||
+      (typeof item.data?.type === 'string' && item.data.type.startsWith('audio/')) ||
+      PresentationContentResolver.isAudioUrl(item.data?.url || item.customBackgroundUrl) ||
+      PresentationContentResolver.isAudioName(item.name || '')
+    ) {
       generated = [
         {
           id: 'a1',
@@ -293,16 +301,37 @@ export class PresentationCore {
           text: '',
           backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url) || '',
           isAudio: true,
+          isVideo: false,
         }
       ];
-    } else if (item.type === 'media' || item.type === 'image' || item.type === 'video') {
+    } else if (
+      item.type === 'video' ||
+      item.data?.isVideo === true ||
+      item.data?.type === 'video' ||
+      item.data?.type === 'motion' ||
+      (typeof item.data?.type === 'string' && item.data.type.startsWith('video/')) ||
+      PresentationContentResolver.isVideoUrl(item.data?.url || item.customBackgroundUrl) ||
+      PresentationContentResolver.isVideoName(item.name || '')
+    ) {
+      generated = [
+        {
+          id: 'v1',
+          title: item.name || 'Video Track',
+          text: '',
+          backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url) || '',
+          isVideo: true,
+          isAudio: false,
+        }
+      ];
+    } else if (item.type === 'media' || item.type === 'image') {
       generated = [
         {
           id: 'm1',
-          title: item.name,
+          title: item.name || 'Image Asset',
           text: '',
-          backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url),
-          isVideo: item.type === 'video' || (item.data && (item.data.type === 'video' || item.data?.type === 'motion'))
+          backgroundUrl: item.customBackgroundUrl || (item.data && item.data.url) || '',
+          isVideo: false,
+          isAudio: false,
         }
       ];
     } else if (item.type === 'camera') {

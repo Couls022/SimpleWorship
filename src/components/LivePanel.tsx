@@ -38,6 +38,7 @@ import { ThemeEngine } from '../core/ThemeEngine';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { DisplayManager } from '../core/DisplayManager';
+import { processDroppedFileList } from '../utils/fileDropHandler';
 import CameraLiveRenderer from './CameraLiveRenderer';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
 import { LiveSlideCard } from './LiveSlideCard';
@@ -198,10 +199,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsItemDragOver(true);
+    if (!isItemDragOver) setIsItemDragOver(true);
     const rect = e.currentTarget.getBoundingClientRect();
     const isLeftHalf = (e.clientX - rect.left) < rect.width / 2;
-    setDropPosition(isLeftHalf ? 'left' : 'right');
+    const targetPos = isLeftHalf ? 'left' : 'right';
+    if (dropPosition !== targetPos) setDropPosition(targetPos);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -218,11 +220,41 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const finalDropPos = dropPosition;
     setDropPosition(null);
     setIsItemDragOver(false);
+
+    // 1. Direct OS files dropped (Images, Audio, Video, PPTX, PPT)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const dropResult = await processDroppedFileList(e.dataTransfer.files);
+      if (dropResult.schedule) {
+        store.setActiveSchedule(dropResult.schedule);
+        return;
+      }
+      if (dropResult.items && dropResult.items.length > 0) {
+        // Ingest all dropped items into Schedule
+        for (const item of dropResult.items) {
+          store.addScheduleItem(item);
+        }
+        // Go live with the first dropped item immediately on this output panel
+        const targetLiveItem = dropResult.items[0];
+        store.goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem);
+        store.setGroupState(groupId, {
+          activeItemId: targetLiveItem.id,
+          activeSlideIndex: 0,
+          isBlack: false,
+          isClear: false,
+        });
+        window.dispatchEvent(
+          new CustomEvent('simpleworship:notify', { 
+            detail: `Going LIVE on ${activeGroup?.name || 'Output'} with "${targetLiveItem.name}"!` 
+          })
+        );
+        return;
+      }
+    }
 
     const rawJson = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('application/x-simpleworship-item');
     if (rawJson) {
@@ -363,7 +395,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             Drop here to Go LIVE in {activeGroup?.name || 'Output'}
           </p>
           <p className="text-[11px] text-emerald-200 mt-0.5">
-            Auto-flowing selected scripture into template slides
+            Images, Videos, Audio, PPTX presentations, Scriptures or Songs
           </p>
         </div>
       )}

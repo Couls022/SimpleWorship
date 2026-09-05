@@ -7,10 +7,14 @@ import {
   GripVertical, 
   Trash2, 
   Play, 
+  Pause,
   Music, 
   BookOpen, 
   FileText, 
   Film, 
+  Image as ImageIcon,
+  Volume2,
+  VolumeX,
   Layers,
   LayoutGrid,
   Pin,
@@ -31,10 +35,12 @@ import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { PresentationItem, Song } from '../types';
 import { PresentationCore } from '../core/PresentationCore';
+import { PresentationContentResolver, FormatBadgeInfo } from '../core/PresentationContentResolver';
 import { readSwsFile } from '../services/swsService';
 import { handleRangeSelection } from '../utils/selectionUtils';
 import { dbApi } from '../db';
 import { isValidPptxBinary } from '../utils/pptxValidator';
+import { processDroppedFileList, isMediaOrPresentationFile } from '../utils/fileDropHandler';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import BibleLibraryModule from './workspace/BibleLibraryModule';
 import SongsTab from './resources/SongsTab';
@@ -49,6 +55,122 @@ interface SchedulePanelProps {
   onOpenNewSong?: () => void;
   onEditSong?: (song: Song) => void;
 }
+
+const ScheduleItemThumbnail: React.FC<{
+  item: PresentationItem;
+  viewMode: 'large' | 'medium' | 'small' | 'summary';
+  isItemLive: boolean;
+  themesList: any[];
+}> = ({ item, viewMode, isItemLive, themesList }) => {
+  const badgeInfo = PresentationContentResolver.getFormatBadgeInfo(item);
+  const isVideo = badgeInfo.category === 'video';
+  const isAudio = badgeInfo.category === 'audio';
+  const isImage = badgeInfo.category === 'image';
+  const isPptx = badgeInfo.category === 'pptx';
+  const isSong = badgeInfo.category === 'song';
+  const isBible = badgeInfo.category === 'bible';
+
+  const videoUrl = item.data?.url || (isVideo ? item.customBackgroundUrl : undefined);
+  const imageUrl = item.customBackgroundUrl || item.data?.thumbnailUrl || item.data?.url;
+  const firstSlide = item.data?.slides?.[0];
+
+  const sizeClass = 
+    viewMode === 'large' ? 'w-14 h-10' :
+    viewMode === 'small' ? 'w-6 h-5' : 'w-8 h-6';
+
+  if (viewMode === 'summary') {
+    return (
+      <div className="shrink-0 flex items-center justify-center">
+        {isVideo ? <Film size={12} className="text-cyan-400" /> :
+         isAudio ? <Music size={12} className="text-purple-400" /> :
+         isImage ? <ImageIcon size={12} className="text-emerald-400" /> :
+         isPptx ? <FileText size={12} className="text-amber-400" /> :
+         isSong ? <Music size={12} className="text-sky-400" /> :
+         isBible ? <BookOpen size={12} className="text-rose-400" /> :
+         <Layers size={12} className="text-gray-400" />}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-xs bg-[#0b0c10] border border-[#2b2e38] relative overflow-hidden flex items-center justify-center shrink-0 ${sizeClass}`}>
+      {isVideo && videoUrl ? (
+        <div className="w-full h-full relative bg-slate-950 flex items-center justify-center overflow-hidden">
+          <video
+            src={videoUrl}
+            muted
+            playsInline
+            preload="metadata"
+            className="w-full h-full object-cover pointer-events-none opacity-80"
+          />
+          <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+            <span className="w-3.5 h-3.5 rounded-full bg-cyan-500/90 text-slate-950 flex items-center justify-center text-[7px] font-bold shadow-xs">
+              ▶
+            </span>
+          </div>
+        </div>
+      ) : isAudio ? (
+        <div className="w-full h-full bg-gradient-to-br from-[#271542] via-[#1b0e30] to-[#120822] flex items-center justify-center relative p-0.5">
+          <div className="flex items-end gap-0.5 h-3">
+            <span className="w-0.5 h-2 bg-purple-400 rounded-xs animate-pulse" />
+            <span className="w-0.5 h-3 bg-purple-300 rounded-xs animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <span className="w-0.5 h-1.5 bg-purple-400 rounded-xs animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+          <Music size={viewMode === 'large' ? 12 : 9} className="text-purple-300 absolute top-0.5 right-0.5 opacity-60" />
+        </div>
+      ) : isImage && imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={item.name}
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.target as HTMLElement).style.display = 'none';
+          }}
+        />
+      ) : isPptx ? (
+        firstSlide?.backgroundUrl ? (
+          <img
+            src={firstSlide.backgroundUrl}
+            alt={item.name}
+            referrerPolicy="no-referrer"
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div 
+            className="w-full h-full flex flex-col items-center justify-center p-0.5 text-center"
+            style={{ background: firstSlide?.backgroundColor || '#1e293b' }}
+          >
+            <span className="text-[7px] font-black text-amber-300 font-mono leading-none">PPT</span>
+            {viewMode === 'large' && firstSlide?.title && (
+              <span className="text-[6px] text-gray-200 line-clamp-1 leading-none mt-0.5">
+                {firstSlide.title}
+              </span>
+            )}
+          </div>
+        )
+      ) : item.customBackgroundUrl ? (
+        <img
+          src={item.customBackgroundUrl}
+          alt={item.name}
+          referrerPolicy="no-referrer"
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="w-full h-full bg-[#111216] flex items-center justify-center">
+          {isSong ? <Music size={11} className="text-sky-400" /> :
+           isBible ? <BookOpen size={11} className="text-rose-400" /> :
+           <Layers size={11} className="text-gray-400" />}
+        </div>
+      )}
+
+      {/* Live Badge dot */}
+      {isItemLive && (
+        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shadow-[0_0_4px_rgba(244,63,94,1)]"></span>
+      )}
+    </div>
+  );
+};
 
 export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }: SchedulePanelProps) {
   const store = useStore();
@@ -115,6 +237,38 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | null>(null);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
+
+  // Quick schedule audio preview player
+  const [previewingAudioItemId, setPreviewingAudioItemId] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const toggleAudioPreview = (itemId: string, audioUrl: string) => {
+    if (!audioUrl) return;
+    if (previewingAudioItemId === itemId) {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+      }
+      setPreviewingAudioItemId(null);
+    } else {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+      }
+      const audio = new Audio(audioUrl);
+      previewAudioRef.current = audio;
+      audio.play().catch(e => console.warn('Preview play warning:', e));
+      audio.onended = () => setPreviewingAudioItemId(null);
+      setPreviewingAudioItemId(itemId);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+    };
+  }, []);
 
   // Single and Multi-selection state for Schedule Rundown
   const [selectedScheduleItemIds, setSelectedScheduleItemIds] = useState<string[]>([]);
@@ -230,7 +384,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
   const handleContainerDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDropTargetActive(true);
+    if (!isDropTargetActive) setIsDropTargetActive(true);
   };
 
   const handleItemDragOver = (e: React.DragEvent, index: number) => {
@@ -239,9 +393,11 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     const rect = e.currentTarget.getBoundingClientRect();
     const relativeY = e.clientY - rect.top;
     const position = relativeY < rect.height / 2 ? 'before' : 'after';
-    setDragOverIdx(index);
-    setDropPosition(position);
-    setIsDropTargetActive(true);
+    
+    // Only update state if changed to prevent 60fps re-render lag
+    if (dragOverIdx !== index) setDragOverIdx(index);
+    if (dropPosition !== position) setDropPosition(position);
+    if (!isDropTargetActive) setIsDropTargetActive(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
@@ -259,37 +415,6 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     e.stopPropagation();
     setIsDropTargetActive(false);
 
-    // Check if an actual OS file was dropped (e.g. .sws, .json)
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.name.endsWith('.sws') || droppedFile.name.endsWith('.json') || droppedFile.name.endsWith('.worship')) {
-        try {
-          const { schedule, bundledSongs, bundledThemes } = await readSwsFile(droppedFile);
-          if (bundledSongs && bundledSongs.length > 0) {
-            for (const song of bundledSongs) {
-              await dbApi.addSong(song).catch(() => {});
-            }
-          }
-          if (bundledThemes && bundledThemes.length > 0) {
-            for (const thm of bundledThemes) {
-              await dbApi.addTheme(thm).catch(() => {});
-            }
-          }
-          await dbApi.addSchedule(schedule);
-          store.setActiveSchedule(schedule);
-          window.dispatchEvent(
-            new CustomEvent('simpleworship:notify', {
-              detail: `Imported SimpleWorship package "${schedule.name}" (${schedule.items.length} items)!`
-            })
-          );
-          setDraggedIdx(null);
-          return;
-        } catch (err: any) {
-          console.error('Failed to import dropped schedule file:', err);
-        }
-      }
-    }
-
     let finalInsertIndex: number = activeSchedule ? activeSchedule.items.length : 0;
     if (typeof targetIndex === 'number') {
       finalInsertIndex = dropPosition === 'after' ? targetIndex + 1 : targetIndex;
@@ -297,6 +422,30 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
 
     setDragOverIdx(null);
     setDropPosition(null);
+
+    // Check if OS files were dropped (Images, Audio, Video, PPTX, PPT, SWS, JSON)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const dropResult = await processDroppedFileList(e.dataTransfer.files);
+      if (dropResult.schedule) {
+        store.setActiveSchedule(dropResult.schedule);
+        setDraggedIdx(null);
+        return;
+      }
+      if (dropResult.items && dropResult.items.length > 0) {
+        if (activeSchedule) {
+          const currentItems = [...activeSchedule.items];
+          const clampedPos = Math.max(0, Math.min(finalInsertIndex, currentItems.length));
+          currentItems.splice(clampedPos, 0, ...dropResult.items);
+          reorderSchedule(currentItems);
+        } else {
+          for (const it of dropResult.items) {
+            addScheduleItem(it);
+          }
+        }
+        setDraggedIdx(null);
+        return;
+      }
+    }
 
     // Check for theme drop directly onto a schedule item or schedule list
     const themeJson = e.dataTransfer.getData('application/x-simpleworship-theme');
@@ -759,97 +908,69 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                   </button>
 
                   {/* Left Thumbnail / Icon Box based on viewMode */}
-                  {viewMode === 'summary' ? (
-                    <div className="shrink-0 flex items-center justify-center text-cyan-400">
-                      {getItemIcon(item.type)}
-                    </div>
-                  ) : (
-                    <div className={`rounded-xs bg-black border border-[#30333d] relative overflow-hidden flex items-center justify-center shrink-0 ${
-                      viewMode === 'large' 
-                        ? 'w-14 h-10' 
-                        : viewMode === 'small' 
-                        ? 'w-6 h-5' 
-                        : 'w-8 h-6'
-                    }`}>
-                      {item.customBackgroundUrl ? (
-                        <img
-                          src={item.customBackgroundUrl}
-                          alt={item.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
+                  {(() => {
+                    const badgeInfo = PresentationContentResolver.getFormatBadgeInfo(item);
+                    return (
+                      <>
+                        <ScheduleItemThumbnail
+                          item={item}
+                          viewMode={viewMode}
+                          isItemLive={isItemLive}
+                          themesList={store.themesList}
                         />
-                      ) : (item.type === 'presentation' || item.type === 'ppt') && item.data?.slides?.[0]?.backgroundUrl ? (
-                        <img
-                          src={item.data.slides[0].backgroundUrl}
-                          alt={item.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (item.type === 'presentation' || item.type === 'ppt') && item.data?.slides?.[0]?.backgroundColor ? (
-                        <div 
-                          className="w-full h-full"
-                          style={{ background: item.data.slides[0].backgroundColor }}
-                        />
-                      ) : store.themesList.find(t => t.type === (item.type === 'bible' ? 'bible' : (item.type === 'song' ? 'song' : (item.type === 'presentation' ? 'presentation' : 'announcement'))))?.styles?.backgroundImageUrl && item.type !== 'presentation' && item.type !== 'ppt' ? (
-                        <img
-                          src={store.themesList.find(t => t.type === (item.type === 'bible' ? 'bible' : (item.type === 'song' ? 'song' : (item.type === 'presentation' ? 'presentation' : 'announcement'))))?.styles?.backgroundImageUrl}
-                          alt={item.name}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover opacity-80"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-[#111216] flex items-center justify-center">
-                          {getItemIcon(item.type)}
-                        </div>
-                      )}
-                      {isItemLive && (
-                        <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                      )}
-                    </div>
-                  )}
 
-                  {/* Title & Subtitle */}
-                  <div className="flex-1 min-w-0 pr-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className={`truncate ${
-                        viewMode === 'large' 
-                          ? 'text-xs font-bold' 
-                          : viewMode === 'small' 
-                          ? 'text-[10px] font-semibold' 
-                          : 'text-[11px] font-semibold'
-                      } ${
-                        isSelected 
-                          ? 'text-cyan-200 font-bold' 
-                          : isItemLive 
-                          ? 'text-rose-200 font-semibold' 
-                          : 'text-gray-200'
-                      }`}>
-                        {item.name}
-                      </span>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {isItemLive && (
-                          <span className="flex items-center gap-1 bg-rose-950/90 text-rose-300 border border-rose-600/60 text-[9px] font-black px-1.5 py-0.2 rounded shadow-2xs uppercase">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                            Live
-                          </span>
-                        )}
-                        {(item.themeOverride || item.themeId) && (
-                          <span 
-                            className="px-1 py-0.2 rounded text-[8px] font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 flex items-center gap-0.5 shrink-0 shadow-2xs" 
-                            title="Custom Theme Applied"
-                          >
-                            <Palette size={8} className="text-indigo-400" />
-                            <span>Theme</span>
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {viewMode !== 'summary' && (
-                      <div className="text-[10px] text-gray-400 truncate italic">
-                        {item.notes || 'notes'}
-                      </div>
-                    )}
-                  </div>
+                        {/* Title & Subtitle */}
+                        <div className="flex-1 min-w-0 pr-1">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 min-w-0 truncate">
+                              <span className={`truncate ${
+                                viewMode === 'large' 
+                                  ? 'text-xs font-bold' 
+                                  : viewMode === 'small' 
+                                  ? 'text-[10px] font-semibold' 
+                                  : 'text-[11px] font-semibold'
+                              } ${
+                                isSelected 
+                                  ? 'text-cyan-200 font-bold' 
+                                  : isItemLive 
+                                  ? 'text-rose-200 font-semibold' 
+                                  : 'text-gray-200'
+                              }`}>
+                                {item.name}
+                              </span>
+                              {/* Format Badge */}
+                              <span className={`px-1.5 py-0.2 rounded text-[8px] font-mono font-extrabold uppercase tracking-wider border shadow-2xs shrink-0 ${badgeInfo.badgeColorClass}`}>
+                                {badgeInfo.badgeLabel}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              {isItemLive && (
+                                <span className="flex items-center gap-1 bg-rose-950/90 text-rose-300 border border-rose-600/60 text-[9px] font-black px-1.5 py-0.2 rounded shadow-2xs uppercase">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                  Live
+                                </span>
+                              )}
+                              {(item.themeOverride || item.themeId) && (
+                                <span 
+                                  className="px-1 py-0.2 rounded text-[8px] font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-500/40 flex items-center gap-0.5 shrink-0 shadow-2xs" 
+                                  title="Custom Theme Applied"
+                                >
+                                  <Palette size={8} className="text-indigo-400" />
+                                  <span>Theme</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {viewMode !== 'summary' && (
+                            <div className="text-[10px] text-gray-400 truncate italic">
+                              {item.notes || badgeInfo.subLabel}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
 
                 {/* Quick Action: Edit Slide */}
                 <button
@@ -890,84 +1011,267 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                 </button>
               </div>
 
-              {/* Sub-Slides List when expanded */}
-              {item.isExpanded && slides.length > 0 && (
-                <div className="border-t border-[#1a1b20] bg-[#17181d] divide-y divide-[#1f2128]">
-                  {slides.map((slide, slideIdx) => {
-                    const isSlideLive = isItemLive && activeControlState?.activeSlideIndex === slideIdx;
-                    const isSlidePreview = isItemInPreview && previewSlideIndex === slideIdx;
+              {/* Sub-Slides / Expanded Format View */}
+              {item.isExpanded && (() => {
+                const badgeInfo = PresentationContentResolver.getFormatBadgeInfo(item);
+                const isVideo = badgeInfo.category === 'video';
+                const isAudio = badgeInfo.category === 'audio';
+                const isImage = badgeInfo.category === 'image';
+                const isPptx = badgeInfo.category === 'pptx';
 
-                    return (
-                      <div
-                        key={slide.id || slideIdx}
-                        onClick={() => setPreviewItem(item.id, slideIdx)}
-                        onDoubleClick={() => handleGoLive(item, slideIdx)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.currentTarget.classList.add('bg-cyan-900/40', 'border-y', 'border-cyan-500/50');
-                        }}
-                        onDragLeave={(e) => {
-                          e.currentTarget.classList.remove('bg-cyan-900/40', 'border-y', 'border-cyan-500/50');
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.currentTarget.classList.remove('bg-cyan-900/40', 'border-y', 'border-cyan-500/50');
-                          const assetJson = e.dataTransfer.getData('application/x-simpleworship-asset-bg');
-                          if (assetJson) {
-                            try {
-                              const asset = JSON.parse(assetJson);
-                              const slideBackgrounds = item.data?.slideBackgrounds || {};
-                              slideBackgrounds[slideIdx] = asset.url;
-                              
-                              const slideMediaData = item.data?.slideMedia || {};
-                              slideMediaData[slideIdx] = { url: asset.url, isVideo: asset.type === 'video' || asset.type === 'motion' };
-
-                              updateScheduleItem(item.id, {
-                                data: {
-                                  ...item.data,
-                                  slideBackgrounds,
-                                  slideMedia: slideMediaData
-                                }
-                              });
-                              window.dispatchEvent(
-                                new CustomEvent('simpleworship:notify', { 
-                                  detail: `Applied custom media to slide ${slideIdx + 1} of "${item.name}"!` 
-                                })
-                              );
-                            } catch (err) {}
-                          }
-                        }}
-                        className={`flex items-start gap-2 px-3 py-1.5 cursor-pointer transition-colors border-y border-transparent ${
-                          isSlideLive
-                            ? 'bg-blue-600/30 text-white font-medium shadow-sm'
-                            : isSlidePreview
-                            ? 'bg-cyan-950/40 text-cyan-200'
-                            : 'hover:bg-[#23262e] text-gray-300'
-                        }`}
-                      >
-                        <span className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold font-mono shrink-0 mt-0.5 ${
-                          isSlideLive ? 'bg-blue-500 text-white' : 'bg-[#2b2e37] text-gray-400'
-                        }`}>
-                          {slideIdx + 1}
+                // 1. VIDEO PREVIEW BAR
+                if (isVideo) {
+                  const vUrl = item.data?.url || item.customBackgroundUrl;
+                  return (
+                    <div className="border-t border-[#1a1b20] bg-[#12141a] p-2 flex items-center gap-3">
+                      <div className="w-24 h-14 rounded bg-black relative overflow-hidden shrink-0 border border-cyan-800/40 flex items-center justify-center">
+                        {vUrl ? (
+                          <video
+                            src={vUrl}
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover pointer-events-none opacity-90"
+                          />
+                        ) : (
+                          <Film size={20} className="text-cyan-400" />
+                        )}
+                        <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded text-[7px] font-mono font-bold bg-black/80 text-cyan-300">
+                          {badgeInfo.badgeLabel}
                         </span>
-
-                        <div className="flex-1 min-w-0">
-                          {slide.title && (
-                            <div className="text-[10px] font-bold text-indigo-300 truncate mb-0.5">
-                              {slide.title}
-                            </div>
-                          )}
-                          <p className="text-[10px] leading-tight line-clamp-2 text-gray-300 whitespace-pre-line font-sans">
-                            {slide.text}
-                          </p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-semibold text-gray-200 truncate">
+                          {item.name}
+                        </div>
+                        <div className="text-[9px] text-gray-400 truncate mt-0.5">
+                          {item.data?.sourceFileName || `${badgeInfo.badgeLabel} Video Asset`}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={() => handleGoLive(item, 0)}
+                            className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-xs transition-colors"
+                          >
+                            <Play size={10} className="fill-current" />
+                            <span>Go Live</span>
+                          </button>
+                          <button
+                            onClick={() => setPreviewItem(item.id, 0)}
+                            className="px-2 py-0.5 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[10px] font-medium transition-colors"
+                          >
+                            Preview
+                          </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
+                  );
+                }
+
+                // 2. AUDIO AUDITIONING BAR
+                if (isAudio) {
+                  const aUrl = item.data?.url;
+                  const isAuditioning = previewingAudioItemId === item.id;
+                  return (
+                    <div className="border-t border-purple-900/30 bg-[#161222] p-2.5 flex items-center gap-3">
+                      <button
+                        onClick={() => toggleAudioPreview(item.id, aUrl || '')}
+                        disabled={!aUrl}
+                        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-md transition-all active:scale-95 cursor-pointer ${
+                          isAuditioning 
+                            ? 'bg-purple-500 text-white ring-2 ring-purple-300' 
+                            : 'bg-purple-700 hover:bg-purple-600 text-white'
+                        }`}
+                        title={isAuditioning ? 'Pause Audition' : 'Play Audition'}
+                      >
+                        {isAuditioning ? <Pause size={14} /> : <Play size={14} className="fill-current ml-0.5" />}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-purple-950 text-purple-300 border border-purple-600/50 uppercase">
+                            {badgeInfo.badgeLabel}
+                          </span>
+                          <span className="text-[11px] font-semibold text-gray-200 truncate">
+                            {item.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1 text-[9px] text-purple-300/70 font-mono">
+                          {isAuditioning ? (
+                            <span className="flex items-center gap-1 text-purple-300 font-semibold animate-pulse">
+                              <Volume2 size={10} /> Auditioning Audio...
+                            </span>
+                          ) : (
+                            <span>Click play to audition track</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleGoLive(item, 0)}
+                        className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-xs transition-colors shrink-0"
+                      >
+                        <Play size={10} className="fill-current" />
+                        <span>Go Live</span>
+                      </button>
+                    </div>
+                  );
+                }
+
+                // 3. IMAGE PREVIEW BAR
+                if (isImage) {
+                  const imgUrl = item.customBackgroundUrl || item.data?.thumbnailUrl || item.data?.url;
+                  return (
+                    <div className="border-t border-emerald-900/30 bg-[#111815] p-2 flex items-center gap-3">
+                      <div className="w-24 h-14 rounded bg-black relative overflow-hidden shrink-0 border border-emerald-800/40 flex items-center justify-center">
+                        {imgUrl ? (
+                          <img
+                            src={imgUrl}
+                            alt={item.name}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <ImageIcon size={20} className="text-emerald-400" />
+                        )}
+                        <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded text-[7px] font-mono font-bold bg-black/80 text-emerald-300">
+                          {badgeInfo.badgeLabel}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-semibold text-gray-200 truncate">
+                          {item.name}
+                        </div>
+                        <div className="text-[9px] text-gray-400 truncate mt-0.5">
+                          {item.data?.sourceFileName || `${badgeInfo.badgeLabel} Graphic`}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={() => handleGoLive(item, 0)}
+                            className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 shadow-xs transition-colors"
+                          >
+                            <Play size={10} className="fill-current" />
+                            <span>Go Live</span>
+                          </button>
+                          <button
+                            onClick={() => setPreviewItem(item.id, 0)}
+                            className="px-2 py-0.5 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[10px] font-medium transition-colors"
+                          >
+                            Preview
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 4. PRESENTATION / PPT / PPTX or MULTI-SLIDE LIST
+                if (slides.length > 0) {
+                  return (
+                    <div className="border-t border-[#1a1b20] bg-[#17181d] divide-y divide-[#1f2128]">
+                      {slides.map((slide, slideIdx) => {
+                        const isSlideLive = isItemLive && activeControlState?.activeSlideIndex === slideIdx;
+                        const isSlidePreview = isItemInPreview && previewSlideIndex === slideIdx;
+
+                        return (
+                          <div
+                            key={slide.id || slideIdx}
+                            onClick={() => setPreviewItem(item.id, slideIdx)}
+                            onDoubleClick={() => handleGoLive(item, slideIdx)}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.currentTarget.classList.add('bg-cyan-900/40', 'border-y', 'border-cyan-500/50');
+                            }}
+                            onDragLeave={(e) => {
+                              e.currentTarget.classList.remove('bg-cyan-900/40', 'border-y', 'border-cyan-500/50');
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              e.currentTarget.classList.remove('bg-cyan-900/40', 'border-y', 'border-cyan-500/50');
+                              const assetJson = e.dataTransfer.getData('application/x-simpleworship-asset-bg');
+                              if (assetJson) {
+                                try {
+                                  const asset = JSON.parse(assetJson);
+                                  const slideBackgrounds = item.data?.slideBackgrounds || {};
+                                  slideBackgrounds[slideIdx] = asset.url;
+                                  
+                                  const slideMediaData = item.data?.slideMedia || {};
+                                  slideMediaData[slideIdx] = { url: asset.url, isVideo: asset.type === 'video' || asset.type === 'motion' };
+
+                                  updateScheduleItem(item.id, {
+                                    data: {
+                                      ...item.data,
+                                      slideBackgrounds,
+                                      slideMedia: slideMediaData
+                                    }
+                                  });
+                                  window.dispatchEvent(
+                                    new CustomEvent('simpleworship:notify', { 
+                                      detail: `Applied custom media to slide ${slideIdx + 1} of "${item.name}"!` 
+                                    })
+                                  );
+                                } catch (err) {}
+                              }
+                            }}
+                            className={`flex items-start gap-2.5 px-3 py-1.5 cursor-pointer transition-colors border-y border-transparent ${
+                              isSlideLive
+                                ? 'bg-blue-600/30 text-white font-medium shadow-sm'
+                                : isSlidePreview
+                                ? 'bg-cyan-950/40 text-cyan-200'
+                                : 'hover:bg-[#23262e] text-gray-300'
+                            }`}
+                          >
+                            {/* Slide Number / Thumbnail */}
+                            {isPptx ? (
+                              <div className="w-10 h-7 rounded-xs bg-black border border-[#30333d] relative overflow-hidden flex items-center justify-center shrink-0">
+                                {slide.backgroundUrl ? (
+                                  <img
+                                    src={slide.backgroundUrl}
+                                    alt={`Slide ${slideIdx + 1}`}
+                                    referrerPolicy="no-referrer"
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-full h-full flex items-center justify-center text-[8px] font-mono font-bold text-amber-300"
+                                    style={{ background: slide.backgroundColor || '#1e293b' }}
+                                  >
+                                    {slideIdx + 1}
+                                  </div>
+                                )}
+                                <span className={`absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[7px] font-mono font-bold ${
+                                  isSlideLive ? 'bg-blue-600 text-white' : 'bg-black/80 text-gray-300'
+                                }`}>
+                                  {slideIdx + 1}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold font-mono shrink-0 mt-0.5 ${
+                                isSlideLive ? 'bg-blue-500 text-white' : 'bg-[#2b2e37] text-gray-400'
+                              }`}>
+                                {slideIdx + 1}
+                              </span>
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              {slide.title && (
+                                <div className="text-[10px] font-bold text-indigo-300 truncate mb-0.5">
+                                  {slide.title}
+                                </div>
+                              )}
+                              <p className="text-[10px] leading-tight line-clamp-2 text-gray-300 whitespace-pre-line font-sans">
+                                {slide.text}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
             </div>
 
             {/* Insertion line indicator below item */}

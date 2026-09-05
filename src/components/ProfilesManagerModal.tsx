@@ -29,7 +29,7 @@ export default function ProfilesManagerModal({ onClose }: { onClose: () => void 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-[100] p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-[99999] p-4 animate-in fade-in duration-150">
       <div className="bg-[#1e2128] border border-[#2d313a] rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d313a] bg-[#1a1d24]">
           <h2 className="text-lg font-semibold text-gray-100">Profiles Manager</h2>

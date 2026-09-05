@@ -46,7 +46,7 @@ export default function AlertModal({ onClose }: AlertModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div className="bg-[#1c1f26] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-4 py-3 bg-[#242833] border-b border-[#181a20] flex items-center justify-between">

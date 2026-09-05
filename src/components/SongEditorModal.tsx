@@ -610,7 +610,7 @@ export default function SongEditorModal({
   }
 
   return (
-    <div className={`fixed inset-0 z-50 bg-black/75 flex items-center justify-center select-none animate-in fade-in duration-150 ${isMaximized ? 'p-0' : 'p-2'}`}>
+    <div className={`fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center select-none animate-in fade-in duration-150 ${isMaximized ? 'p-0' : 'p-2'}`}>
       <div className={`bg-[#1f2229] border border-[#363a47] shadow-2xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 ${
         isMaximized ? 'w-full h-full rounded-none' : 'w-full max-w-7xl h-[94vh] rounded-md'
       }`}>

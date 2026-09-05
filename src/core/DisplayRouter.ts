@@ -20,10 +20,22 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
     
     // Support matching display names like "Monitor 2" vs "disp-2" or "display-2"
     if (raw.replace(/\s+/g, '') === target.replace(/\s+/g, '')) return true;
-    if (raw.includes('monitor 2') && (target.includes('2') || target.includes('secondary'))) return true;
-    if (raw.includes('monitor 3') && target.includes('3')) return true;
-    if (target.includes('monitor 2') && (raw.includes('2') || raw.includes('secondary'))) return true;
-    if (target.includes('monitor 3') && raw.includes('3')) return true;
+    if (raw.includes(target) || target.includes(raw)) return true;
+    
+    // STRICT index/positional matching to avoid large-id coincidences
+    // Only apply includes matching if the string actually names a display specifically
+    const isTargetPrimary = target.includes('primary') || target.includes('monitor-1') || target === 'monitor 1';
+    const isTarget2 = target.includes('monitor-2') || target === 'monitor 2' || target.includes('secondary') || target.includes('alternate');
+    const isTarget3 = target.includes('monitor-3') || target === 'monitor 3' || target.includes('foldback') || target.includes('stage') || target.includes('tertiary');
+
+    const isRawPrimary = raw.includes('primary') || raw.includes('monitor-1') || raw === 'monitor 1';
+    const isRaw2 = raw.includes('monitor-2') || raw === 'monitor 2' || raw.includes('secondary') || raw.includes('alternate');
+    const isRaw3 = raw.includes('monitor-3') || raw === 'monitor 3' || raw.includes('foldback') || raw.includes('stage') || raw.includes('tertiary');
+
+    if (isTargetPrimary && isRawPrimary) return true;
+    if (isTarget2 && isRaw2) return true;
+    if (isTarget3 && isRaw3) return true;
+
     return false;
   });
 }

@@ -70,7 +70,7 @@ export default function TargetSelectionModal() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div className="bg-[#181a21] border border-[#2e3342] rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Modal Header */}

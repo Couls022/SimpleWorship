@@ -28,6 +28,7 @@ import RouteConfigModal from '../RouteConfigModal';
 import { PresentationCore } from '../../core/PresentationCore';
 import { ThemeEngine } from '../../core/ThemeEngine';
 import { PresentationContentResolver } from '../../core/PresentationContentResolver';
+import { processDroppedFileList } from '../../utils/fileDropHandler';
 
 interface FixedLiveDisplayProps {
   forcedGroupId?: string;
@@ -51,6 +52,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Sync fullscreen state & listen for in-app projector events
   React.useEffect(() => {
@@ -190,7 +192,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
     >
       {/* Top Header Bar for Fixed Live Output Display */}
       <div className="h-8 flex items-center justify-between px-2.5 shrink-0 bg-gradient-to-r from-[#171a23] via-[#1d212d] to-[#171a23] border-b border-[#292d3b] z-40">
-        {/* Left: Indicator + Title */}
+        {/* Left: Indicator + Status Title */}
         <div className="flex items-center gap-2 min-w-0">
           {/* Pulsing Live LED Indicator */}
           <div className="flex items-center gap-1.5 shrink-0">
@@ -252,7 +254,81 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
       {isConfigOpen && <RouteConfigModal groupId={effectiveGroupId} onClose={() => setIsConfigOpen(false)} />}
 
       {/* Main Screen Canvas Frame */}
-      <div className="flex-1 w-full h-full min-h-0 bg-[#07080b] relative flex items-center justify-center overflow-hidden p-2">
+      <div 
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!isDraggingOver) setIsDraggingOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setIsDraggingOver(false);
+        }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDraggingOver(false);
+
+          // 1. Check if OS files were dropped (Images, Audio, Video, PPTX, PPT)
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const dropResult = await processDroppedFileList(e.dataTransfer.files);
+            if (dropResult.schedule) {
+              store.setActiveSchedule(dropResult.schedule);
+              return;
+            }
+            if (dropResult.items && dropResult.items.length > 0) {
+              for (const item of dropResult.items) {
+                store.addScheduleItem(item);
+              }
+              const targetItem = dropResult.items[0];
+              store.goLiveItem(targetItem.id, 0, effectiveGroupId, targetItem);
+              store.setGroupState(effectiveGroupId, {
+                activeItemId: targetItem.id,
+                activeSlideIndex: 0,
+                isBlack: false,
+                isClear: false,
+              });
+              window.dispatchEvent(
+                new CustomEvent('simpleworship:notify', {
+                  detail: `Projecting LIVE on ${activeGroup?.name || 'Display'}: "${targetItem.name}"!`
+                })
+              );
+              return;
+            }
+          }
+
+          // 2. Internal JSON / item drop
+          const rawJson = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('application/x-simpleworship-item');
+          if (rawJson) {
+            try {
+              const payload = JSON.parse(rawJson);
+              if (payload && payload.item) {
+                const item = payload.item;
+                if (payload.source !== 'schedule') {
+                  store.addScheduleItem(item);
+                }
+                store.goLiveItem(item.id, 0, effectiveGroupId, item);
+                store.setGroupState(effectiveGroupId, {
+                  activeItemId: item.id,
+                  activeSlideIndex: 0,
+                  isBlack: false,
+                  isClear: false,
+                });
+                window.dispatchEvent(
+                  new CustomEvent('simpleworship:notify', {
+                    detail: `Projecting LIVE on ${activeGroup?.name || 'Display'}: "${item.name}"!`
+                  })
+                );
+              }
+            } catch (err) {
+              console.error('Failed to parse dropped item', err);
+            }
+          }
+        }}
+        className="flex-1 w-full h-full min-h-0 bg-[#07080b] relative flex items-center justify-center overflow-hidden p-2"
+      >
         {/* Aspect-Ratio Box containing the MonitorPreviewCanvas */}
         <div className="w-full h-full relative rounded-lg border border-[#1d212d] overflow-hidden shadow-2xl bg-black flex items-center justify-center">
           <MonitorPreviewCanvas 
@@ -260,6 +336,15 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             showResolutionTag={false}
             className="w-full h-full"
           />
+
+          {/* Drag & Drop Live Overlay */}
+          {isDraggingOver && (
+            <div className="absolute inset-0 bg-cyan-950/85 backdrop-blur-[2px] z-40 flex flex-col items-center justify-center text-cyan-200 border-2 border-dashed border-cyan-400 p-4 text-center pointer-events-none animate-in fade-in duration-150">
+              <Tv size={42} className="text-cyan-400 mb-2 animate-bounce" />
+              <span className="text-sm font-black uppercase tracking-wider text-white">Drop to Go Live on Display</span>
+              <span className="text-xs text-cyan-300 mt-1">Directly projects to {activeGroup?.name || 'Display Output'}</span>
+            </div>
+          )}
 
           {/* Mute Overlays for clear operator feedback */}
           {isBlack && (

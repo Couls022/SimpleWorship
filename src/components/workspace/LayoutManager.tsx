@@ -12,7 +12,6 @@ import SchedulePanel from '../SchedulePanel';
 import LivePanel from '../LivePanel';
 import FixedLiveDisplay from './FixedLiveDisplay';
 import BottomModuleBar from './BottomModuleBar';
-import ResourcesPanel from '../ResourcesPanel';
 import { Song, PresentationItem } from '../../types';
 
 export interface LayoutManagerProps {
@@ -125,42 +124,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative w-full h-full bg-[#101217]" key={layoutKey}>
       {/* Main Workspace Area */}
       <div className="flex-1 min-h-0 w-full overflow-hidden flex">
-        {isResourcesDocked ? (
-          <PanelGroup 
-            direction="vertical" 
-            autoSaveId="simpleworship-main-workspace-vertical-split-v2" 
-            className="h-full w-full"
-          >
-            {/* Top Workspace Section (Split horizontally) */}
-            <Panel id="vertical-top-pane" defaultSize={65} minSize={30}>
-              <div className="h-full w-full overflow-hidden flex">
-                {horizontalWorkspaceContent}
-              </div>
-            </Panel>
-            
-            <ResizeHandle direction="vertical" />
-            
-            {/* Bottom Section: Docked Resources Drawer */}
-            <Panel 
-              id="vertical-bottom-pane" 
-              defaultSize={35} 
-              minSize={15}
-              collapsible={true}
-              onResize={(size) => updatePanelSize('resources', size)}
-              onCollapse={() => updatePanelCollapsed('resources', true)}
-              onExpand={() => updatePanelCollapsed('resources', false)}
-            >
-              <div className="h-full w-full overflow-hidden flex">
-                <ResourcesPanel 
-                  onOpenNewSong={onOpenNewSong}
-                  onEditSong={onEditSong}
-                />
-              </div>
-            </Panel>
-          </PanelGroup>
-        ) : (
-          horizontalWorkspaceContent
-        )}
+        {horizontalWorkspaceContent}
       </div>
 
       {/* 

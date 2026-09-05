@@ -119,7 +119,19 @@ export default function App() {
         });
       }
 
+      // Global dragover & drop handler to prevent browser navigation when dropping files outside drop zones
+      const preventGlobalDrop = (e: DragEvent) => {
+        e.preventDefault();
+      };
+      window.addEventListener('dragover', preventGlobalDrop);
+      window.addEventListener('drop', preventGlobalDrop);
+
       setIsReady(true);
+
+      return () => {
+        window.removeEventListener('dragover', preventGlobalDrop);
+        window.removeEventListener('drop', preventGlobalDrop);
+      };
     }
     
     init();

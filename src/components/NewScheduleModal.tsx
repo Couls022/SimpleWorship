@@ -109,7 +109,7 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
         className="w-full max-w-2xl bg-[#1c1e24] border border-[#2d313c] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}

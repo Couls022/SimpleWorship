@@ -255,7 +255,7 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
 
   return (
     <div 
-      className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-150"
+      className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-150"
       onClick={() => {
         if (playingAudioId && audioRef.current) {
           audioRef.current.pause();

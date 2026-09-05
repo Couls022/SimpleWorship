@@ -195,9 +195,33 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
             const label = scr.label || scr.name || `Monitor ${idx + 1}`;
             const w = scr.bounds?.width || 1920;
             const h = scr.bounds?.height || 1080;
-            const isSelectedForMain = localOptions.mainOutput.general.outputMonitor === label;
-            const isSelectedForAlt = localOptions.alternateOutput.outputMonitor === label;
-            const isSelectedForFoldback = localOptions.foldback.outputMonitor === label;
+            const isSelectedForMain = localOptions.mainOutput.general.outputMonitor === label || 
+              (localOptions.mainOutput.general.outputMonitor && (
+                localOptions.mainOutput.general.outputMonitor.toLowerCase().includes(label.toLowerCase()) ||
+                label.toLowerCase().includes(localOptions.mainOutput.general.outputMonitor.toLowerCase()) ||
+                (idx === 0 && localOptions.mainOutput.general.outputMonitor.toLowerCase().includes('primary'))
+              ));
+              
+            const isSelectedForAlt = localOptions.alternateOutput.outputMonitor === label ||
+              (localOptions.alternateOutput.outputMonitor && (
+                localOptions.alternateOutput.outputMonitor.toLowerCase().includes(label.toLowerCase()) ||
+                label.toLowerCase().includes(localOptions.alternateOutput.outputMonitor.toLowerCase()) ||
+                (idx === 1 && (
+                  localOptions.alternateOutput.outputMonitor.toLowerCase().includes('monitor 2') ||
+                  localOptions.alternateOutput.outputMonitor.toLowerCase().includes('secondary')
+                ))
+              ));
+              
+            const isSelectedForFoldback = localOptions.foldback.outputMonitor === label ||
+              (localOptions.foldback.outputMonitor && (
+                localOptions.foldback.outputMonitor.toLowerCase().includes(label.toLowerCase()) ||
+                label.toLowerCase().includes(localOptions.foldback.outputMonitor.toLowerCase()) ||
+                (idx === 2 && (
+                  localOptions.foldback.outputMonitor.toLowerCase().includes('monitor 3') ||
+                  localOptions.foldback.outputMonitor.toLowerCase().includes('stage') ||
+                  localOptions.foldback.outputMonitor.toLowerCase().includes('foldback')
+                ))
+              ));
             
             const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
             const divisor = gcd(w, h);
@@ -396,7 +420,7 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-3 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-3 animate-in fade-in duration-150">
       <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[620px] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100">
         
         {/* Title Bar */}
@@ -739,252 +763,6 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                         />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Monitor Checking & Connection Alignment Checker */}
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-4 space-y-4">
-                    <div className="text-gray-200 font-bold border-b border-[#292c36] pb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Monitor size={15} className="text-cyan-400 animate-pulse" />
-                        <span>Monitor Checking & Connection Alignment</span>
-                      </div>
-                      <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-extrabold font-mono tracking-wider">
-                        ACTIVE STREAM DETECTOR
-                      </span>
-                    </div>
-
-                    <div className="text-[11px] text-gray-400 leading-relaxed">
-                      <strong>Rearrange your displays:</strong> Click on any display box below to assign it as the Main Output screen. The system will automatically map its exact physical coordinate bounds and optimal resolution to prevent screen layout cut-offs.
-                    </div>
-
-                    {/* Windows-style Visual Arrangement Stage */}
-                    <div className="relative w-full h-[150px] bg-[#0c0d11] border border-[#232631] rounded-lg p-3 overflow-hidden flex items-center justify-center" style={{
-                      backgroundImage: 'radial-gradient(circle, #222530 1px, transparent 1px)',
-                      backgroundSize: '12px 12px'
-                    }}>
-                      {(() => {
-                        const currentScreens = screens || [];
-
-                        if (currentScreens.length === 0) {
-                          return (
-                            <div className="flex flex-col items-center justify-center text-center p-4 text-gray-400">
-                              <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mb-2" />
-                              <span className="text-xs font-semibold text-gray-300">Auto-Detecting Connected Monitors...</span>
-                              <span className="text-[10px] text-gray-500 mt-1">Please ensure display drivers are active.</span>
-                            </div>
-                          );
-                        }
-
-                        // Compute screen bounds
-                        let minX = Infinity, minY = Infinity;
-                        let maxX = -Infinity, maxY = -Infinity;
-
-                        currentScreens.forEach(scr => {
-                          const x = scr.bounds?.x ?? 0;
-                          const y = scr.bounds?.y ?? 0;
-                          const w = scr.bounds?.width ?? 1920;
-                          const h = scr.bounds?.height ?? 1080;
-
-                          if (x < minX) minX = x;
-                          if (y < minY) minY = y;
-                          if (x + w > maxX) maxX = x + w;
-                          if (y + h > maxY) maxY = y + h;
-                        });
-
-                        const totalWidth = maxX - minX || 1;
-                        const totalHeight = maxY - minY || 1;
-
-                        // Canvas scale factor
-                        const containerW = 400;
-                        const containerH = 130;
-                        const scale = Math.min((containerW - 40) / totalWidth, (containerH - 40) / totalHeight);
-
-                        const offsetX = (containerW - totalWidth * scale) / 2;
-                        const offsetY = (containerH - totalHeight * scale) / 2;
-
-                        return currentScreens.map((scr, idx) => {
-                          const x = scr.bounds?.x ?? 0;
-                          const y = scr.bounds?.y ?? 0;
-                          const w = scr.bounds?.width ?? 1920;
-                          const h = scr.bounds?.height ?? 1080;
-
-                          const leftPos = (x - minX) * scale + offsetX;
-                          const topPos = (y - minY) * scale + offsetY;
-                          const widthPos = w * scale;
-                          const heightPos = h * scale;
-
-                          const label = scr.label || scr.name || `Monitor ${idx + 1}`;
-                          const isSelected = localOptions.mainOutput.general.outputMonitor === label;
-                          const isPrimary = scr.isPrimary;
-
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                updateMainGeneral({
-                                  outputMonitor: label,
-                                  position: { left: x, top: y, width: w, height: h }
-                                });
-                                window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-                                  detail: `Mapped worship display to ${label} (${w}x${h}) at [X:${x}, Y:${y}]`
-                                }));
-                              }}
-                              style={{
-                                left: `${(leftPos / containerW) * 100}%`,
-                                top: `${(topPos / containerH) * 100}%`,
-                                width: `${(widthPos / containerW) * 100}%`,
-                                height: `${(heightPos / containerH) * 100}%`
-                              }}
-                              className={`absolute border rounded-lg flex flex-col items-center justify-center transition-all duration-200 select-none ${
-                                isSelected
-                                  ? 'border-cyan-500 bg-cyan-950/40 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-2 ring-cyan-500/30'
-                                  : 'border-[#2d313c] bg-[#16171d]/90 text-gray-500 hover:border-gray-500 hover:text-gray-300'
-                              }`}
-                            >
-                              <span className="text-3xl font-black font-mono tracking-tight leading-none">
-                                {idx + 1}
-                              </span>
-                              <div className="text-[8px] font-bold tracking-wider mt-1 px-1 py-0.5 rounded bg-black/40 text-gray-300 max-w-[90%] truncate">
-                                {isPrimary ? 'Primary' : `Screen ${idx + 1}`}
-                              </div>
-                            </button>
-                          );
-                        });
-                      })()}
-                    </div>
-
-                    {/* Web Browser Notice Helper */}
-                    {!(window.electronAPI && window.electronAPI.isElectron) && (
-                      <div className="text-[10px] bg-slate-900/40 border border-slate-800/50 rounded px-2.5 py-1.5 text-gray-400 leading-normal">
-                        💡 <strong>Running in Browser Preview:</strong> Real-time dual display arrangements, physical driver names, and hardware brands are fully auto-scanned when running inside the native SimpleWorship Windows application.
-                      </div>
-                    )}
-
-                    {/* Identify & Detect Action Controls */}
-                    <div className="flex gap-2.5">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          window.dispatchEvent(new CustomEvent('simpleworship:identify-displays'));
-                          
-                          // Broadcast to other virtual projector screens/tabs
-                          try {
-                            broadcastStateChange({
-                              type: 'IDENTIFY_DISPLAYS',
-                              data: { timestamp: Date.now() }
-                            });
-                          } catch (e) {
-                            console.error("Failed to broadcast identify signal:", e);
-                          }
-
-                          if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
-                            try {
-                              await window.electronAPI.identifyDisplays();
-                            } catch (e) {
-                              console.error("Failed to run native identify displays:", e);
-                            }
-                          }
-                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-                            detail: 'Sent identify signals! Big overlay numbers will pop up on your displays.'
-                          }));
-                        }}
-                        className="flex-1 py-2 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-bold rounded text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-950/40"
-                      >
-                        <Sparkles size={12} />
-                        <span>Identify Display Monitors</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (typeof refreshScreens === 'function') {
-                            await refreshScreens();
-                          }
-                          const activeCount = screens && screens.length > 0 ? screens.length : 2;
-                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-                            detail: `Hardware scan complete! Detected ${activeCount} display monitors.`
-                          }));
-                        }}
-                        className="py-2 px-4 bg-[#2a2d36] hover:bg-[#383d47] active:bg-[#1f2128] text-gray-200 border border-[#3e4350] font-bold rounded text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-                      >
-                        <RotateCcw size={12} />
-                        <span>Detect Monitors</span>
-                      </button>
-                    </div>
-
-                    {/* Detailed Alignment Checklist */}
-                    {(() => {
-                      const selectedLabel = localOptions.mainOutput.general.outputMonitor;
-                      const matchedScr = screens.find((s: any) => (s.label || s.name) === selectedLabel);
-                      
-                      const label = matchedScr?.label || matchedScr?.name || selectedLabel || 'Monitor 1 (Primary Desktop)';
-                      const w = matchedScr?.bounds?.width ?? localOptions.mainOutput.general.position.width ?? 1920;
-                      const h = matchedScr?.bounds?.height ?? localOptions.mainOutput.general.position.height ?? 1080;
-                      const x = matchedScr?.bounds?.x ?? localOptions.mainOutput.general.position.left ?? 0;
-                      const y = matchedScr?.bounds?.y ?? localOptions.mainOutput.general.position.top ?? 0;
-
-                      // Calculate Aspect Ratio string
-                      const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
-                      const divisor = gcd(w, h);
-                      const aspectStr = `${w / divisor}:${h / divisor}`;
-
-                      // Verify alignment: whether the output position equals the physical screen bounds
-                      const isAlignedWidth = localOptions.mainOutput.general.position.width === w;
-                      const isAlignedHeight = localOptions.mainOutput.general.position.height === h;
-                      const isAlignedLeft = localOptions.mainOutput.general.position.left === x;
-                      const isAlignedTop = localOptions.mainOutput.general.position.top === y;
-                      const isFullyAligned = isAlignedWidth && isAlignedHeight && isAlignedLeft && isAlignedTop;
-
-                      return (
-                        <div className="bg-[#121317] border border-[#2b2e3a] rounded-lg p-3 space-y-2 text-[11px]">
-                          <div className="flex items-center justify-between text-gray-400 font-semibold border-b border-[#1f2129] pb-1.5">
-                            <span>Selected Display Status:</span>
-                            <span className="text-cyan-400 font-bold truncate max-w-[180px]">{label}</span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-gray-300">
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-400">Resolution:</span>
-                              <span className="font-mono text-gray-100 font-semibold">{w} × {h}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-gray-400">Aspect Ratio:</span>
-                              <span className="font-mono text-indigo-400 font-semibold">{aspectStr}</span>
-                            </div>
-                            <div className="flex items-center justify-between col-span-2 border-t border-[#1a1b22] pt-1.5 mt-0.5">
-                              <span className="text-gray-400">Position Coordinates:</span>
-                              <span className="font-mono text-gray-100 font-semibold">Left: {x} px, Top: {y} px</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between mt-1 pt-1.5 border-t border-[#1a1b22]">
-                            <span className="text-gray-400">Alignment State:</span>
-                            {isFullyAligned ? (
-                              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                                <Check size={11} />
-                                <span>🟢 PERFECT ALIGNMENT (NO CUT-OFFS)</span>
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  updateMainGeneral({
-                                    position: { left: x, top: y, width: w, height: h }
-                                  });
-                                  window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-                                    detail: `Manually corrected alignment to ${w}x${h} at [X:${x}, Y:${y}]`
-                                  }));
-                                }}
-                                className="text-[10px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold transition-all flex items-center gap-1"
-                              >
-                                ⚠️ Sync Bounds Now
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
                 </div>
               )}

@@ -35,14 +35,27 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
     }
   }, [groupId]);
 
+  useEffect(() => {
+    // Automatically trigger visual display identification when entering 'Configure Output' mode
+    const triggerIdentify = async () => {
+      window.dispatchEvent(new CustomEvent('simpleworship:identify-displays'));
+      if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
+        try {
+          await window.electronAPI.identifyDisplays();
+        } catch (e) {
+          console.error("Auto identify displays failed:", e);
+        }
+      }
+    };
+    
+    const t = setTimeout(triggerIdentify, 200);
+    return () => clearTimeout(t);
+  }, []);
+
   if (!group) return null;
 
-  // Available real screens or fallback mock monitors
-  const availableDisplays = screens.length > 0 ? screens : [
-    { label: 'Monitor 1', isPrimary: true, width: 1920, height: 1080 },
-    { label: 'Monitor 2', isPrimary: false, width: 1366, height: 768 },
-    { label: 'Monitor 3', isPrimary: false, width: 1920, height: 1080 }
-  ];
+  // Available real screens
+  const availableDisplays = screens;
 
   const handleToggleDisplay = (dispObj: any) => {
     const label = dispObj.label || dispObj.name;
@@ -217,14 +230,32 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-bold text-gray-300">Display Targets</label>
-              {!permissionGranted && 'getScreenDetails' in window && (
-                <button 
-                  onClick={requestAccess}
-                  className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-1 rounded transition-colors"
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    window.dispatchEvent(new CustomEvent('simpleworship:identify-displays'));
+                    if (window.electronAPI && typeof window.electronAPI.identifyDisplays === 'function') {
+                      try {
+                        await window.electronAPI.identifyDisplays();
+                      } catch (e) {
+                        console.error("Failed to run native identify displays:", e);
+                      }
+                    }
+                  }}
+                  className="text-[10px] bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-600/50 text-cyan-300 hover:text-white px-2 py-0.5 rounded transition-all font-bold cursor-pointer"
                 >
-                  Detect Real Screens
+                  Identify Displays (1, 2, 3...)
                 </button>
-              )}
+                {!permissionGranted && 'getScreenDetails' in window && (
+                  <button 
+                    onClick={requestAccess}
+                    className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded transition-colors"
+                  >
+                    Detect Real Screens
+                  </button>
+                )}
+              </div>
             </div>
             
             <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
@@ -257,7 +288,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
             </div>
             
             <div className="flex items-center gap-2 mt-2">
-               <button onClick={() => setDisplayIds(availableDisplays.map(d => d.label))} className="text-[10px] text-indigo-400 hover:text-indigo-300">Select All</button>
+               <button onClick={() => setDisplayIds(availableDisplays.map(d => d.label || d.name || d.id))} className="text-[10px] text-indigo-400 hover:text-indigo-300">Select All</button>
                <span className="text-gray-600">|</span>
                <button onClick={() => setDisplayIds([])} className="text-[10px] text-gray-400 hover:text-gray-300">Clear All</button>
             </div>

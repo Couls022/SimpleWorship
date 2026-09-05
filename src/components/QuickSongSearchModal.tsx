@@ -95,7 +95,7 @@ export default function QuickSongSearchModal({ onClose }: QuickSongSearchModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/75 flex items-start justify-center pt-24 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-start justify-center pt-24 animate-in fade-in duration-150">
       <div 
         className="w-full max-w-2xl bg-[#1c1e24] border border-[#2d3039] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-top-10 zoom-in-95"
         onClick={(e) => e.stopPropagation()}

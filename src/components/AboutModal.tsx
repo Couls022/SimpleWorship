@@ -11,7 +11,7 @@ export default function AboutModal({ onClose }: AboutModalProps) {
   const store = useStore();
 
   return (
-    <div className="fixed inset-0 z-[120] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
         className="w-full max-w-lg bg-[#1a1c23] border border-[#353a4a] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 text-gray-200 select-none"
         onClick={(e) => e.stopPropagation()}

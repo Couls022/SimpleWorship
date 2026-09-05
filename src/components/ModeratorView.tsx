@@ -16,7 +16,6 @@ import TopToolbar from './TopToolbar';
 import LayoutManager from './workspace/LayoutManager';
 import SchedulePanel from './SchedulePanel';
 import LivePanel from './LivePanel';
-import ResourcesPanel from './ResourcesPanel';
 import MultiGroupPreviewBar from './MultiGroupPreviewBar';
 import FloatingPanel from './workspace/FloatingPanel';
 import StageMonitorContent from './workspace/StageMonitorContent';
@@ -405,6 +404,12 @@ export default function ModeratorView() {
         }}
       />
 
+      {/* System Status Bar */}
+      <SystemStatusBar 
+        onOpenDiagnostics={() => setIsDiagnosticsOpen(true)} 
+        onOpenShortcuts={() => setIsShortcutsOpen(true)} 
+      />
+
       {/* 3. Draggable / Floating Windows Layer */}
       <FloatingPanel id="schedule" icon={<Layers size={13} />}>
         <SchedulePanel 
@@ -471,19 +476,6 @@ export default function ModeratorView() {
 
       <FloatingPanel id="multiGroup" icon={<Monitor size={13} />}>
         <MultiGroupPreviewBar />
-      </FloatingPanel>
-
-      <FloatingPanel id="resources" icon={<FolderOpen size={13} />}>
-        <ResourcesPanel
-          onOpenNewSong={() => {
-            setEditingSong(null);
-            setIsSongEditorOpen(true);
-          }}
-          onEditSong={(song) => {
-            setEditingSong(song);
-            setIsSongEditorOpen(true);
-          }}
-        />
       </FloatingPanel>
 
       <FloatingPanel id="stageMonitor" icon={<Clock size={13} />}>

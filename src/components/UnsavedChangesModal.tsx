@@ -19,7 +19,7 @@ export default function UnsavedChangesModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 p-4 animate-in fade-in duration-150">
       <div className="bg-[#18191f] border border-[#2b2d38] rounded-xl shadow-2xl max-w-md w-full p-6 text-gray-200">
         <div className="flex items-start gap-4">
           <div className="p-3 bg-amber-500/10 rounded-full text-amber-400">

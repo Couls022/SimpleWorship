@@ -330,6 +330,11 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
   const slides: ParsedSlide[] = [];
 
   for (let sIdx = 0; sIdx < slideFiles.length; sIdx++) {
+    // Yield to the browser UI loop every 3 slides to eliminate UI freeze on large decks
+    if (sIdx > 0 && sIdx % 3 === 0) {
+      await new Promise(r => setTimeout(r, 0));
+    }
+
     const fileName = slideFiles[sIdx];
     const xmlString = await loadedZip.files[fileName].async('text');
     const xmlDoc = parser.parseFromString(xmlString, 'text/xml');

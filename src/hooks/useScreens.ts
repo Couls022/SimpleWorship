@@ -1,6 +1,62 @@
 import { useState, useEffect } from 'react';
 import { DisplayManager } from '../core/DisplayManager';
 
+function formatAndEnsureDisplays(displays: any[]) {
+  const formatted = displays.map((d, idx) => ({
+    label: d.name || d.label || `Monitor ${idx + 1}`,
+    name: d.name || d.label || `Monitor ${idx + 1}`,
+    isPrimary: d.isPrimary ?? (idx === 0),
+    id: d.id || `monitor-${idx + 1}`,
+    displayId: d.displayId || d.id || `monitor-${idx + 1}`,
+    bounds: d.bounds || { x: idx * 1920, y: 0, width: 1920, height: 1080 }
+  }));
+
+  // If there's only 1 screen detected (default in standard browsers),
+  // append Monitor 2 and Monitor 3 as virtual monitors so the user can easily test and configure multi-route projection.
+  if (formatted.length === 1) {
+    formatted.push({
+      label: 'Monitor 2',
+      name: 'Monitor 2',
+      isPrimary: false,
+      id: 'monitor-2',
+      displayId: 'monitor-2',
+      bounds: { x: 1920, y: 0, width: 1366, height: 768 }
+    });
+    formatted.push({
+      label: 'Monitor 3',
+      name: 'Monitor 3',
+      isPrimary: false,
+      id: 'monitor-3',
+      displayId: 'monitor-3',
+      bounds: { x: 3286, y: 0, width: 1920, height: 1080 }
+    });
+  } else if (formatted.length === 2) {
+    formatted.push({
+      label: 'Monitor 3',
+      name: 'Monitor 3',
+      isPrimary: false,
+      id: 'monitor-3',
+      displayId: 'monitor-3',
+      bounds: { x: 3286, y: 0, width: 1920, height: 1080 }
+    });
+  }
+
+  // Ensure standard names/labels are consistent
+  return formatted.map((scr) => {
+    if (scr.isPrimary) {
+      const baseName = scr.name || scr.label || 'Primary Display';
+      const hasPrimary = baseName.toLowerCase().includes('primary');
+      const finalName = hasPrimary ? baseName : `${baseName} (Primary)`;
+      return {
+        ...scr,
+        label: finalName,
+        name: finalName
+      };
+    }
+    return scr;
+  });
+}
+
 export function useScreens() {
   const [screens, setScreens] = useState<any[]>([]);
   const [permissionGranted, setPermissionGranted] = useState(false);
@@ -12,26 +68,11 @@ export function useScreens() {
       // 1. Electron or DisplayManager
       if (DisplayManager.isElectron() || typeof (window as any).electronAPI?.getDisplays === 'function') {
         const displays = await DisplayManager.getDisplays();
-        const formatted = displays.map((d) => ({
-          label: d.name,
-          isPrimary: d.isPrimary,
-          id: d.id,
-          displayId: d.displayId,
-          bounds: d.bounds
-        }));
-        setScreens(formatted);
+        setScreens(formatAndEnsureDisplays(displays));
         setPermissionGranted(true);
 
         cleanup = DisplayManager.listenToDisplays((updated) => {
-          setScreens(
-            updated.map((d) => ({
-              label: d.name,
-              isPrimary: d.isPrimary,
-              id: d.id,
-              displayId: d.displayId,
-              bounds: d.bounds
-            }))
-          );
+          setScreens(formatAndEnsureDisplays(updated));
         });
         return;
       }
@@ -47,35 +88,17 @@ export function useScreens() {
             } else {
               // Fallback to basic display
               const displays = await DisplayManager.getDisplays();
-              setScreens(displays.map(d => ({
-                label: d.name,
-                isPrimary: d.isPrimary,
-                id: d.id,
-                displayId: d.displayId,
-                bounds: d.bounds
-              })));
+              setScreens(formatAndEnsureDisplays(displays));
             }
           })
           .catch(async () => {
             const displays = await DisplayManager.getDisplays();
-            setScreens(displays.map(d => ({
-              label: d.name,
-              isPrimary: d.isPrimary,
-              id: d.id,
-              displayId: d.displayId,
-              bounds: d.bounds
-            })));
+            setScreens(formatAndEnsureDisplays(displays));
           });
       } else {
         // Fallback for other browsers (Firefox, Safari, etc.)
         const displays = await DisplayManager.getDisplays();
-        setScreens(displays.map(d => ({
-          label: d.name,
-          isPrimary: d.isPrimary,
-          id: d.id,
-          displayId: d.displayId,
-          bounds: d.bounds
-        })));
+        setScreens(formatAndEnsureDisplays(displays));
       }
     }
 
@@ -90,24 +113,16 @@ export function useScreens() {
     try {
       if (DisplayManager.isElectron()) {
         const displays = await DisplayManager.getDisplays();
-        setScreens(
-          displays.map((d) => ({
-            label: d.name,
-            isPrimary: d.isPrimary,
-            id: d.id,
-            displayId: d.displayId,
-            bounds: d.bounds
-          }))
-        );
+        setScreens(formatAndEnsureDisplays(displays));
         setPermissionGranted(true);
         return;
       }
 
       if ('getScreenDetails' in window) {
         const screenDetails = await (window as any).getScreenDetails();
-        setScreens(screenDetails.screens);
+        setScreens(formatAndEnsureDisplays(screenDetails.screens));
         screenDetails.addEventListener('screenschange', () => {
-          setScreens(screenDetails.screens);
+          setScreens(formatAndEnsureDisplays(screenDetails.screens));
         });
       }
     } catch (e) {
