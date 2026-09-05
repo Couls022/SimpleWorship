@@ -541,3 +541,11 @@ html.light.high-contrast .text-gray-400 {
   max-height: 100% !important;
   object-fit: contain !important;
 }
+
+/* PROJECTOR OPTIMIZATION FOR HARDWARE ACCELERATION */
+.projector-canvas {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
