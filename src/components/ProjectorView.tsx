@@ -511,41 +511,35 @@ function ProjectorLayer({
 
   useEffect(() => {
     let isMounted = true;
-    let createdBgUrl: string | null = null;
-    let createdAudioUrl: string | null = null;
     
-    const resolveUrl = async (url: string, contentId?: string): Promise<{ resolved: string, created: boolean }> => {
-      if (!url || !url.startsWith('blob:') || !contentId) return { resolved: url, created: false };
+    const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
+      if (!url || !url.startsWith('blob:') || !contentId) return url;
       try {
-        const { getDB } = await import('../db');
-        const db = await getDB();
-        const asset = await db.get('assets', contentId);
-        if (asset?.blob) return { resolved: URL.createObjectURL(asset.blob), created: true };
+        const { dbApi } = await import('../db');
+        // Fast path: try cache first
+        const cachedUrl = dbApi.getCachedUrl(contentId);
+        if (cachedUrl) return cachedUrl;
+        
+        // Slow path: hit IndexedDB
+        const asset = await dbApi.getAsset(contentId);
+        if (asset?.url) return asset.url; // Uses the globally cached ObjectURL
       } catch (e) {}
-      return { resolved: url, created: false };
+      return url;
     };
 
-    resolveUrl(backgroundUrl, activeItem?.contentId).then(res => {
+    resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
       if (isMounted) {
-        setLocalBackgroundUrl(res.resolved);
-        if (res.created) createdBgUrl = res.resolved;
-      } else if (res.created) {
-        URL.revokeObjectURL(res.resolved);
+        setLocalBackgroundUrl(resolved);
       }
     });
-    resolveUrl(audioSrc, activeItem?.contentId).then(res => {
+    resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
       if (isMounted) {
-        setLocalAudioSrc(res.resolved);
-        if (res.created) createdAudioUrl = res.resolved;
-      } else if (res.created) {
-        URL.revokeObjectURL(res.resolved);
+        setLocalAudioSrc(resolved);
       }
     });
 
     return () => { 
       isMounted = false; 
-      if (createdBgUrl) URL.revokeObjectURL(createdBgUrl);
-      if (createdAudioUrl) URL.revokeObjectURL(createdAudioUrl);
     };
   }, [backgroundUrl, audioSrc, activeItem?.contentId]);
 
@@ -644,7 +638,6 @@ function ProjectorLayer({
           {isVideo && (managedVideoSrc || videoSrc) ? (
             <video
               ref={videoRef}
-              key={managedVideoSrc || videoSrc}
               src={managedVideoSrc || videoSrc}
               autoPlay
               loop={presentationState.isVideoLooping ?? true}

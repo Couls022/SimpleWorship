@@ -1,5 +1,6 @@
 import { Asset, PresentationItem } from '../types';
 import { getDB } from '../db';
+import { dbApi } from '../db';
 
 export class MediaStreamController {
   private objectUrl: string | null = null;
@@ -17,8 +18,16 @@ export class MediaStreamController {
 
     try {
       if (sourceId) {
-        const db = await getDB();
-        const asset = await db.get('assets', sourceId);
+        // Fast path: Check the memory cache first to avoid IndexedDB latency
+        let resolvedUrl = dbApi.getCachedUrl(sourceId);
+        
+        if (!resolvedUrl) {
+          // Slow path: hit IndexedDB if not cached yet
+          const asset = await dbApi.getAsset(sourceId);
+          if (asset?.url) {
+             resolvedUrl = asset.url;
+          }
+        }
         
         // If the component unmounted or a new load was requested while fetching DB
         if (currentGen !== this.generation) {
@@ -26,9 +35,10 @@ export class MediaStreamController {
           return null;
         }
 
-        if (asset?.blob) {
+        if (resolvedUrl) {
           this.revokeCurrent();
-          this.objectUrl = URL.createObjectURL(asset.blob);
+          // We DO NOT revoke URLs from dbApi, since they are managed globally
+          this.objectUrl = resolvedUrl; 
           this.currentSourceId = sourceId;
 
           if (this.videoElement) {
@@ -36,15 +46,6 @@ export class MediaStreamController {
             this.videoElement.load();
           }
           return this.objectUrl;
-        } else if (asset?.url && !asset.url.startsWith('blob:')) {
-          // Fallback for remote URLs or non-blob assets
-          this.revokeCurrent();
-          this.currentSourceId = sourceId;
-          if (this.videoElement) {
-            this.videoElement.src = asset.url;
-            this.videoElement.load();
-          }
-          return asset.url;
         }
       }
       
@@ -105,10 +106,8 @@ export class MediaStreamController {
   }
 
   private revokeCurrent() {
-    if (this.objectUrl) {
-      URL.revokeObjectURL(this.objectUrl);
-      this.objectUrl = null;
-    }
+    // We NO LONGER revoke the objectUrl here because it is globally cached by dbApi
+    this.objectUrl = null;
     this.currentSourceId = null;
   }
 

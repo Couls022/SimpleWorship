@@ -38,6 +38,7 @@ interface SimpleWorshipDB extends DBSchema {
 }
 
 let dbPromise: Promise<IDBPDatabase<SimpleWorshipDB>> | null = null;
+const objectUrlCache = new Map<string, string>(); // Cache blob URLs
 
 export function getDB() {
   if (!dbPromise) {
@@ -115,6 +116,9 @@ export const dbApi = {
   },
   // Assets
   async addAsset(asset: Asset) {
+    if (asset.url && asset.url.startsWith('blob:')) {
+      objectUrlCache.set(asset.id, asset.url);
+    }
     const db = await getDB();
     await db.put('assets', asset);
   },
@@ -122,19 +126,30 @@ export const dbApi = {
     const db = await getDB();
     const asset = await db.get('assets', id);
     if (asset && asset.blob && asset.url && asset.url.startsWith('blob:')) {
-      asset.url = URL.createObjectURL(asset.blob);
+      if (!objectUrlCache.has(asset.id)) {
+        objectUrlCache.set(asset.id, URL.createObjectURL(asset.blob));
+      }
+      asset.url = objectUrlCache.get(asset.id)!;
       if (asset.thumbnailUrl && asset.thumbnailUrl.startsWith('blob:')) {
         asset.thumbnailUrl = asset.url;
       }
     }
     return asset;
   },
+  getCachedUrl(id: string): string | undefined {
+    return objectUrlCache.get(id);
+  },
   async getAllAssets() {
     const db = await getDB();
+    // Getting all assets can be slow if there are massive blobs.
+    // However, IndexedDB mostly returns references.
     const assets = await db.getAll('assets');
     return assets.map(a => {
       if (a.blob && a.url && a.url.startsWith('blob:')) {
-        a.url = URL.createObjectURL(a.blob);
+        if (!objectUrlCache.has(a.id)) {
+          objectUrlCache.set(a.id, URL.createObjectURL(a.blob));
+        }
+        a.url = objectUrlCache.get(a.id)!;
         if (a.thumbnailUrl && a.thumbnailUrl.startsWith('blob:')) {
           a.thumbnailUrl = a.url;
         }
@@ -143,6 +158,10 @@ export const dbApi = {
     });
   },
   async deleteAsset(id: string) {
+    if (objectUrlCache.has(id)) {
+      URL.revokeObjectURL(objectUrlCache.get(id)!);
+      objectUrlCache.delete(id);
+    }
     const db = await getDB();
     await db.delete('assets', id);
   },

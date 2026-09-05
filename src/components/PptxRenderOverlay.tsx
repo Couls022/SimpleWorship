@@ -208,6 +208,8 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
   );
 };
 
+const pptxBytesCache = new Map<string, Uint8Array>();
+
 export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = ({ fileBytes, contentId, activeSlideIndex, fallbackContent }) => {
   const [localBytes, setLocalBytes] = useState<Uint8Array | null>(null);
 
@@ -216,10 +218,16 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = ({ fileBytes,
     if (fileBytes && isValidPptxBinary(fileBytes)) {
       setLocalBytes(toValidPptxUint8Array(fileBytes));
     } else if (contentId) {
+      if (pptxBytesCache.has(contentId)) {
+        setLocalBytes(pptxBytesCache.get(contentId)!);
+        return;
+      }
       import('../db').then(({ getDB }) => {
         getDB().then(db => db.get('assets', contentId)).then(asset => {
-          if (isMounted && asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
-            setLocalBytes(toValidPptxUint8Array(asset.data.fileBytes));
+          if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
+            const bytes = toValidPptxUint8Array(asset.data.fileBytes);
+            pptxBytesCache.set(contentId, bytes);
+            if (isMounted) setLocalBytes(bytes);
           }
         }).catch(e => console.error('[PptxRenderOverlay] Error loading PPTX from DB', e));
       });
