@@ -228,9 +228,21 @@ export class DisplayManager {
   }
 
   /**
+   * Dedicated 1-to-1 Presentation Sender:
+   * Sends the presentation to strictly ONE target monitor, guaranteeing that
+   * only 1:1 presentation display is active and no stray displays are thrown.
+   */
+  static async sendPresentationToTarget(
+    groupId: string,
+    targetDisplayId?: string
+  ): Promise<{ success: boolean; status: ProjectorStatus; displayId?: string; conflict?: string | null; error?: string }> {
+    return this.openProjector(groupId, targetDisplayId);
+  }
+
+  /**
    * Synchronizes physical projector windows with current LIVE route and active control states.
-   * Uses DisplayRouter to deterministically resolve winning routes per physical monitor.
-   * Ensures idempotency: existing windows are reused and not duplicated.
+   * Enforces strict 1-to-1 presentation target display mapping so only the designated
+   * target monitor receives the presentation display.
    */
   static async syncPhysicalDisplays(
     outputGroups: OutputGroup[],
@@ -265,7 +277,7 @@ export class DisplayManager {
 
       try {
         if (typeof window.electronAPI.syncProjectorDisplays === 'function') {
-          await window.electronAPI.syncProjectorDisplays(assignmentList);
+          await (window.electronAPI.syncProjectorDisplays as any)(assignmentList);
         } else {
           for (const item of assignmentList) {
             if (item.groupId) {
@@ -279,7 +291,7 @@ export class DisplayManager {
         console.error('[DisplayManager] syncPhysicalDisplays electron error:', err);
       }
     } else if (typeof window !== 'undefined') {
-      // 2. Web Standalone / Preview environment
+      // 2. Web Standalone / Preview environment (1 is to 1 per physical monitor with active overlay)
       assignments.forEach((assignment, displayId) => {
         if (operatorBlockedDisplayIds.has(displayId)) return;
 

@@ -624,6 +624,8 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Manual trigger for resetLayout function
   const resetLayout = useCallback(() => {
     // Clear panel split caches from react-resizable-panels
+    localStorage.removeItem('simpleworship-main-workspace-3pane-v3');
+    localStorage.removeItem('simpleworship-main-workspace-3pane-v4');
     localStorage.removeItem('simpleworship-vertical-main-v2');
     localStorage.removeItem('simpleworship-horizontal-top-v2');
     localStorage.removeItem('simpleworship-horizontal-bottom-v2');

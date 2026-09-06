@@ -188,10 +188,10 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
   return (
     <section 
       id="fixed-live-display-container"
-      className="w-full h-full flex flex-col bg-[#101217] overflow-visible select-none text-gray-200 relative border-l border-[#262936]"
+      className="w-full h-full flex flex-col bg-[#0f1117] overflow-visible select-none text-gray-200 relative"
     >
       {/* Top Header Bar for Fixed Live Output Display */}
-      <div className="h-8 flex items-center justify-between px-2.5 shrink-0 bg-gradient-to-r from-[#171a23] via-[#1d212d] to-[#171a23] border-b border-[#292d3b] z-40">
+      <div className="h-9 flex items-center justify-between px-3 shrink-0 bg-[#151720] border-b border-[#222634] z-40">
         {/* Left: Indicator + Status Title */}
         <div className="flex items-center gap-2 min-w-0">
           {/* Pulsing Live LED Indicator */}
@@ -203,38 +203,57 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               isLive ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]' :
               'bg-gray-600'
             }`} />
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400 shrink-0 hidden min-[450px]:inline">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-400 shrink-0 hidden min-[450px]:inline">
               {isBlack ? 'BLACKOUT' : isClear ? 'CLEARED' : isLogo ? 'LOGO' : isLive ? 'LIVE DISPLAY' : 'STANDBY'}
             </span>
           </div>
         </div>
 
         {/* Right: Aspect Tag + Popout Projector + Fullscreen + Settings */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 overflow-hidden">
           {/* Aspect ratio tag */}
           <span 
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#171922] text-gray-400 border border-[#2c3142]"
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1b1e29] text-gray-300 border border-[#2b3042] shrink-0 hidden min-[540px]:inline-block"
             title={`Resolution Aspect: ${resInfo.aspectLabel} (${resInfo.width}×${resInfo.height})`}
           >
             {resInfo.aspectLabel}
           </span>
 
-          {/* Launch Fullscreen Projector Presentation Mode */}
+          {/* 1:1 Target Monitor Quick Tag */}
           <button
-            onClick={() => {
-              DisplayManager.openProjector(effectiveGroupId, activeGroup?.displayIds?.[0]);
-            }}
-            className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-600/50 text-cyan-300 hover:text-white transition-all text-[11px] font-bold cursor-pointer active:scale-95 shadow-xs"
-            title={`Open separate full hardware projector window for ${activeGroup?.name || 'this display'}`}
+            onClick={() => setIsConfigOpen(true)}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#151722] hover:bg-[#1f2230] border border-[#2a2e40] text-[10px] text-gray-300 transition-colors cursor-pointer shrink-0"
+            title="Current 1:1 Target Monitor (Click to change)"
           >
-            <MonitorUp size={12} className="text-cyan-400" />
-            <span className="hidden sm:inline">Projector</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-gray-400 hidden min-[560px]:inline">1:1 Target:</span>
+            <span className="font-mono text-cyan-300 font-semibold truncate max-w-[55px] min-[560px]:max-w-[85px]">
+              {activeGroup?.targetDisplayId || activeGroup?.displayIds?.[0] || 'Monitor 2'}
+            </span>
+          </button>
+
+          {/* Strict 1:1 Target Presentation Trigger */}
+          <button
+            onClick={async () => {
+              const targetDisp = activeGroup?.targetDisplayId || activeGroup?.displayIds?.[0] || 'Monitor 2';
+              await DisplayManager.sendPresentationToTarget(effectiveGroupId, targetDisp);
+              window.dispatchEvent(
+                new CustomEvent('simpleworship:notify', { 
+                  detail: `1:1 Presentation display sent to ${targetDisp}` 
+                })
+              );
+            }}
+            className="flex items-center gap-1 px-1.5 py-1 rounded bg-sky-950/90 hover:bg-sky-900 border border-sky-600/60 text-sky-200 hover:text-white transition-all text-[11px] font-semibold cursor-pointer active:scale-95 shadow-xs shrink-0"
+            title={`Send presentation strictly 1-to-1 to ${activeGroup?.targetDisplayId || activeGroup?.displayIds?.[0] || 'Monitor 2'}`}
+          >
+            <MonitorUp size={12} className="text-sky-400 shrink-0" />
+            <span className="hidden min-[580px]:inline">1:1 Target</span>
           </button>
 
           {/* Fullscreen Toggle */}
           <button
             onClick={handleToggleFullscreen}
-            className="p-1 rounded hover:bg-[#2a3040] text-gray-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
             title="Toggle Fullscreen Live Output Display (Esc to exit)"
           >
             <Maximize2 size={13} />
@@ -243,7 +262,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
           {/* Route Config */}
           <button
             onClick={() => setIsConfigOpen(true)}
-            className="p-1 rounded hover:bg-[#2a3040] text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
             title="Route Display Settings"
           >
             <Settings size={13} />

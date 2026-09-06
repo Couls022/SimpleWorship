@@ -156,11 +156,15 @@ export default function ModeratorView() {
       }, 2500);
     };
 
+    const handleOpenDiagnostics = () => setIsDiagnosticsOpen(true);
+
     window.addEventListener('simpleworship:notify', handleNotification);
     window.addEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
+    window.addEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
     return () => {
       window.removeEventListener('simpleworship:notify', handleNotification);
       window.removeEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
+      window.removeEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
     };
   }, [loadAllData, resetLayout]);
 

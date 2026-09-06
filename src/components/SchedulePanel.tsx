@@ -3,6 +3,7 @@ import {
   Plus, 
   Settings, 
   ChevronRight, 
+  ChevronLeft,
   ChevronDown, 
   GripVertical, 
   Trash2, 
@@ -653,25 +654,25 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
   };
 
   return (
-    <aside className="w-full flex flex-col bg-[#1f2127] border-r border-[#15161a] select-none h-full overflow-hidden text-gray-200 relative">
+    <aside className="w-full flex flex-col bg-[#0f1117] select-none h-full overflow-hidden text-gray-200 relative">
       {/* Sidebar Header & Tab Switcher */}
-      <div className="bg-[#282b33] border-b border-[#18191d] flex flex-col shrink-0">
-        <div className="h-8 flex items-center justify-between px-2">
+      <div className="bg-[#151720] border-b border-[#222634] flex flex-col shrink-0 z-40">
+        <div className="h-9 flex items-center justify-between px-2.5">
           {/* Tabs: Schedule, Scriptures, Songs, Presentations, Cameras - Evenly Divided (Grid 5-col) */}
-          <div className="grid grid-cols-5 gap-0.5 bg-[#171920] p-0.5 rounded border border-[#343946] flex-1 min-w-0 mr-1.5 shadow-inner">
+          <div className="grid grid-cols-5 gap-0.5 bg-[#101218] p-0.5 rounded-md border border-[#242938] flex-1 min-w-0 mr-1.5 shadow-inner">
             <button
               onClick={() => setActiveSidebarTab('schedule')}
-              title={`Schedule (${activeSchedule ? activeSchedule.items.length : 0})`}
-              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              title={`Schedule & Order of Service (${activeSchedule ? activeSchedule.items.length : 0} items)`}
+              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'schedule'
-                  ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+                  ? 'bg-sky-950/80 text-sky-300 border border-sky-500/50 shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <Calendar size={11} className="shrink-0" />
-              <span className="truncate hidden xl:inline">Schedule</span>
+              <Calendar size={12} className="shrink-0" />
+              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Sched</span>
               {activeSchedule && (
-                <span className="text-[9px] bg-[#2a2e3a] px-1 rounded-full text-gray-300 shrink-0 font-mono ml-0.5">
+                <span className="text-[9px] bg-[#1a1e28] px-1 rounded-full text-gray-300 shrink-0 font-mono ml-0.5">
                   {activeSchedule.items.length}
                 </span>
               )}
@@ -679,54 +680,54 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
 
             <button
               onClick={() => setActiveSidebarTab('scriptures')}
-              title="Scriptures"
-              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              title="Scriptures & Bibles"
+              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'scriptures'
-                  ? 'bg-amber-500/30 text-amber-300 border border-amber-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+                  ? 'bg-amber-950/80 text-amber-300 border border-amber-500/50 shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <BookOpen size={11} className="shrink-0" />
-              <span className="truncate hidden xl:inline">Scriptures</span>
+              <BookOpen size={12} className="shrink-0" />
+              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Bible</span>
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('songs')}
-              title="Songs"
-              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              title="Songs & Hymns Library"
+              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'songs'
-                  ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+                  ? 'bg-sky-950/80 text-sky-300 border border-sky-500/50 shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <Music size={11} className="shrink-0" />
-              <span className="truncate hidden xl:inline">Songs</span>
+              <Music size={12} className="shrink-0" />
+              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Songs</span>
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('presentations')}
-              title="Presentations"
-              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              title="Presentations & Slides"
+              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'presentations'
-                  ? 'bg-purple-600/30 text-purple-300 border border-purple-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+                  ? 'bg-purple-950/80 text-purple-300 border border-purple-500/50 shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <FileText size={11} className="shrink-0" />
-              <span className="truncate hidden xl:inline">Presentations</span>
+              <FileText size={12} className="shrink-0" />
+              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Slides</span>
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('cameras')}
-              title="Cameras"
-              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              title="Live Video & Camera Inputs"
+              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'cameras'
-                  ? 'bg-pink-600/30 text-pink-300 border border-pink-500/40 shadow-sm'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#252834]'
+                  ? 'bg-pink-950/80 text-pink-300 border border-pink-500/50 shadow-xs'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <Camera size={11} className="shrink-0" />
-              <span className="truncate hidden xl:inline">Cameras</span>
+              <Camera size={12} className="shrink-0" />
+              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Cams</span>
             </button>
           </div>
 
@@ -736,9 +737,9 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
               <div className="relative" ref={viewMenuRef}>
                 <button
                   onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
-                  className={`p-1 rounded hover:bg-[#383d47] transition-colors text-[10px] ${
+                  className={`p-1.5 rounded hover:bg-[#252937] transition-colors cursor-pointer ${
                     isViewMenuOpen 
-                      ? 'text-cyan-400 bg-[#323744]' 
+                      ? 'text-sky-400 bg-[#252937]' 
                       : 'text-gray-400 hover:text-white'
                   }`}
                   title="Schedule View Options"
@@ -805,6 +806,17 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
             >
               <Pin size={12} className={isDocked ? '' : 'rotate-45'} />
             </button>
+
+            {/* Collapse Sidebar Button */}
+            {isDocked && (
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('simpleworship:toggle-sidebar'))}
+                className="p-1 rounded hover:bg-[#383d47] text-gray-400 hover:text-sky-300 transition-colors"
+                title="Collapse Sidebar (Ctrl+\)"
+              >
+                <ChevronLeft size={12} />
+              </button>
+            )}
 
             {/* Schedule Settings dropdown */}
             {activeSidebarTab === 'schedule' && (

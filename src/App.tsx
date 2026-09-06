@@ -13,10 +13,9 @@ import { getDB, dbApi } from './db';
 import { readSwsFile } from './services/swsService';
 import { useStore } from './store/useStore';
 import { applyAppearanceSettings, initSystemThemeListener } from './utils/themeManager';
-import { v4 as uuidv4 } from 'uuid';
 
 export default function App() {
-  const [isReady, setIsReady] = useState(false);
+  const [isReady, setIsReady] = useState(true);
   
   const searchParams = new URLSearchParams(window.location.search);
   let hashQueryString = '';
@@ -27,6 +26,7 @@ export default function App() {
   } else if (window.location.hash.includes('remote')) {
     hashQueryString = window.location.hash.replace(/^#\/?remote\/?\??/, '');
   }
+
   const hashParams = new URLSearchParams(hashQueryString);
 
   const isProjector =
@@ -56,90 +56,86 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      // Init IndexedDB
-      await getDB();
-      
-      // Init Broadcast Channel
-      initSync(isProjector);
+      try {
+        // Init IndexedDB in background
+        getDB().catch((e) => console.warn('[App] DB init warning:', e));
+        
+        // Init Broadcast Channel
+        initSync(isProjector);
 
-      // Apply initial workspace theme & appearance
-      const initialOptions = useStore.getState().systemOptions;
-      applyAppearanceSettings(initialOptions?.appearance);
+        // Apply initial workspace theme & appearance
+        const initialOptions = useStore.getState().systemOptions;
+        applyAppearanceSettings(initialOptions?.appearance);
 
-      // Listen for OS system theme changes
-      const cleanupThemeListener = initSystemThemeListener(() => useStore.getState().systemOptions);
+        // Listen for OS system theme changes
+        initSystemThemeListener(() => useStore.getState().systemOptions);
 
-      // Subscribe to store updates to keep theme updated live
-      const unsubscribeStore = useStore.subscribe((state) => {
-        applyAppearanceSettings(state.systemOptions?.appearance);
-      });
+        // Subscribe to store updates to keep theme updated live
+        useStore.subscribe((state) => {
+          applyAppearanceSettings(state.systemOptions?.appearance);
+        });
 
-      // Listen for Native File Association Opening (.sws double-click on Windows)
-      if (typeof window !== 'undefined' && (window as any).electronAPI?.onFileAssociationOpened) {
-        (window as any).electronAPI.onFileAssociationOpened(async (filePath: string) => {
-          try {
-            if ((window as any).electronAPI.readSwsFromPath) {
-              const res = await (window as any).electronAPI.readSwsFromPath(filePath);
-              if (res && !res.canceled && res.data) {
-                const blob = new Blob([res.data]);
-                const fileName = filePath.split(/[/\\]/).pop() || 'Imported.sws';
-                const file = new File([blob], fileName);
-                const result = await readSwsFile(file);
-                if (result.schedule) {
-                  // Ingest bundled songs into offline database
-                  if (result.bundledSongs && result.bundledSongs.length > 0) {
-                    for (const song of result.bundledSongs) {
-                      await dbApi.addSong(song).catch(() => {});
+        // Listen for Native File Association Opening (.sws double-click on Windows)
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.onFileAssociationOpened) {
+          (window as any).electronAPI.onFileAssociationOpened(async (filePath: string) => {
+            try {
+              if ((window as any).electronAPI.readSwsFromPath) {
+                const res = await (window as any).electronAPI.readSwsFromPath(filePath);
+                if (res && !res.canceled && res.data) {
+                  const blob = new Blob([res.data]);
+                  const fileName = filePath.split(/[/\\]/).pop() || 'Imported.sws';
+                  const file = new File([blob], fileName);
+                  const result = await readSwsFile(file);
+                  if (result.schedule) {
+                    if (result.bundledSongs && result.bundledSongs.length > 0) {
+                      for (const song of result.bundledSongs) {
+                        await dbApi.addSong(song).catch(() => {});
+                      }
                     }
-                  }
-                  // Ingest bundled themes into offline database
-                  if (result.bundledThemes && result.bundledThemes.length > 0) {
-                    for (const thm of result.bundledThemes) {
-                      await dbApi.addTheme(thm).catch(() => {});
+                    if (result.bundledThemes && result.bundledThemes.length > 0) {
+                      for (const thm of result.bundledThemes) {
+                        await dbApi.addTheme(thm).catch(() => {});
+                      }
                     }
+                    await dbApi.addSchedule(result.schedule).catch(() => {});
+                    useStore.getState().setActiveSchedule(result.schedule);
+                    window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                      detail: `Opened Service: ${result.schedule.name}`
+                    }));
                   }
-                  await dbApi.addSchedule(result.schedule).catch(() => {});
-                  useStore.getState().setActiveSchedule(result.schedule);
-                  window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-                    detail: `Opened Service: ${result.schedule.name}`
-                  }));
                 }
               }
+            } catch (err) {
+              console.error('Failed to open SWS file from Windows association:', err);
             }
-          } catch (err) {
-            console.error('Failed to open SWS file from Windows association:', err);
-          }
-        });
+          });
+        }
+
+        // Listen for Native Display Hot-Plug changes
+        if (typeof window !== 'undefined' && (window as any).electronAPI?.onDisplayChanged) {
+          (window as any).electronAPI.onDisplayChanged(() => {
+            window.dispatchEvent(new CustomEvent('simpleworship:displays-changed'));
+          });
+        }
+
+        // Global dragover & drop handler to prevent browser navigation when dropping files outside drop zones
+        const preventGlobalDrop = (e: DragEvent) => {
+          e.preventDefault();
+        };
+        window.addEventListener('dragover', preventGlobalDrop);
+        window.addEventListener('drop', preventGlobalDrop);
+
+        return () => {
+          window.removeEventListener('dragover', preventGlobalDrop);
+          window.removeEventListener('drop', preventGlobalDrop);
+        };
+      } catch (err) {
+        console.error('[App] Init Error:', err);
       }
-
-      // Listen for Native Display Hot-Plug changes
-      if (typeof window !== 'undefined' && (window as any).electronAPI?.onDisplayChanged) {
-        (window as any).electronAPI.onDisplayChanged(() => {
-          window.dispatchEvent(new CustomEvent('simpleworship:displays-changed'));
-        });
-      }
-
-      // Global dragover & drop handler to prevent browser navigation when dropping files outside drop zones
-      const preventGlobalDrop = (e: DragEvent) => {
-        e.preventDefault();
-      };
-      window.addEventListener('dragover', preventGlobalDrop);
-      window.addEventListener('drop', preventGlobalDrop);
-
-      setIsReady(true);
-
-      return () => {
-        window.removeEventListener('dragover', preventGlobalDrop);
-        window.removeEventListener('drop', preventGlobalDrop);
-      };
     }
-    
+
     init();
   }, [isProjector]);
-
-  if (!isReady) {
-    return <div className="h-screen w-screen flex items-center justify-center bg-gray-900 text-white">Loading SimpleWorship...</div>;
-  }
 
   if (isProjector && groupId) {
     return <ProjectorView groupId={groupId} displayId={displayId} />;
@@ -155,4 +151,3 @@ export default function App() {
     </WorkspaceProvider>
   );
 }
-

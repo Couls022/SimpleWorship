@@ -8,13 +8,26 @@ function simpleWorshipApiPlugin(): Plugin {
     groupStates?: Record<string, any>;
     alert?: any;
     activeSchedule?: any;
+    activeControlGroupId?: string | null;
+    outputGroups?: any[];
+    themesList?: any[];
+    systemOptions?: any;
     lastUpdated: number;
   } = {
     lastUpdated: Date.now()
   };
 
+  let pendingCommands: Array<{
+    id: string;
+    action: string;
+    params?: any;
+    timestamp: number;
+  }> = [];
+
+  let serverSchedules: any[] = [];
+
   let serverLogs: Array<{ id: string; timestamp: string; level: 'info' | 'warn' | 'error'; message: string }> = [
-    { id: '1', timestamp: new Date().toISOString(), level: 'info', message: 'SimpleWorship Engine initialized' }
+    { id: '1', timestamp: new Date().toISOString(), level: 'info', message: 'SimpleWorship Engine initialized on port 3000' }
   ];
 
   function logServerEvent(level: 'info' | 'warn' | 'error', message: string) {
@@ -47,7 +60,8 @@ function simpleWorshipApiPlugin(): Plugin {
             uptime: process.uptime(),
             timestamp: Date.now(),
             memory: process.memoryUsage(),
-            nodeVersion: process.version
+            nodeVersion: process.version,
+            activeSchedule: currentServerState.activeSchedule?.name || 'Default Service'
           }));
           return;
         }
@@ -61,11 +75,13 @@ function simpleWorshipApiPlugin(): Plugin {
             uptimeSeconds: Math.floor(process.uptime()),
             lastStateUpdate: currentServerState.lastUpdated,
             serverLogs: serverLogs.slice(0, 30),
+            pendingCommandsCount: pendingCommands.length,
             capabilities: {
               broadcastChannel: true,
               indexedDbBridge: true,
               backupExport: true,
-              restSync: true
+              restSync: true,
+              remoteCommandQueue: true
             }
           }));
           return;
@@ -74,7 +90,8 @@ function simpleWorshipApiPlugin(): Plugin {
         if (pathname === '/api/sync/state' && req.method === 'GET') {
           res.end(JSON.stringify({
             success: true,
-            data: currentServerState
+            data: currentServerState,
+            pendingCommands: pendingCommands.slice(-10)
           }));
           return;
         }
@@ -85,18 +102,93 @@ function simpleWorshipApiPlugin(): Plugin {
           req.on('end', () => {
             try {
               const parsed = body ? JSON.parse(body) : {};
-              const { groupStates, alert, activeSchedule } = parsed;
+              const { groupStates, alert, activeSchedule, activeControlGroupId, outputGroups, themesList, systemOptions } = parsed;
               currentServerState = {
                 groupStates: groupStates || currentServerState.groupStates,
                 alert: alert || currentServerState.alert,
                 activeSchedule: activeSchedule || currentServerState.activeSchedule,
+                activeControlGroupId: activeControlGroupId !== undefined ? activeControlGroupId : currentServerState.activeControlGroupId,
+                outputGroups: outputGroups || currentServerState.outputGroups,
+                themesList: themesList || currentServerState.themesList,
+                systemOptions: systemOptions || currentServerState.systemOptions,
                 lastUpdated: Date.now()
               };
-              logServerEvent('info', `State synchronized across engine. Schedule: "${activeSchedule?.name || 'Untitled'}"`);
+              logServerEvent('info', `State synchronized across engine. Schedule: "${activeSchedule?.name || currentServerState.activeSchedule?.name || 'Untitled'}"`);
               res.end(JSON.stringify({ success: true, timestamp: currentServerState.lastUpdated }));
             } catch (err: any) {
               logServerEvent('error', `Sync state failed: ${err.message}`);
               res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        // Remote presentation command dispatch
+        if (pathname === '/api/remote/command' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const parsed = body ? JSON.parse(body) : {};
+              const { action, params } = parsed;
+              if (!action) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ success: false, error: 'Missing action field' }));
+                return;
+              }
+              const cmd = {
+                id: `cmd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                action,
+                params,
+                timestamp: Date.now()
+              };
+              pendingCommands.push(cmd);
+              if (pendingCommands.length > 50) pendingCommands.shift();
+              logServerEvent('info', `Remote command queued: ${action} (${cmd.id})`);
+              res.end(JSON.stringify({ success: true, commandId: cmd.id, timestamp: cmd.timestamp }));
+            } catch (err: any) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          });
+          return;
+        }
+
+        // Schedules persistence endpoint
+        if (pathname === '/api/schedules' && req.method === 'GET') {
+          res.end(JSON.stringify({
+            success: true,
+            schedules: serverSchedules,
+            activeSchedule: currentServerState.activeSchedule
+          }));
+          return;
+        }
+
+        if (pathname === '/api/schedules' && req.method === 'POST') {
+          let body = '';
+          req.on('data', chunk => { body += chunk; });
+          req.on('end', () => {
+            try {
+              const sched = body ? JSON.parse(body) : null;
+              if (sched && sched.id) {
+                const idx = serverSchedules.findIndex(s => s.id === sched.id);
+                if (idx >= 0) {
+                  serverSchedules[idx] = sched;
+                } else {
+                  serverSchedules.unshift(sched);
+                }
+                if (serverSchedules.length > 20) serverSchedules.pop();
+                currentServerState.activeSchedule = sched;
+                currentServerState.lastUpdated = Date.now();
+                logServerEvent('info', `Schedule saved to backend server: "${sched.name}"`);
+                res.end(JSON.stringify({ success: true, scheduleId: sched.id }));
+              } else {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ success: false, error: 'Invalid schedule object' }));
+              }
+            } catch (err: any) {
+              res.statusCode = 400;
               res.end(JSON.stringify({ success: false, error: err.message }));
             }
           });
@@ -130,6 +222,7 @@ function simpleWorshipApiPlugin(): Plugin {
             level: 'info',
             message: 'Server diagnostics log reset by operator'
           }];
+          pendingCommands = [];
           res.end(JSON.stringify({ success: true, message: 'Logs cleared' }));
           return;
         }
@@ -160,7 +253,7 @@ export default defineConfig(() => {
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
     build: {
-      target: 'esnext',
+      target: 'es2022',
       minify: 'esbuild' as const,
       cssMinify: true,
       reportCompressedSize: false,

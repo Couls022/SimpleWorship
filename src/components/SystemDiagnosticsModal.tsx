@@ -29,7 +29,8 @@ import {
 import { useStore } from '../store/useStore';
 import { getDB, dbApi } from '../db';
 import { exportDatabaseBackup, importDatabaseBackup } from '../db/backup';
-import { syncTelemetry } from '../store/sync';
+import { syncTelemetry, forceSyncNow } from '../store/sync';
+import { backendApi } from '../services/backendApi';
 import { hardwareProfile, HardwareInfo } from '../core/HardwareProfile';
 import { pptxCacheManager } from '../utils/initPptxViewer';
 
@@ -156,6 +157,34 @@ export default function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsMod
       setActionMessage('Server diagnostics log cleared');
       setTimeout(() => setActionMessage(null), 3000);
     } catch (e) {}
+  };
+
+  const handleTestRemoteCommand = async (action: any, params?: any) => {
+    try {
+      setActionMessage(`Sending test command "${action}" to backend server...`);
+      const res = await backendApi.dispatchRemoteCommand(action, params);
+      if (res.success) {
+        setActionMessage(`✓ Backend dispatched command: "${action}". Frontend synced immediately!`);
+        fetchDiagnostics();
+      } else {
+        setActionMessage(`Failed to dispatch command: ${res.error}`);
+      }
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (e: any) {
+      setActionMessage(`Command error: ${e.message}`);
+    }
+  };
+
+  const handleForcePushSync = async () => {
+    try {
+      setActionMessage('Pushing live frontend state to backend server...');
+      await forceSyncNow();
+      fetchDiagnostics();
+      setActionMessage('✓ Live state pushed & verified with Backend Engine!');
+      setTimeout(() => setActionMessage(null), 3500);
+    } catch (e: any) {
+      setActionMessage(`Sync error: ${e.message}`);
+    }
   };
 
   const formatBytes = (bytes: number) => {
@@ -438,42 +467,131 @@ export default function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsMod
 
               {/* REST API Endpoints Registry */}
               <div className="bg-[#14161c] p-4 rounded-lg border border-[#2b303e] space-y-3">
-                <h3 className="font-bold text-white text-xs flex items-center justify-between">
-                  <span>Backend REST Endpoints</span>
-                  <span className="text-[10px] font-mono text-cyan-400">HTTP/1.1 JSON API</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] font-mono">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-white text-xs flex items-center gap-2">
+                    <Server size={14} className="text-cyan-400" />
+                    <span>Backend REST Endpoints (Express Server)</span>
+                  </h3>
+                  <button
+                    onClick={handleForcePushSync}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                  >
+                    <RefreshCw size={12} />
+                    <span>Force Push State to Backend</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono">
                   <div className="p-2 rounded bg-[#1d212a] border border-[#2c3242] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-300 font-bold text-[9px]">GET</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1 py-0.5 rounded bg-emerald-900 text-emerald-300 font-bold text-[9px]">GET</span>
                       <span className="text-gray-200">/api/health</span>
                     </div>
                     <span className="text-emerald-400 font-sans text-[10px]">Healthy</span>
                   </div>
 
                   <div className="p-2 rounded bg-[#1d212a] border border-[#2c3242] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-300 font-bold text-[9px]">GET</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1 py-0.5 rounded bg-emerald-900 text-emerald-300 font-bold text-[9px]">GET</span>
                       <span className="text-gray-200">/api/system/status</span>
                     </div>
                     <span className="text-emerald-400 font-sans text-[10px]">Active</span>
                   </div>
 
                   <div className="p-2 rounded bg-[#1d212a] border border-[#2c3242] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded bg-blue-900 text-blue-300 font-bold text-[9px]">POST</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1 py-0.5 rounded bg-blue-900 text-blue-300 font-bold text-[9px]">POST</span>
                       <span className="text-gray-200">/api/sync/state</span>
                     </div>
                     <span className="text-cyan-400 font-sans text-[10px]">Live Sync</span>
                   </div>
 
                   <div className="p-2 rounded bg-[#1d212a] border border-[#2c3242] flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 rounded bg-blue-900 text-blue-300 font-bold text-[9px]">POST</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1 py-0.5 rounded bg-purple-900 text-purple-300 font-bold text-[9px]">POST</span>
+                      <span className="text-gray-200">/api/remote/command</span>
+                    </div>
+                    <span className="text-purple-300 font-sans text-[10px]">Command Queue</span>
+                  </div>
+
+                  <div className="p-2 rounded bg-[#1d212a] border border-[#2c3242] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1 py-0.5 rounded bg-emerald-900 text-emerald-300 font-bold text-[9px]">GET</span>
+                      <span className="text-gray-200">/api/schedules</span>
+                    </div>
+                    <span className="text-emerald-400 font-sans text-[10px]">Persistence</span>
+                  </div>
+
+                  <div className="p-2 rounded bg-[#1d212a] border border-[#2c3242] flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-1 py-0.5 rounded bg-blue-900 text-blue-300 font-bold text-[9px]">POST</span>
                       <span className="text-gray-200">/api/backup/export</span>
                     </div>
                     <span className="text-cyan-400 font-sans text-[10px]">Available</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Interactive Remote Command Pipeline Test */}
+              <div className="bg-[#14161c] p-4 rounded-lg border border-[#2b303e] space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-white text-xs flex items-center gap-2">
+                    <Radio size={14} className="text-purple-400" />
+                    <span>Live Backend ↔ Frontend Command Pipeline Verification</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded bg-purple-950/70 border border-purple-700/60 text-purple-300 font-mono text-[10px]">
+                    Bidirectional IPC/REST Active
+                  </span>
+                </div>
+                <p className="text-gray-400 text-[11px]">
+                  Click any button below to dispatch a real command through the backend server (<code className="text-purple-300">/api/remote/command</code>).
+                  The server enqueues and logs the command, and the SimpleWorship presentation frontend executes it instantly!
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    onClick={() => handleTestRemoteCommand('next_slide')}
+                    className="p-2.5 bg-[#1d222e] hover:bg-[#252c3c] border border-[#2d364a] hover:border-purple-500/50 rounded-lg text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-white font-semibold text-xs flex items-center justify-between">
+                      <span>Next Slide</span>
+                      <Play size={11} className="text-purple-400 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">POST /api/remote/command</div>
+                  </button>
+
+                  <button
+                    onClick={() => handleTestRemoteCommand('prev_slide')}
+                    className="p-2.5 bg-[#1d222e] hover:bg-[#252c3c] border border-[#2d364a] hover:border-purple-500/50 rounded-lg text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-white font-semibold text-xs flex items-center justify-between">
+                      <span>Prev Slide</span>
+                      <Play size={11} className="text-purple-400 rotate-180 group-hover:-translate-x-0.5 transition-transform" />
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">POST /api/remote/command</div>
+                  </button>
+
+                  <button
+                    onClick={() => handleTestRemoteCommand('toggle_black')}
+                    className="p-2.5 bg-[#1d222e] hover:bg-[#252c3c] border border-[#2d364a] hover:border-amber-500/50 rounded-lg text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-white font-semibold text-xs flex items-center justify-between">
+                      <span>Toggle Blackout</span>
+                      <Zap size={11} className="text-amber-400" />
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">Black Screen Toggle</div>
+                  </button>
+
+                  <button
+                    onClick={() => handleTestRemoteCommand('set_alert', { text: `Connected Test: ${new Date().toLocaleTimeString()}`, enabled: true })}
+                    className="p-2.5 bg-[#1d222e] hover:bg-[#252c3c] border border-[#2d364a] hover:border-cyan-500/50 rounded-lg text-left transition-all cursor-pointer group"
+                  >
+                    <div className="text-white font-semibold text-xs flex items-center justify-between">
+                      <span>Dispatch Alert</span>
+                      <ShieldCheck size={11} className="text-cyan-400" />
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">Ticker Alert Banner</div>
+                  </button>
                 </div>
               </div>
 

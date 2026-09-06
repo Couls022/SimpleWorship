@@ -101,6 +101,16 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const isLast = groupIndex === -1 || groupIndex >= outputGroups.length - 1;
   const activeControlState = groupStates[groupId];
   const isTargetedGroup = store.activeRouterId === routerId || (!routerId && store.activeControlGroupId === groupId);
+  const isActiveControlGroup = store.activeControlGroupId === groupId;
+  const groupTargetDisplays = (activeGroup?.displayIds && activeGroup.displayIds.length > 0)
+    ? activeGroup.displayIds
+    : (activeGroup?.targetDisplayId ? [activeGroup.targetDisplayId] : ['Monitor 2']);
+
+  const handleMakeActiveOverlay = () => {
+    store.setActiveControlGroupId(groupId);
+    store.setActiveRouterId(routerId || 'router-1');
+    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, groupId);
+  };
 
   const handleAddPanel = () => {
     const newGroup = {
@@ -379,12 +389,12 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`w-full h-full flex flex-col bg-[#1e2026] overflow-hidden select-none text-gray-200 relative transition-all duration-150 ${
-        isDraggingSelf ? 'opacity-40 border-2 border-dashed border-cyan-400' : ''
+      className={`w-full h-full flex flex-col bg-[#0f1117] overflow-hidden select-none text-gray-200 relative transition-all duration-150 ${
+        isDraggingSelf ? 'opacity-40 border-2 border-dashed border-sky-400' : ''
       } ${
         isItemDragOver ? 'ring-2 ring-emerald-500/80' : ''
       } ${
-        isTargetedGroup ? 'ring-2 ring-cyan-500/90 shadow-[0_0_15px_rgba(34,211,238,0.2)] z-10' : 'ring-1 ring-[#2a2d38] opacity-95 hover:opacity-100'
+        isTargetedGroup ? 'ring-1 ring-sky-500/50 shadow-[0_0_12px_rgba(56,189,248,0.15)] z-10' : 'ring-1 ring-[#1f2330]'
       }`}
     >
       {/* Direct Content Drop Overlay */}
@@ -401,12 +411,12 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
       )}
       {/* Enterprise Drop Indicator Overlays */}
       {dropPosition === 'left' && (
-        <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-cyan-400 z-50 shadow-[0_0_15px_#22d3ee] pointer-events-none rounded-r animate-pulse flex items-center justify-center">
+        <div className="absolute left-0 top-0 bottom-0 w-2 bg-sky-400 z-50 shadow-[0_0_12px_#38bdf8] pointer-events-none rounded-r animate-pulse flex items-center justify-center">
           <div className="w-1 h-8 bg-white rounded-full"></div>
         </div>
       )}
       {dropPosition === 'right' && (
-        <div className="absolute right-0 top-0 bottom-0 w-2.5 bg-cyan-400 z-50 shadow-[0_0_15px_#22d3ee] pointer-events-none rounded-l animate-pulse flex items-center justify-center">
+        <div className="absolute right-0 top-0 bottom-0 w-2 bg-sky-400 z-50 shadow-[0_0_12px_#38bdf8] pointer-events-none rounded-l animate-pulse flex items-center justify-center">
           <div className="w-1 h-8 bg-white rounded-full"></div>
         </div>
       )}
@@ -424,25 +434,66 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           e.dataTransfer.effectAllowed = 'move';
         }}
         onDragEnd={() => setIsDraggingSelf(false)}
-        className={`h-8 flex items-center justify-between px-2 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
-          isTargetedGroup
-            ? 'bg-gradient-to-r from-[#1c2a38] via-[#24354a] to-[#1a2636] border-b border-cyan-500/60'
-            : 'bg-[#282b33] border-b border-[#18191d] hover:bg-[#2d313a]'
-        }`}
+        className="h-9 flex items-center justify-between px-3 shrink-0 cursor-grab active:cursor-grabbing transition-colors bg-[#151720] border-b border-[#222634] z-40"
         title="Drag header to move panel left or right • Click to select as Active Target"
       >
-        <div className="flex items-center gap-1.5 min-w-0" onClick={() => store.setActiveRouterId(routerId || 'router-1')}>
+        <div 
+          className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer select-none overflow-hidden" 
+          onClick={handleMakeActiveOverlay}
+          title="Click to select this panel as Active Overlay for its target monitor(s)"
+        >
           {/* Drag Handle Icon */}
           <div 
-            className="p-0.5 text-gray-400 hover:text-cyan-300 transition-colors flex items-center cursor-grab active:cursor-grabbing"
+            className="p-0.5 text-gray-400 hover:text-sky-300 transition-colors flex items-center cursor-grab active:cursor-grabbing shrink-0"
             title="Drag to rearrange panel position"
           >
-            <GripVertical size={14} />
+            <GripVertical size={13} />
           </div>
 
-          <span className="text-xs font-bold text-gray-200 tracking-wide uppercase flex items-center gap-2">
-            <span className="truncate max-w-[220px]">{liveItem?.name || 'No Content'}</span>
+          <div className="flex items-center gap-1 min-w-0 shrink overflow-hidden">
+            <span className="text-[11px] font-bold text-sky-400 tracking-wider uppercase truncate max-w-[100px] min-[420px]:max-w-[140px] sm:max-w-[180px]" title={activeGroup?.name || 'Output'}>
+              {activeGroup?.name || 'Output'}
+            </span>
+            {liveItem?.name && (
+              <>
+                <span className="text-gray-500 shrink-0 hidden min-[520px]:inline">•</span>
+                <span className="text-[11px] font-medium text-gray-300 truncate max-w-[80px] min-[600px]:max-w-[120px] hidden min-[520px]:inline" title={liveItem?.name}>
+                  {liveItem?.name}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Assigned Target Monitor Tag */}
+          <span 
+            className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#202534] text-cyan-300 border border-cyan-800/40 shrink-0 truncate max-w-[80px]"
+            title={`Assigned Target Monitor(s): ${groupTargetDisplays.join(', ')}`}
+          >
+            {groupTargetDisplays.join(', ')}
           </span>
+
+          {/* Active Overlay Status Badge */}
+          {isActiveControlGroup ? (
+            <span 
+              className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1 shadow-xs whitespace-nowrap"
+              title="This panel is currently ACTIVE and overlays on top for its target monitor(s)"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="hidden min-[480px]:inline">ACTIVE </span>OVERLAY
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMakeActiveOverlay();
+              }}
+              className="text-[9px] font-medium tracking-wider px-1.5 py-0.5 rounded bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white border border-gray-700 transition-colors shrink-0 cursor-pointer whitespace-nowrap"
+              title="Click to activate this route as top overlay on its target monitor(s)"
+            >
+              SET ACTIVE
+            </button>
+          )}
         </div>
 
         <div 
@@ -450,18 +501,37 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           onClick={(e) => e.stopPropagation()} 
           onMouseDown={(e) => e.stopPropagation()}
         >
+          {/* Quick Send 1:1 Presentation Button */}
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              handleMakeActiveOverlay();
+              for (const disp of groupTargetDisplays) {
+                await DisplayManager.sendPresentationToTarget(groupId, disp);
+              }
+              window.dispatchEvent(
+                new CustomEvent('simpleworship:notify', {
+                  detail: `1:1 Presentation sent for ${activeGroup.name} to ${groupTargetDisplays.join(', ')}`
+                })
+              );
+            }}
+            className="p-1.5 rounded hover:bg-[#252937] text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+            title={`Send 1:1 Presentation to ${groupTargetDisplays.join(', ')} (Overlaying as Active)`}
+          >
+            <MonitorUp size={13} />
+          </button>
 
 
           <div className="relative">
             <button
               onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
-              className="p-1 rounded hover:bg-[#383d47] text-gray-400 hover:text-cyan-400 transition-colors"
+              className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-sky-300 transition-colors cursor-pointer"
               title="Live View Options"
             >
-              <ListFilter size={12} />
+              <ListFilter size={13} />
             </button>
             {isViewMenuOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-[#232630] border border-[#3b4152] rounded-md shadow-2xl py-1 text-xs text-gray-200 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-[#1a1d27] border border-[#2e3447] rounded-md shadow-2xl py-1 text-xs text-gray-200 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Panel Arrangement
                 </div>
@@ -471,11 +541,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                     setIsViewMenuOpen(false);
                   }}
                   disabled={isFirst}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#323847] flex items-center gap-2 transition-colors ${
+                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
                     isFirst ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
                   }`}
                 >
-                  <ArrowLeft size={12} className="text-cyan-400 shrink-0" />
+                  <ArrowLeft size={12} className="text-sky-400 shrink-0" />
                   <span>Move to First (Leftmost)</span>
                 </button>
                 <button
@@ -484,11 +554,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                     setIsViewMenuOpen(false);
                   }}
                   disabled={isFirst}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#323847] flex items-center gap-2 transition-colors ${
+                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
                     isFirst ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
                   }`}
                 >
-                  <ChevronLeft size={12} className="text-cyan-400 shrink-0" />
+                  <ChevronLeft size={12} className="text-sky-400 shrink-0" />
                   <span>Move Left</span>
                 </button>
                 <button
@@ -497,11 +567,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                     setIsViewMenuOpen(false);
                   }}
                   disabled={isLast}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#323847] flex items-center gap-2 transition-colors ${
+                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
                     isLast ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
                   }`}
                 >
-                  <ChevronRight size={12} className="text-cyan-400 shrink-0" />
+                  <ChevronRight size={12} className="text-sky-400 shrink-0" />
                   <span>Move Right</span>
                 </button>
                 <button
@@ -510,11 +580,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                     setIsViewMenuOpen(false);
                   }}
                   disabled={isLast}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#323847] flex items-center gap-2 transition-colors ${
+                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
                     isLast ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
                   }`}
                 >
-                  <ArrowRight size={12} className="text-cyan-400 shrink-0" />
+                  <ArrowRight size={12} className="text-sky-400 shrink-0" />
                   <span>Move to Last (Rightmost)</span>
                 </button>
 
@@ -558,21 +628,20 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           {outputGroups.length > 1 && (
             <button
               onClick={handleRemovePanel}
-              className="p-1 rounded hover:bg-[#383d47] text-gray-400 hover:text-rose-400 transition-colors"
+              className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-rose-400 transition-colors cursor-pointer"
               title="Remove Live Panel"
             >
-              <X size={12} />
+              <X size={13} />
             </button>
           )}
 
-          {/* Configure Route dropdown/button */}
+          {/* Configure Route Settings button */}
           <button
             onClick={() => setIsConfigOpen(true)}
-            className="flex items-center gap-0.5 px-1.5 py-0.5 hover:bg-[#383d47] rounded text-gray-300 hover:text-white transition-colors text-[10px]"
+            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
             title="Configure Output Route"
           >
             <Settings size={13} />
-            <ChevronDown size={10} />
           </button>
 
 

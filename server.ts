@@ -7,10 +7,23 @@ let currentServerState: {
   groupStates?: Record<string, any>;
   alert?: any;
   activeSchedule?: any;
+  activeControlGroupId?: string | null;
+  outputGroups?: any[];
+  themesList?: any[];
+  systemOptions?: any;
   lastUpdated: number;
 } = {
   lastUpdated: Date.now()
 };
+
+let pendingCommands: Array<{
+  id: string;
+  action: string;
+  params?: any;
+  timestamp: number;
+}> = [];
+
+let serverSchedules: any[] = [];
 
 let serverLogs: Array<{ id: string; timestamp: string; level: 'info' | 'warn' | 'error'; message: string }> = [
   { id: '1', timestamp: new Date().toISOString(), level: 'info', message: 'SimpleWorship Backend Engine initialized on port 3000' }
@@ -18,7 +31,7 @@ let serverLogs: Array<{ id: string; timestamp: string; level: 'info' | 'warn' | 
 
 function logServerEvent(level: 'info' | 'warn' | 'error', message: string) {
   const entry = {
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     timestamp: new Date().toISOString(),
     level,
     message
@@ -50,7 +63,8 @@ async function startServer() {
       uptime: process.uptime(),
       timestamp: Date.now(),
       memory: process.memoryUsage(),
-      nodeVersion: process.version
+      nodeVersion: process.version,
+      activeSchedule: currentServerState.activeSchedule?.name || 'Default Service'
     });
   });
 
@@ -64,11 +78,13 @@ async function startServer() {
       uptimeSeconds: Math.floor(process.uptime()),
       lastStateUpdate: currentServerState.lastUpdated,
       serverLogs: serverLogs.slice(0, 30),
+      pendingCommandsCount: pendingCommands.length,
       capabilities: {
         broadcastChannel: true,
         indexedDbBridge: true,
         backupExport: true,
-        restSync: true
+        restSync: true,
+        remoteCommandQueue: true
       }
     });
   });
@@ -77,20 +93,25 @@ async function startServer() {
   app.get('/api/sync/state', (req, res) => {
     res.json({
       success: true,
-      data: currentServerState
+      data: currentServerState,
+      pendingCommands: pendingCommands.slice(-10)
     });
   });
 
   app.post('/api/sync/state', (req, res) => {
     try {
-      const { groupStates, alert, activeSchedule } = req.body;
+      const { groupStates, alert, activeSchedule, activeControlGroupId, outputGroups, themesList, systemOptions } = req.body;
       currentServerState = {
         groupStates: groupStates || currentServerState.groupStates,
         alert: alert || currentServerState.alert,
         activeSchedule: activeSchedule || currentServerState.activeSchedule,
+        activeControlGroupId: activeControlGroupId !== undefined ? activeControlGroupId : currentServerState.activeControlGroupId,
+        outputGroups: outputGroups || currentServerState.outputGroups,
+        themesList: themesList || currentServerState.themesList,
+        systemOptions: systemOptions || currentServerState.systemOptions,
         lastUpdated: Date.now()
       };
-      logServerEvent('info', `State synchronized across backend. Schedule: "${activeSchedule?.name || 'Untitled'}"`);
+      logServerEvent('info', `State synchronized across backend. Schedule: "${activeSchedule?.name || currentServerState.activeSchedule?.name || 'Untitled'}"`);
       res.json({ success: true, timestamp: currentServerState.lastUpdated });
     } catch (err: any) {
       logServerEvent('error', `Sync state failed: ${err.message}`);
@@ -98,7 +119,61 @@ async function startServer() {
     }
   });
 
-  // 4. Server-Side Backup & Restore Endpoints
+  // 4. Remote presentation command dispatch
+  app.post('/api/remote/command', (req, res) => {
+    try {
+      const { action, params } = req.body;
+      if (!action) {
+        return res.status(400).json({ success: false, error: 'Missing action field' });
+      }
+      const cmd = {
+        id: `cmd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        action,
+        params,
+        timestamp: Date.now()
+      };
+      pendingCommands.push(cmd);
+      if (pendingCommands.length > 50) pendingCommands.shift();
+      logServerEvent('info', `Remote command queued: ${action} (${cmd.id})`);
+      res.json({ success: true, commandId: cmd.id, timestamp: cmd.timestamp });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5. Schedules persistence endpoint
+  app.get('/api/schedules', (req, res) => {
+    res.json({
+      success: true,
+      schedules: serverSchedules,
+      activeSchedule: currentServerState.activeSchedule
+    });
+  });
+
+  app.post('/api/schedules', (req, res) => {
+    try {
+      const sched = req.body;
+      if (sched && sched.id) {
+        const idx = serverSchedules.findIndex(s => s.id === sched.id);
+        if (idx >= 0) {
+          serverSchedules[idx] = sched;
+        } else {
+          serverSchedules.unshift(sched);
+        }
+        if (serverSchedules.length > 20) serverSchedules.pop();
+        currentServerState.activeSchedule = sched;
+        currentServerState.lastUpdated = Date.now();
+        logServerEvent('info', `Schedule saved to backend server: "${sched.name}"`);
+        res.json({ success: true, scheduleId: sched.id });
+      } else {
+        res.status(400).json({ success: false, error: 'Invalid schedule object' });
+      }
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 6. Server-Side Backup & Restore Endpoints
   app.post('/api/backup/export', (req, res) => {
     try {
       const backupData = req.body;
@@ -113,7 +188,7 @@ async function startServer() {
     }
   });
 
-  // 5. Clear Server Logs
+  // 7. Clear Server Logs
   app.post('/api/system/clear-logs', (req, res) => {
     serverLogs = [{
       id: `${Date.now()}`,
@@ -121,6 +196,7 @@ async function startServer() {
       level: 'info',
       message: 'Server diagnostics log reset by operator'
     }];
+    pendingCommands = [];
     res.json({ success: true, message: 'Logs cleared' });
   });
 

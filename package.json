@@ -65,13 +65,25 @@
       "electron/**/*",
       "package.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": "sws",
+        "name": "SimpleWorship Schedule",
+        "description": "SimpleWorship Presentation Schedule File",
+        "role": "Editor"
+      }
+    ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/branding/logo/SimpleWorship.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SimpleWorship"
     }
   }
 }

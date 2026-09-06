@@ -154,6 +154,7 @@ interface AppState {
   moveOutputGroup: (id: string, direction: 'left' | 'right' | 'first' | 'last') => void;
   addOutputGroup: (group: OutputGroup) => void;
   updateOutputGroup: (id: string, updates: Partial<OutputGroup>) => void;
+  setGroupTargetDisplay: (groupId: string, targetDisplayId: string) => void;
   removeOutputGroup: (id: string) => void;
   setLivePanelCount: (count: number) => void;
   
@@ -568,6 +569,30 @@ export const useStore = create<AppState>((set, get) => ({
       return { outputGroups: newGroups };
     });
   },
+  setGroupTargetDisplay: (groupId, targetDisplayId) => {
+    set((state) => {
+      const groupIndex = state.outputGroups.findIndex(g => g.id === groupId);
+      if (groupIndex === -1) return state;
+      const updatedGroup = { 
+        ...state.outputGroups[groupIndex], 
+        targetDisplayId, 
+        displayIds: targetDisplayId ? [targetDisplayId] : [] 
+      };
+      const newGroups = [...state.outputGroups];
+      newGroups[groupIndex] = updatedGroup;
+      dbApi.saveOutputGroup(updatedGroup);
+
+      DisplayManager.syncPhysicalDisplays(newGroups, state.groupStates, state.activeControlGroupId).catch(() => {});
+
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:notify', { 
+          detail: `1:1 Target Monitor updated: "${updatedGroup.name}" -> ${targetDisplayId || 'None'}` 
+        })
+      );
+
+      return { outputGroups: newGroups };
+    });
+  },
   setLivePanelCount: async (count) => {
     const state = get();
     let current = [...state.outputGroups];
@@ -641,8 +666,7 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   
   groupStates: {
-    'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: true },
-    'group-stage': { ...defaultState, activeItemId: 'item-gen-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: true },
+    'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setGroupState: (groupId, newState) => {
     set((state) => {
@@ -1063,7 +1087,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!targetId) return;
     const currentState = groupStates[targetId] || defaultState;
     const nextLive = !currentState.isLiveEnabled;
-    const targetGroups = activeControlGroupId ? [activeControlGroupId] : outputGroups.map(g => g.id);
+    const targetGroups = [targetId];
     const updatedStates = { ...groupStates };
     targetGroups.forEach(gId => {
       const currentG = updatedStates[gId] || defaultState;
@@ -1305,7 +1329,6 @@ export const useStore = create<AppState>((set, get) => ({
     // Always reset/initialize group states so that Live is OFF (isLiveEnabled: false)
     const initialStates = {
       'group-congregation': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
-      'group-stage': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
     };
     set({ 
       groupStates: initialStates, 

@@ -420,20 +420,11 @@ export const defaultAssets: Asset[] = [
 export const defaultOutputGroups: OutputGroup[] = [
   {
     id: 'group-congregation',
-    name: 'Congregation Display',
+    name: 'Main Presentation Display',
     themeId: 'theme-global',
     role: 'broadcast',
     displayIds: ['Monitor 2'],
-    isBlack: false,
-    isClear: false,
-    showLogo: true
-  },
-  {
-    id: 'group-stage',
-    name: 'Stage Confidence Monitor',
-    themeId: 'theme-stage',
-    role: 'confidence',
-    displayIds: ['Monitor 3'],
+    targetDisplayId: 'Monitor 2',
     isBlack: false,
     isClear: false,
     showLogo: true

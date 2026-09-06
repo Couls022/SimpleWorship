@@ -78,8 +78,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleLaunchGroup = (groupId: string) => {
     const group = outputGroups.find(g => g.id === groupId);
-    const assignedScreenLabel = group?.displayIds?.[0];
-    DisplayManager.openProjector(groupId, assignedScreenLabel);
+    const assignedScreenLabel = group?.targetDisplayId || group?.displayIds?.[0];
+    DisplayManager.sendPresentationToTarget(groupId, assignedScreenLabel);
   };
 
   return (
@@ -172,21 +172,54 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1.5 mt-2">
-                        <button
-                          onClick={() => updateOutputGroup(g.id, { displayIds: [] })}
-                          className={`px-2 py-1 text-[10px] font-bold rounded border ${!assignedDisplayId ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
-                        >
-                          Windowed (No Display)
-                        </button>
-                        {screenPermissionGranted && screens.map((screen, idx) => (
-                          <button
-                            key={screen.label || idx}
-                            onClick={() => updateOutputGroup(g.id, { displayIds: [screen.label || ''] })}
-                            className={`px-2 py-1 text-[10px] font-bold rounded border ${assignedDisplayId === screen.label ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
-                          >
-                            Display {idx + 1}: {screen.label || `Unknown (${screen.width}x${screen.height})`} {screen.isPrimary ? '(Primary)' : ''}
-                          </button>
-                        ))}
+                        {(() => {
+                          const groupDisplayIds = (g.displayIds && g.displayIds.length > 0)
+                            ? g.displayIds
+                            : (g.targetDisplayId ? [g.targetDisplayId] : []);
+                          return (
+                            <>
+                              <button
+                                onClick={() => updateOutputGroup(g.id, { targetDisplayId: '', displayIds: [] })}
+                                className={`px-2 py-1 text-[10px] font-bold rounded border ${groupDisplayIds.length === 0 ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                              >
+                                Windowed (No Display)
+                              </button>
+                              {screenPermissionGranted && screens.map((screen, idx) => {
+                                const sLabel = screen.label || '';
+                                const isSelected = groupDisplayIds.includes(sLabel);
+                                const otherSharing = outputGroups.filter(
+                                  (otherG) => otherG.id !== g.id && ((otherG.displayIds?.includes(sLabel)) || otherG.targetDisplayId === sLabel)
+                                );
+                                return (
+                                  <button
+                                    key={sLabel || idx}
+                                    onClick={() => {
+                                      let nextIds: string[];
+                                      if (isSelected) {
+                                        nextIds = groupDisplayIds.filter((id) => id !== sLabel);
+                                      } else {
+                                        nextIds = [...groupDisplayIds, sLabel];
+                                      }
+                                      updateOutputGroup(g.id, {
+                                        targetDisplayId: nextIds[0] || '',
+                                        displayIds: nextIds
+                                      });
+                                    }}
+                                    className={`px-2 py-1 text-[10px] font-bold rounded border flex items-center gap-1.5 ${isSelected ? 'bg-indigo-600/30 border-indigo-500 text-indigo-200' : 'bg-[#141519] border-[#323642] text-gray-400 hover:bg-[#1a1c23]'}`}
+                                    title={otherSharing.length > 0 ? `Shared with ${otherSharing.map(o => o.name).join(', ')} • Active route overlays 1:1` : 'Target Monitor (1:1)'}
+                                  >
+                                    <span>Display {idx + 1}: {sLabel || `Screen ${idx + 1}`} {screen.isPrimary ? '(Primary)' : ''}</span>
+                                    {otherSharing.length > 0 && (
+                                      <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300">
+                                        Shared
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

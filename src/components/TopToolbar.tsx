@@ -48,6 +48,8 @@ import AboutModal from './AboutModal';
 import PrintScheduleModal from './PrintScheduleModal';
 import UnsavedChangesModal from './UnsavedChangesModal';
 import { downloadSwsFile, readSwsFile, encodeSwsPackage } from '../services/swsService';
+import BackendStatusBadge from './workspace/BackendStatusBadge';
+import { forceSyncNow } from '../store/sync';
 
 interface TopToolbarProps {
   onOpenAlerts: () => void;
@@ -374,20 +376,25 @@ export default function TopToolbar({
   return (
     <header className="bg-gradient-to-b from-[#383c44] via-[#2a2d34] to-[#22242a] border-b border-[#151619] select-none text-gray-200" ref={menuRef}>
       {/* 1. Window Title Bar (SimpleWorship - Clean Modern Branding) */}
-      <div className="app-drag-region flex items-center justify-between px-3 py-1 text-xs border-b border-[#18191c] bg-[#1a1c22] text-gray-300 select-none">
-        <div className="app-no-drag flex items-center gap-2">
+      <div className="app-drag-region flex items-center justify-between px-3 py-1 text-xs border-b border-[#18191c] bg-[#1a1c22] text-gray-300 select-none min-w-0">
+        <div className="app-no-drag flex items-center gap-2 min-w-0">
           {/* SimpleWorship Modern Vector Logo */}
           <SimpleWorshipLogo size={18} showText={false} />
-          <span className="font-semibold text-xs tracking-tight text-white flex items-center gap-1.5">
-            <span>SimpleWorship</span>
-            <span className="text-[10px] text-cyan-400 font-mono font-normal">v7.4</span>
-            <span className="text-gray-500 font-normal">•</span>
-            <span className="text-gray-400 font-normal truncate max-w-[200px]">{store.activeSchedule?.name || 'Default Service'}</span>
+          <span className="font-semibold text-xs tracking-tight text-white flex items-center gap-1.5 min-w-0">
+            <span className="shrink-0">SimpleWorship</span>
+            <span className="text-[10px] text-cyan-400 font-mono font-normal shrink-0">v7.4</span>
+            <span className="text-gray-500 font-normal shrink-0">•</span>
+            <span className="text-gray-400 font-normal truncate max-w-[140px] sm:max-w-[260px]" title={store.activeSchedule?.name || 'Default Service'}>{store.activeSchedule?.name || 'Default Service'}</span>
           </span>
         </div>
 
+        {/* Center/Right: Live Backend Server Connectivity & Health Badge */}
+        <div className="app-no-drag flex items-center gap-2 shrink-0 ml-auto mr-3">
+          <BackendStatusBadge onOpenDiagnostics={onOpenDiagnostics} />
+        </div>
+
         {/* Window controls */}
-        <div className="app-no-drag flex items-center h-full -mr-3 -my-1">
+        <div className="app-no-drag flex items-center h-full -mr-3 -my-1 shrink-0">
           <button 
             id="btn-window-minimize"
             onClick={handleMinimizeWindow}
@@ -984,6 +991,20 @@ export default function TopToolbar({
                 </button>
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
+                  onClick={async () => {
+                    await forceSyncNow();
+                    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Frontend and Backend State Synchronized' }));
+                    setActiveMenu(null);
+                  }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-emerald-300"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Radio size={12} className="text-emerald-400" />
+                    <span>Synchronize with Backend Now</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono">Sync</span>
+                </button>
+                <button 
                   onClick={() => {
                     if (onOpenDiagnostics) onOpenDiagnostics();
                     setActiveMenu(null);
@@ -992,9 +1013,9 @@ export default function TopToolbar({
                 >
                   <span className="flex items-center gap-1.5">
                     <ShieldCheck size={12} />
-                    <span>System Backbone Diagnostics...</span>
+                    <span>Backend Engine & System Diagnostics...</span>
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Hub</span>
+                  <span className="text-[10px] text-cyan-400 font-mono">Hub</span>
                 </button>
 
                 <div className="border-t border-[#313540] my-1"></div>
@@ -1024,9 +1045,9 @@ export default function TopToolbar({
       />
 
       {/* 3. Main Command Bar with EasyWorship Icons */}
-      <div className="flex items-center justify-between px-3 py-1.5 gap-2 bg-gradient-to-b from-[#33373f] to-[#25282f]">
+      <div className="flex items-center justify-between px-3 py-1.5 gap-2 bg-gradient-to-b from-[#33373f] to-[#25282f] overflow-x-auto custom-scrollbar min-w-0 flex-nowrap">
         {/* Left Side: Schedule & File Tools */}
-        <div className="flex items-center space-x-1 shrink-0">
+        <div className="flex items-center space-x-1 shrink-0 flex-nowrap">
           {/* NEW BUTTON WITH DROPDOWN */}
           <div className="relative flex items-center rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] transition-all group">
             <button
@@ -1238,7 +1259,7 @@ export default function TopToolbar({
 
 
         {/* Right Side: Presentation Master Controls (Go Live, Alerts, Logo, Black, Clear, Master Live) */}
-        <div className="flex items-center space-x-1 shrink-0">
+        <div className="flex items-center space-x-1 shrink-0 flex-nowrap">
 
 
           {/* ALERTS BUTTON WITH DROPDOWN */}

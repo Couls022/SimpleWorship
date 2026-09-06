@@ -89,8 +89,8 @@ export function resolveDisplayAssignments(
     const candidateGroupIds = groupsForDisplay.map((g) => g.id);
     const liveGroupIds = candidateGroupIds.filter((gid) => isRouteLive(gid));
 
-    // 2. Zero live candidate routes
-    if (liveGroupIds.length === 0) {
+    // 2. Zero candidate routes targeting this display
+    if (candidateGroupIds.length === 0) {
       result.set(displayId, {
         displayId,
         assignedGroupId: null,
@@ -99,32 +99,33 @@ export function resolveDisplayAssignments(
       continue;
     }
 
-    // 3. Exactly one live candidate route
-    if (liveGroupIds.length === 1) {
-      result.set(displayId, {
-        displayId,
-        assignedGroupId: liveGroupIds[0],
-        liveGroupIds: liveGroupIds,
-      });
-      continue;
+    // 3. Resolve winning route for this physical display
+    // RULE: "Route Panel 1 merong target monitor 1 tapos route panel 2 merong target monitor 1 and 2
+    // kaya ang mangyayari ay ung monitor 1 makakatanggap ng 1 is to 1 galing sa route panel 1 and 2
+    // at kung sino ung active siya ung naka overlay na display"
+    let winningGroupId: string | null = null;
+    if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId) && isRouteLive(activeControlGroupId)) {
+      // Active route takes priority and overlays on this monitor when LIVE!
+      winningGroupId = activeControlGroupId;
+    } else if (liveGroupIds.length > 0) {
+      winningGroupId = liveGroupIds[0];
+    } else {
+      winningGroupId = null;
     }
 
-    // 4. Multiple live candidate routes target this physical display
-    // ACTIVE ROUTE OVERLAY PRIORITY:
-    // If the currently active target router panel (activeControlGroupId) targets this display AND IS LIVE,
-    // it OVERLAYS and TAKES DISPLAY PRIORITY on this monitor!
-    let winningGroupId: string | null = null;
-    if (activeControlGroupId && liveGroupIds.includes(activeControlGroupId)) {
-      winningGroupId = activeControlGroupId;
-    } else {
-      // Otherwise, fallback to the first LIVE route targeting this display
-      winningGroupId = liveGroupIds[0];
+    // Build the ordered layer list for multi-layer presentation stacking:
+    // All available live routes are included, with the WINNING/ACTIVE group placed LAST
+    // so it renders on the highest z-index / top overlay in the presentation DOM.
+    const orderedLiveGroupIds: string[] = [];
+    if (winningGroupId) {
+      const baseList = liveGroupIds.filter((id) => id !== winningGroupId);
+      orderedLiveGroupIds.push(...baseList, winningGroupId);
     }
 
     result.set(displayId, {
       displayId,
       assignedGroupId: winningGroupId,
-      liveGroupIds: liveGroupIds,
+      liveGroupIds: orderedLiveGroupIds,
     });
   }
 

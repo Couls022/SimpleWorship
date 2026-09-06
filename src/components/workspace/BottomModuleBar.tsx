@@ -1,24 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Tv, 
-  Monitor, 
-  Radio, 
-  Plus, 
   Layers, 
+  Plus, 
   Settings, 
-  Play, 
-  Check, 
-  ShieldAlert, 
-  Eye, 
-  Sparkles,
-  ChevronRight,
-  ExternalLink,
   X,
-  Clock
+  Clock,
+  LayoutGrid,
+  RotateCcw
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { OutputGroup } from '../../types';
 import RouteConfigModal from '../RouteConfigModal';
+import BackendStatusBadge from './BackendStatusBadge';
 
 interface BottomModuleBarProps {
   onConfigureRoute?: (groupId: string) => void;
@@ -33,14 +26,23 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
     activeRouterId,
     setActiveRouterId,
     addRouterPanel,
-    removeRouterPanel,
-    updateRouterPanel,
-    toggleBlack,
-    toggleClear,
-    toggleLogo
+    removeRouterPanel
   } = store;
 
   const [configuringGroupId, setConfiguringGroupId] = useState<string | null>(null);
+  const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
+  const layoutMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) {
+        setIsLayoutMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
 
   useEffect(() => {
@@ -77,13 +79,13 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
   };
 
   return (
-    <div className="h-11 w-full bg-[#13151b] border-t border-[#262a38] flex items-center justify-between px-2.5 select-none shrink-0 z-20 shadow-lg">
+    <div className="h-9 w-full bg-[#14161f] border-t border-[#222634] flex items-center justify-between px-3 select-none shrink-0 z-20 shadow-md">
       {/* Left: Section Header & Module Route Selector Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar py-1 min-w-0">
+      <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar py-0.5 min-w-0">
         {/* Module Bar Brand Label */}
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#1b1e28] border border-[#2b3042] text-[11px] font-bold text-gray-300 uppercase tracking-wider shrink-0">
-          <Layers size={13} className="text-cyan-400" />
-          <span className="hidden sm:inline text-gray-400">ROUTER PANELS:</span>
+        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#181b25] border border-[#262c3e] text-[10px] font-bold text-gray-400 uppercase tracking-wider shrink-0">
+          <Layers size={12} className="text-sky-400" />
+          <span className="hidden sm:inline">ROUTERS:</span>
         </div>
 
         {/* List of Router Panel Module Tabs */}
@@ -98,32 +100,30 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
             const isBlack = Boolean(state?.isBlack);
             const isClear = Boolean(state?.isClear);
             const isLogo = Boolean(state?.showLogo);
-            
-            const RoleIcon = Tv;
 
             return (
               <div
                 key={router.routerId}
                 onClick={() => handleSelectRouter(router.routerId, `Router ${index + 1}`)}
-                className={`group relative flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-semibold transition-all shrink-0 cursor-pointer border ${
+                className={`group relative flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold transition-all shrink-0 cursor-pointer border ${
                   isTargeted
-                    ? 'bg-gradient-to-r from-cyan-950/90 via-[#182a3d] to-blue-950/90 border-cyan-400/90 text-white shadow-[0_0_12px_rgba(34,211,238,0.25)] ring-1 ring-cyan-400/40'
-                    : 'bg-[#1a1d26] hover:bg-[#232734] border-[#2c3244] hover:border-[#3c445c] text-gray-300 hover:text-white'
+                    ? 'bg-sky-950/80 border-sky-500/70 text-sky-200 shadow-xs ring-1 ring-sky-500/30'
+                    : 'bg-[#181b25] hover:bg-[#202533] border-[#262c3e] hover:border-[#353d54] text-gray-400 hover:text-gray-200'
                 }`}
                 title={`Click to activate Router Panel ${index + 1}`}
               >
                 {/* Position Index Badge */}
-                <span className={`text-[10px] font-mono font-bold px-1 py-0.2 rounded border ${
+                <span className={`text-[10px] font-mono font-bold px-1 rounded border ${
                   isTargeted 
-                    ? 'bg-cyan-900/80 text-cyan-200 border-cyan-400/60 font-extrabold' 
-                    : 'bg-[#12141a] text-gray-400 border-[#2f3445]'
+                    ? 'bg-sky-900/90 text-sky-100 border-sky-400/60 font-extrabold' 
+                    : 'bg-[#12141c] text-gray-400 border-[#262b3c]'
                 }`}>
                   R-{index + 1}
                 </span>
 
-                {/* Clean Target Text Label (No Dropdown Arrow) */}
-                <span className={`truncate max-w-[90px] sm:max-w-[180px] tracking-wide text-[11px] font-bold ${
-                  isTargeted ? 'text-cyan-100 font-bold' : 'text-gray-300'
+                {/* Clean Target Text Label */}
+                <span className={`truncate max-w-[90px] sm:max-w-[180px] tracking-wide text-[11px] ${
+                  isTargeted ? 'text-sky-100 font-bold' : 'text-gray-300'
                 }`}>
                   Target: {targetGroup?.name || 'Output Group'}
                 </span>
@@ -141,11 +141,6 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
                   ) : (
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-600" title="Standby / No active item" />
                   )}
-                  {isTargeted && (
-                    <span className="hidden md:inline text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-cyan-400/20 text-cyan-300 border border-cyan-400/40 uppercase tracking-wider ml-0.5">
-                      ACTIVE
-                    </span>
-                  )}
                 </div>
 
                 {/* Remove Panel Button */}
@@ -158,7 +153,7 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
                     className="p-0.5 rounded hover:bg-rose-950/80 hover:text-rose-400 text-gray-500 transition-colors ml-0.5"
                     title="Close this Router Panel"
                   >
-                    <X size={12} />
+                    <X size={11} />
                   </button>
                 )}
               </div>
@@ -168,32 +163,84 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
           {/* Add Router Button */}
           <button
             onClick={handleAddNewRouter}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#191b24] hover:bg-[#232735] border border-dashed border-[#343b4f] hover:border-cyan-500/60 text-gray-400 hover:text-cyan-300 text-xs font-semibold transition-all shrink-0 cursor-pointer"
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#181b25] hover:bg-[#202533] border border-dashed border-[#2d3448] hover:border-sky-500/60 text-gray-400 hover:text-sky-300 text-[11px] font-semibold transition-all shrink-0 cursor-pointer"
             title="Create a new Router Panel"
           >
-            <Plus size={12} />
+            <Plus size={11} />
             <span className="hidden md:inline">Add Panel</span>
           </button>
         </div>
       </div>
 
-      {/* Right: Master Screen Quick Toggles & Active Status Indicator */}
-      <div className="flex items-center gap-3 shrink-0 ml-2 mr-2">
+      {/* Right: Master Screen Quick Toggles & Clock */}
+      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+        {/* Layout Modes & Resizing Presets */}
+        <div className="relative" ref={layoutMenuRef}>
+          <button
+            onClick={() => setIsLayoutMenuOpen(!isLayoutMenuOpen)}
+            className="px-2 py-0.5 rounded bg-[#181b25] hover:bg-[#222736] border border-[#262c3e] text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
+            title="Workspace Layout Modes & Panel Sizing"
+          >
+            <LayoutGrid size={11} className="text-sky-400" />
+            <span className="hidden min-[620px]:inline">Layout</span>
+          </button>
+          {isLayoutMenuOpen && (
+            <div 
+              className="absolute right-0 bottom-full mb-1.5 w-56 bg-[#1b1e28] border border-[#333a4c] rounded-md shadow-2xl py-1 z-50 text-xs text-gray-200 animate-in fade-in zoom-in-95 duration-100"
+              onClick={() => setIsLayoutMenuOpen(false)}
+            >
+              <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Layout Adjustments
+              </div>
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('simpleworship:reset-layout'));
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-[#282d3b] hover:text-white flex items-center gap-2"
+              >
+                <RotateCcw size={12} className="text-sky-400 shrink-0" />
+                <span>Reset to Balanced 3-Pane</span>
+              </button>
+              <button
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('simpleworship:toggle-sidebar'));
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-[#282d3b] hover:text-white flex items-center gap-2"
+              >
+                <Layers size={12} className="text-amber-400 shrink-0" />
+                <span>Toggle Sidebar (Ctrl+\)</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="w-px h-3.5 bg-[#222634]" />
+
         {/* Settings Button (Output Groups) */}
         <button
           onClick={() => setConfiguringGroupId(outputGroups[0]?.id || 'group-1')}
-          className="p-1 rounded bg-[#1c1f2a] hover:bg-[#272b3b] border border-[#2e3447] text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 px-2"
+          className="px-2 py-0.5 rounded bg-[#181b25] hover:bg-[#222736] border border-[#262c3e] text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
           title="Configure Output Routes & Displays"
         >
-          <Settings size={13} />
-          <span className="text-xs">Routes</span>
+          <Settings size={12} />
+          <span>Routes</span>
         </button>
 
-        <div className="w-px h-4 bg-[#2b3042]" />
+        <div className="w-px h-3.5 bg-[#222634]" />
+
+        {/* Live Backend Connection Indicator */}
+        <BackendStatusBadge 
+          compact={true} 
+          onOpenDiagnostics={() => {
+            window.dispatchEvent(new CustomEvent('simpleworship:open-diagnostics'));
+          }} 
+        />
+
+        <div className="w-px h-3.5 bg-[#222634]" />
 
         {/* Real-time Clock */}
-        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-[11px] font-semibold bg-[#1a1d26] px-2 py-1 rounded border border-[#2c3244]">
-          <Clock size={11} className="text-cyan-500" />
+        <div className="flex items-center gap-1 text-gray-400 font-mono text-[10px] font-semibold bg-[#181b25] px-2 py-0.5 rounded border border-[#262c3e]">
+          <Clock size={10} className="text-sky-400" />
           <span>{currentTime}</span>
         </div>
       </div>

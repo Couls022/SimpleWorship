@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, CheckCircle2, Play } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useScreens } from '../hooks/useScreens';
+import { DisplayManager } from '../core/DisplayManager';
 import { OutputGroup } from '../types';
 
 interface RouteConfigModalProps {
@@ -24,14 +25,21 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
   const [name, setName] = useState(group?.name || '');
   const [themeId, setThemeId] = useState(group?.themeId || 'theme-global');
   const [aspectRatio, setAspectRatio] = useState(group?.aspectRatio || '16:9');
-  const [displayIds, setDisplayIds] = useState<string[]>(group?.displayIds || []);
+  const [selectedDisplayIds, setSelectedDisplayIds] = useState<string[]>(() => {
+    if (group?.displayIds && group.displayIds.length > 0) return group.displayIds;
+    if (group?.targetDisplayId) return [group.targetDisplayId];
+    return ['Monitor 2'];
+  });
 
   useEffect(() => {
     if (group) {
       setName(group.name);
       setThemeId(group.themeId || 'theme-global');
       setAspectRatio(group.aspectRatio || '16:9');
-      setDisplayIds(group.displayIds || []);
+      const initialDisplays = (group.displayIds && group.displayIds.length > 0)
+        ? group.displayIds
+        : (group.targetDisplayId ? [group.targetDisplayId] : ['Monitor 2']);
+      setSelectedDisplayIds(initialDisplays);
     }
   }, [groupId]);
 
@@ -42,19 +50,39 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
 
   const handleToggleDisplay = (dispObj: any) => {
     const label = dispObj.label || dispObj.name;
-    let newDisplays = [...displayIds];
-    if (newDisplays.includes(label)) {
-      newDisplays = newDisplays.filter(id => id !== label);
-    } else {
-      newDisplays.push(label);
-      // Auto detect native screen resolution from physical monitor
-      const w = dispObj.width || dispObj.bounds?.width;
-      const h = dispObj.height || dispObj.bounds?.height;
-      if (w && h) {
-        setAspectRatio(`${w}x${h}`);
+    setSelectedDisplayIds(prev => {
+      let updated: string[];
+      if (prev.includes(label)) {
+        updated = prev.filter(id => id !== label);
+        if (updated.length === 0) updated = [label]; // keep at least 1 target
+      } else {
+        updated = [...prev, label];
       }
+      return updated;
+    });
+
+    // Auto detect native screen resolution from physical monitor
+    const w = dispObj.width || dispObj.bounds?.width;
+    const h = dispObj.height || dispObj.bounds?.height;
+    if (w && h) {
+      setAspectRatio(`${w}x${h}`);
     }
-    setDisplayIds(newDisplays);
+  };
+
+  const handleTestPresentation = async () => {
+    try {
+      store.setActiveControlGroupId(groupId);
+      for (const disp of selectedDisplayIds) {
+        await DisplayManager.sendPresentationToTarget(groupId, disp);
+      }
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:notify', { 
+          detail: `1:1 Presentation sent to ${selectedDisplayIds.join(', ')} (Active overlay: ${name})` 
+        })
+      );
+    } catch (err: any) {
+      console.error('Failed to send presentation test:', err);
+    }
   };
 
   const handleSave = () => {
@@ -73,12 +101,15 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       targetH = 1200;
     }
 
-    // 1. Update Output Group in store
+    const primaryTarget = selectedDisplayIds[0] || 'Monitor 2';
+
+    // 1. Update Output Group in store with multi-target 1:1 mapping
     updateOutputGroup(groupId, {
       name,
       themeId,
       aspectRatio,
-      displayIds,
+      targetDisplayId: primaryTarget,
+      displayIds: selectedDisplayIds,
       customResolution: { width: targetW, height: targetH }
     });
 
@@ -89,7 +120,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
         ...prev.mainOutput,
         general: {
           ...prev.mainOutput.general,
-          outputMonitor: displayIds[0] || prev.mainOutput.general.outputMonitor,
+          outputMonitor: primaryTarget || prev.mainOutput.general.outputMonitor,
           position: {
             ...prev.mainOutput.general.position,
             width: targetW,
@@ -185,39 +216,106 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
               </div>
             </div>
             
-            <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
+            {/* Multi-Target 1-to-1 Target Monitor Selection */}
+            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
               {availableDisplays.map((disp, i) => {
                 const label = disp.label || disp.name;
                 const w = disp.width || disp.bounds?.width;
                 const h = disp.height || disp.bounds?.height;
                 const resText = w && h ? `${w}×${h}` : '';
+                const isSelected = selectedDisplayIds.includes(label);
+                const isOperatorScreen = !!disp.isPrimary;
+
+                // Check other route panels targeting this monitor
+                const otherSharingGroups = outputGroups.filter(
+                  (g) => g.id !== groupId && (g.displayIds?.includes(label) || g.targetDisplayId === label)
+                );
 
                 return (
-                  <label key={i} className="flex items-center justify-between p-2 rounded border border-[#2d313d] bg-[#141519] cursor-pointer hover:bg-[#1a1c23] transition-colors">
-                    <div className="flex items-center gap-3">
-                      <input 
-                        type="checkbox"
-                        checked={displayIds.includes(label)}
-                        onChange={() => handleToggleDisplay(disp)}
-                        className="w-4 h-4 rounded border-gray-500 bg-transparent accent-indigo-500 text-indigo-500"
-                      />
-                      <Monitor size={16} className="text-gray-400" />
-                      <span className="text-sm text-gray-200">{label} {disp.isPrimary ? '(Primary)' : ''}</span>
+                  <div
+                    key={i}
+                    onClick={() => handleToggleDisplay(disp)}
+                    className={`flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none ${
+                      isSelected
+                        ? 'border-indigo-500/80 bg-indigo-950/30 shadow-xs ring-1 ring-indigo-500/30'
+                        : 'border-[#2d313d] bg-[#141519] hover:bg-[#1a1c23] hover:border-gray-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-4 h-4 rounded flex items-center justify-center border transition-all shrink-0 ${
+                        isSelected ? 'border-indigo-400 bg-indigo-600' : 'border-gray-600 bg-transparent'
+                      }`}>
+                        {isSelected && (
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <Monitor size={16} className={`shrink-0 ${isSelected ? 'text-indigo-400' : 'text-gray-400'}`} />
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs font-semibold ${isSelected ? 'text-white' : 'text-gray-200'}`}>
+                            {label}
+                          </span>
+                          {isOperatorScreen && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              Operator Primary
+                            </span>
+                          )}
+                          {!isOperatorScreen && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Audience Projector
+                            </span>
+                          )}
+                        </div>
+
+                        {otherSharingGroups.length > 0 ? (
+                          <span className="text-[10px] text-amber-400/90 truncate">
+                            Shared with: {otherSharingGroups.map(g => g.name).join(', ')} (Active route overlays 1:1)
+                          </span>
+                        ) : isOperatorScreen ? (
+                          <span className="text-[10px] text-gray-500">
+                            Operator workspace console display
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-gray-400">
+                            Dedicated output monitor (1 is to 1)
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {resText && (
-                      <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-[#252834] text-cyan-400 border border-[#3b4155]">
-                        {resText}
-                      </span>
-                    )}
-                  </label>
+                    
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      {resText && (
+                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-[#252834] text-cyan-400 border border-[#3b4155]">
+                          {resText}
+                        </span>
+                      )}
+                      {isSelected && (
+                        <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                          1:1 TARGET
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
-            
-            <div className="flex items-center gap-2 mt-2">
-               <button onClick={() => setDisplayIds(availableDisplays.map(d => d.label || d.name || d.id))} className="text-[10px] text-indigo-400 hover:text-indigo-300">Select All</button>
-               <span className="text-gray-600">|</span>
-               <button onClick={() => setDisplayIds([])} className="text-[10px] text-gray-400 hover:text-gray-300">Clear All</button>
+
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#2d313d]/60 text-[11px] text-gray-400">
+              <span className="text-gray-400 flex items-center gap-1">
+                <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
+                1:1 Presentation: Shared monitors overlay the active route panel cleanly.
+              </span>
+              <button
+                type="button"
+                onClick={handleTestPresentation}
+                className="flex items-center gap-1 text-sky-400 hover:text-sky-300 font-medium cursor-pointer shrink-0"
+                title="Immediately test sending presentation to target monitor(s)"
+              >
+                <Play size={11} className="text-sky-400" />
+                Send Test
+              </button>
             </div>
           </div>
         </div>
@@ -231,7 +329,8 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
                   name: `${name} (Copy)`,
                   role: group.role,
                   themeId,
-                  displayIds: [...displayIds]
+                  targetDisplayId: selectedDisplayIds[0] || 'Monitor 2',
+                  displayIds: selectedDisplayIds
                 };
                 store.addOutputGroup(duplicated);
                 onClose();

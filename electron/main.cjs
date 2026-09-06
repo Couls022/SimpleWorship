@@ -4,39 +4,11 @@ const fs = require('fs');
 const os = require('os');
 const { pathToFileURL } = require('url');
 
-// ============================================================================
-// HARDWARE ACCELERATION & HIGH-PERFORMANCE WINDOWS SYSTEM ENGINE
-// Configured to adapt directly to real device CPU, RAM, GPU, and graphics drivers
-// ============================================================================
-
-// 1. Force GPU Hardware Acceleration & Bypass strict Chromium blocklists on Windows
-// (Ensures Intel HD/UHD/Iris, AMD Radeon, and NVIDIA GPUs utilize direct D3D11/DirectX rasterization)
-app.commandLine.appendSwitch('ignore-gpu-blocklist');
-app.commandLine.appendSwitch('enable-gpu-rasterization');
-app.commandLine.appendSwitch('enable-zero-copy');
-app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
-app.commandLine.appendSwitch('force-gpu-mem-available-mb', '2048');
-
-// 2. Hardware Video & Media Decoding (DXVA2 / Direct3D11 / NVDEC / VAAPI)
-app.commandLine.appendSwitch('enable-accelerated-video-decode');
-app.commandLine.appendSwitch('enable-accelerated-mjpeg-decode');
-app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,CanvasOopRasterization,RawDraw,DirectShow');
-
-// 3. Prevent Background Throttling on Unfocused Projector Windows
-// When operator clicks main console window, secondary projector display MUST NOT lag or drop frames
+// Standard robust Electron flags for smooth Windows rendering
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-
-// 4. Memory & V8 Engine Optimization for 4K Media, Video Loops, and PPTX
-// Avoids stop-the-world GC pauses on real devices with 4GB - 16GB RAM
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
-
-// 5. Windows D3D11 Compositor Optimization
-if (process.platform === 'win32') {
-  app.commandLine.appendSwitch('use-angle', 'd3d11');
-  app.commandLine.appendSwitch('enable-hardware-overlays', 'single-fullscreen,single-on-top');
-}
 
 let mainWindow = null;
 let powerSaveId = null;
@@ -91,21 +63,27 @@ function createMainWindow() {
   
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   mainWindow = new BrowserWindow({
-    width: Math.min(1440, width),
-    height: Math.min(900, height),
+    width: Math.min(1366, width),
+    height: Math.min(768, height),
     minWidth: 1024,
-    minHeight: 720,
-
+    minHeight: 580,
+    show: false,
     frame: false,
     backgroundColor: '#0c0d10',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
+      webSecurity: false,
       backgroundThrottling: false,
       spellcheck: false
     }
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
@@ -358,7 +336,7 @@ function getProjectorUrl(displayId, groupId) {
 
   const indexPath = path.join(__dirname, '../dist/index.html');
   const fileUrl = pathToFileURL(indexPath).href;
-  return `${fileUrl}?${queryParams}${hashParams}`;
+  return `${fileUrl}${hashParams}`;
 }
 
 function resolveTargetDisplay(displayId, formattedDisplays) {
@@ -394,19 +372,19 @@ function resolveTargetDisplay(displayId, formattedDisplays) {
 
   // "monitor-2", "secondary" or index 1 matches the first non-primary display
   if (idLower.includes('monitor-2') || idLower === 'monitor 2' || idLower.includes('secondary') || idLower.includes('alternate')) {
-    return formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[1] || formattedDisplays[0];
+    return formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[1] || null;
   }
 
   // "monitor-3", "foldback", "stage" or index 2 matches the second non-primary display
   if (idLower.includes('monitor-3') || idLower === 'monitor 3' || idLower.includes('foldback') || idLower.includes('stage') || idLower.includes('tertiary')) {
     const nonPrimary = formattedDisplays.filter(fd => !fd.isPrimary);
-    return nonPrimary[1] || formattedDisplays[2] || formattedDisplays[0];
+    return nonPrimary[1] || formattedDisplays[2] || null;
   }
 
   return null;
 }
 
-// Projector Management (Display-Centric)
+// Projector Management (Strict 1-to-1 Target Display Architecture)
 ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) => {
   if (!groupId) return { success: false, status: 'DISCONNECTED', error: 'groupId is required' };
 
@@ -436,7 +414,7 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
 
   const canonicalDisplayId = selectedDisplay ? selectedDisplay.id : (displayId || `display-${primaryDisplay.id}`);
 
-  // --- PROJECTOR WINDOW REUSE (DISPLAY-CENTRIC) ---
+  // --- PROJECTOR WINDOW REUSE (DISPLAY-CENTRIC 1:1) ---
   // A physical monitor must have at most ONE active fullscreen projector window.
   // If a window already exists on this physical display, reuse it and switch route!
   if (displayWindows.has(canonicalDisplayId)) {
@@ -505,7 +483,8 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
+      webSecurity: false,
       backgroundThrottling: false,
       spellcheck: false
     }
@@ -606,112 +585,121 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
   const formattedDisplays = await getFormattedDisplays();
   const results = [];
 
-  for (const item of assignments) {
-    const { displayId, groupId } = item;
-    if (!displayId) continue;
+  // Filter for valid live targets
+  const liveAssignments = assignments.filter(item => item && item.groupId && item.displayId);
 
-    const matchedDisplay = resolveTargetDisplay(displayId, formattedDisplays);
-    const canonicalDisplayId = matchedDisplay ? matchedDisplay.id : displayId;
-
-    if (!groupId) {
-      // Zero live routes on this display -> close projector window if open
-      if (displayWindows.has(canonicalDisplayId)) {
-        const win = displayWindows.get(canonicalDisplayId);
-        if (win && !win.isDestroyed()) win.close();
-        displayWindows.delete(canonicalDisplayId);
-        displayRouteMap.delete(canonicalDisplayId);
-        results.push({ displayId: canonicalDisplayId, action: 'closed' });
-      }
-    } else {
-      // Exactly 1 or winning live route -> ensure window is open and showing groupId
-      if (displayWindows.has(canonicalDisplayId)) {
-        const win = displayWindows.get(canonicalDisplayId);
-        if (win && !win.isDestroyed()) {
-          const currentGroupId = displayRouteMap.get(canonicalDisplayId);
-          if (currentGroupId !== groupId) {
-            displayRouteMap.set(canonicalDisplayId, groupId);
-            win.webContents.send('projector:route-changed', { displayId: canonicalDisplayId, groupId });
-            results.push({ displayId: canonicalDisplayId, groupId, action: 'route-updated' });
-          } else {
-            results.push({ displayId: canonicalDisplayId, groupId, action: 'noop' });
-          }
-          continue;
-        }
-      }
-
-      // Open new window on this display
-      const win = new BrowserWindow({
-        x: matchedDisplay ? matchedDisplay.bounds.x : 0,
-        y: matchedDisplay ? matchedDisplay.bounds.y : 0,
-        width: matchedDisplay ? matchedDisplay.bounds.width : 1920,
-        height: matchedDisplay ? matchedDisplay.bounds.height : 1080,
-        frame: false,
-        fullscreen: false,
-        alwaysOnTop: false,
-        skipTaskbar: false,
-        backgroundColor: '#000000',
-        webPreferences: {
-          preload: path.join(__dirname, 'preload.cjs'),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          backgroundThrottling: false,
-          spellcheck: false
-        }
+  // Map of canonicalDisplayId -> winning assigned target details (strictly 1 is to 1 per physical display)
+  const canonicalTargets = new Map();
+  for (const item of liveAssignments) {
+    const matchedDisplay = resolveTargetDisplay(item.displayId, formattedDisplays);
+    if (matchedDisplay) {
+      canonicalTargets.set(matchedDisplay.id, {
+        canonicalDisplayId: matchedDisplay.id,
+        matchedDisplay,
+        groupId: item.groupId,
+        displayId: item.displayId
       });
-
-      win.webContents.on('did-fail-load', (loadEvent, errorCode, errorDescription, validatedURL) => {
-        console.error(`[Projector] Failed to load URL: ${validatedURL}, error: ${errorDescription} (${errorCode})`);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('projector:error', {
-            displayId: canonicalDisplayId,
-            groupId,
-            errorCode,
-            errorDescription,
-            url: validatedURL
-          });
-        }
-      });
-
-      const url = getProjectorUrl(canonicalDisplayId, groupId);
-      win.loadURL(url);
-
-      if (matchedDisplay) {
-        win.setPosition(matchedDisplay.bounds.x, matchedDisplay.bounds.y);
-        win.setSize(matchedDisplay.bounds.width, matchedDisplay.bounds.height);
-        win.setBounds(matchedDisplay.bounds);
-        win.setFullScreen(true);
-        if (typeof win.showInactive === 'function') {
-          win.showInactive();
-        } else {
-          win.show();
-        }
-      }
-
-      win.on('closed', () => {
-        displayWindows.delete(canonicalDisplayId);
-        displayRouteMap.delete(canonicalDisplayId);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
-          mainWindow.focus();
-          mainWindow.moveTop();
-        }
-      });
-
-      displayWindows.set(canonicalDisplayId, win);
-      displayRouteMap.set(canonicalDisplayId, groupId);
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'CONNECTED' });
-      }
-
-      results.push({ displayId: canonicalDisplayId, groupId, action: 'opened' });
     }
   }
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.focus();
-    mainWindow.moveTop();
+  // Close any projector windows on displays that are NO LONGER targeted
+  for (const [dispId, win] of displayWindows.entries()) {
+    if (!canonicalTargets.has(dispId)) {
+      if (win && !win.isDestroyed()) win.close();
+      displayWindows.delete(dispId);
+      displayRouteMap.delete(dispId);
+      results.push({ displayId: dispId, action: 'closed' });
+    }
+  }
+
+  // Ensure each targeted physical display has EXACTLY ONE window (1-is-to-1)
+  for (const [canonicalDisplayId, target] of canonicalTargets.entries()) {
+    const { matchedDisplay, groupId } = target;
+
+    // If window already exists on this physical display, reuse it and update route!
+    if (displayWindows.has(canonicalDisplayId)) {
+      const win = displayWindows.get(canonicalDisplayId);
+      if (win && !win.isDestroyed()) {
+        const currentGroupId = displayRouteMap.get(canonicalDisplayId);
+        if (currentGroupId !== groupId) {
+          displayRouteMap.set(canonicalDisplayId, groupId);
+          win.webContents.send('projector:route-changed', { displayId: canonicalDisplayId, groupId });
+          results.push({ displayId: canonicalDisplayId, groupId, action: 'route-updated' });
+        } else {
+          results.push({ displayId: canonicalDisplayId, groupId, action: 'noop' });
+        }
+        continue;
+      }
+    }
+
+    // Otherwise create exactly 1 window on this physical display
+    const win = new BrowserWindow({
+      x: matchedDisplay.bounds.x,
+      y: matchedDisplay.bounds.y,
+      width: matchedDisplay.bounds.width,
+      height: matchedDisplay.bounds.height,
+      frame: false,
+      fullscreen: false,
+      alwaysOnTop: false,
+      skipTaskbar: false,
+      backgroundColor: '#000000',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+        webSecurity: false,
+        backgroundThrottling: false,
+        spellcheck: false
+      }
+    });
+
+    win.webContents.on('did-fail-load', (loadEvent, errorCode, errorDescription, validatedURL) => {
+      console.error(`[Projector] Failed to load URL: ${validatedURL}, error: ${errorDescription} (${errorCode})`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('projector:error', {
+          displayId: canonicalDisplayId,
+          groupId,
+          errorCode,
+          errorDescription,
+          url: validatedURL
+        });
+      }
+    });
+
+    const url = getProjectorUrl(canonicalDisplayId, groupId);
+    win.loadURL(url);
+
+    win.setPosition(matchedDisplay.bounds.x, matchedDisplay.bounds.y);
+    win.setSize(matchedDisplay.bounds.width, matchedDisplay.bounds.height);
+    win.setBounds(matchedDisplay.bounds);
+    win.setFullScreen(true);
+    if (typeof win.showInactive === 'function') {
+      win.showInactive();
+    } else {
+      win.show();
+    }
+
+    win.on('closed', () => {
+      displayWindows.delete(canonicalDisplayId);
+      displayRouteMap.delete(canonicalDisplayId);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
+        mainWindow.focus();
+        mainWindow.moveTop();
+      }
+    });
+
+    displayWindows.set(canonicalDisplayId, win);
+    displayRouteMap.set(canonicalDisplayId, groupId);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'CONNECTED' });
+      mainWindow.focus();
+      mainWindow.moveTop();
+    }
+
+    results.push({ displayId: canonicalDisplayId, groupId, action: 'opened' });
   }
 
   return { success: true, results };

@@ -28,11 +28,16 @@ export default function MultiGroupPreviewBar() {
     moveOutputGroup
   } = store;
 
-  const handleLaunchProjector = (groupId: string, e: React.MouseEvent) => {
+  const handleLaunchProjector = async (groupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setActiveControlGroupId(groupId);
     const group = outputGroups.find(g => g.id === groupId);
-    const displayId = group?.displayIds?.[0];
-    DisplayManager.openProjector(groupId, displayId);
+    const targets = (group?.displayIds && group.displayIds.length > 0)
+      ? group.displayIds
+      : (group?.targetDisplayId ? [group.targetDisplayId] : ['Monitor 2']);
+    for (const target of targets) {
+      await DisplayManager.sendPresentationToTarget(groupId, target);
+    }
   };
 
   return (
@@ -181,9 +186,18 @@ export default function MultiGroupPreviewBar() {
                   </span>
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0"></span>
                   <span className="font-bold text-xs text-gray-200 truncate">{group.name}</span>
-                  <span className="text-[9px] font-mono px-1 rounded bg-[#16171c] text-gray-400 uppercase hidden sm:inline truncate">
-                    {group.role}
+                  {/* Assigned Target Displays */}
+                  <span 
+                    className="text-[9px] font-mono px-1 rounded bg-[#16171c] text-cyan-400 border border-cyan-800/40 shrink-0"
+                    title={`Assigned Target Monitor(s): ${(group.displayIds && group.displayIds.length > 0) ? group.displayIds.join(', ') : (group.targetDisplayId || 'Monitor 2')}`}
+                  >
+                    {(group.displayIds && group.displayIds.length > 0) ? group.displayIds.join(', ') : (group.targetDisplayId || 'Monitor 2')}
                   </span>
+                  {isTargeted && (
+                    <span className="text-[8px] font-bold px-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                      ACTIVE
+                    </span>
+                  )}
                 </div>
 
                 <div 
