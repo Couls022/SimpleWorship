@@ -102,6 +102,7 @@ const PREVIEW_BACKGROUNDS = [
 
 const RESOLUTION_PRESETS = [
   { label: '16:9 Full HD (1920 × 1080)', width: 1920, height: 1080, ratio: '16:9' },
+  { label: '16:9 HD (1366 × 768)', width: 1366, height: 768, ratio: '16:9' },
   { label: '16:9 HD (1280 × 720)', width: 1280, height: 720, ratio: '16:9' },
   { label: '16:9 4K UHD (3840 × 2160)', width: 3840, height: 2160, ratio: '16:9' },
   { label: '4:3 Standard Projector (1024 × 768)', width: 1024, height: 768, ratio: '4:3' },
@@ -357,14 +358,20 @@ export default function ScriptureLivePreview({
               const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
                 text: rawCombinedText,
                 baseFontSize: ThemeEngine.normalizeFontSize(scriptureThemeStyles.fontSize || scriptureOptions?.scriptureFont?.maxSize),
+                fontFamily: scriptureThemeStyles.fontFamily,
+                fontWeight: scriptureThemeStyles.fontWeight || (scriptureOptions?.scriptureFont?.bold ? '700' : '400'),
+                fontStyle: scriptureThemeStyles.fontStyle || (scriptureOptions?.scriptureFont?.italic ? 'italic' : 'normal'),
                 hasHeader: showReference && refLocation === 'Before Each Slide',
                 hasFooter: showReference && refLocation === 'After Each Slide',
                 scale: 1,
                 minFontSize: scriptureOptions?.minFontSize || 24,
                 maxFontSize: 160,
-                isUppercase: scriptureOptions?.scriptureFont?.casing === 'uppercase',
-                lineSpacing: scriptureOptions?.lineSpacing || scriptureOptions?.scriptureFont?.lineSpacing || 1.35,
+                isUppercase: scriptureOptions?.scriptureFont?.casing === 'uppercase' || scriptureThemeStyles.textTransform === 'uppercase',
+                lineSpacing: scriptureOptions?.lineSpacing || scriptureOptions?.scriptureFont?.lineSpacing || scriptureThemeStyles.lineHeight || 1.35,
+                widthPercent: scriptureThemeStyles.widthPercent,
                 margins: margins,
+                containerWidth: width,
+                containerHeight: height,
               });
 
               return (

@@ -125,6 +125,35 @@ export class ThemeEngine {
     };
   }
 
+  private static sharedCanvas: HTMLCanvasElement | null = null;
+  private static sharedCtx: CanvasRenderingContext2D | null = null;
+  private static measurementCache = new Map<string, {
+    wrappedLines: string[];
+    lineCount: number;
+    width: number;
+    height: number;
+    fontSize: number;
+    lineHeight: number;
+    lineBoxHeight: number;
+    actualBoundingBoxAscent: number;
+    actualBoundingBoxDescent: number;
+    glyphHeight: number;
+    ascent: number;
+    descent: number;
+  }>();
+
+  private static getMeasurementContext(): CanvasRenderingContext2D | null {
+    if (typeof document === 'undefined') return null;
+    if (this.sharedCtx) return this.sharedCtx;
+    try {
+      this.sharedCanvas = document.createElement('canvas');
+      this.sharedCtx = this.sharedCanvas.getContext('2d');
+      return this.sharedCtx;
+    } catch {
+      return null;
+    }
+  }
+
   // Canonical Presentation Text Measurement Pipeline
   static measurePresentationText(options: {
     text: string;
@@ -180,16 +209,13 @@ export class ThemeEngine {
     }
 
     const processedText = isUppercase ? text.toUpperCase() : text;
-
-    let ctx: CanvasRenderingContext2D | null = null;
-    if (typeof document !== 'undefined') {
-      try {
-        const canvas = document.createElement('canvas');
-        ctx = canvas.getContext('2d');
-      } catch {
-        ctx = null;
-      }
+    const cacheKey = `${processedText}|${fontFamily}|${fontSize}|${fontWeight}|${fontStyle}|${lineHeight}|${Math.round(maxWidth)}|${isUppercase}`;
+    const cached = this.measurementCache.get(cacheKey);
+    if (cached) {
+      return cached;
     }
+
+    const ctx = this.getMeasurementContext();
 
     if (ctx) {
       try {
@@ -287,7 +313,7 @@ export class ThemeEngine {
     const totalHeight = lineCount * lineBoxHeight;
     const glyphHeight = ascent + descent;
 
-    return {
+    const result = {
       wrappedLines,
       lineCount,
       width: maxLineWidth,
@@ -301,6 +327,15 @@ export class ThemeEngine {
       ascent,
       descent,
     };
+
+    // Bounded LRU cache size limit
+    if (this.measurementCache.size > 500) {
+      const firstKey = this.measurementCache.keys().next().value;
+      if (firstKey) this.measurementCache.delete(firstKey);
+    }
+    this.measurementCache.set(cacheKey, result);
+
+    return result;
   }
 
   // Canonical Auto-fit font size calculation across all renderers (Song, Scripture, Presentations)
@@ -319,6 +354,7 @@ export class ThemeEngine {
     containerHeight?: number;
     isUppercase?: boolean;
     lineSpacing?: number;
+    widthPercent?: number;
     margins?: { left?: number; top?: number; right?: number; bottom?: number };
   }): number {
     const {
@@ -336,6 +372,7 @@ export class ThemeEngine {
       containerHeight = 1080,
       isUppercase = false,
       lineSpacing = 1.35,
+      widthPercent,
       margins
     } = options;
 
@@ -345,21 +382,23 @@ export class ThemeEngine {
       return Math.round(baseFontSize * scale);
     }
 
-    // Usable screen real estate calculations in canonical canvas (1920x1080)
+    // Usable screen real estate calculations in canonical canvas
     const marginLeft = margins?.left ?? 60;
     const marginRight = margins?.right ?? 60;
     const marginTop = margins?.top ?? 50;
     const marginBottom = margins?.bottom ?? 50;
 
-    // Available text region dimensions inside canonical card
-    const availableWidth = Math.max(400, (containerWidth - marginLeft - marginRight) * 0.90 - 64);
-    const headerAllowance = hasHeader ? 60 : 0;
-    const footerAllowance = hasFooter ? 50 : 0;
-    const availableHeight = Math.max(300, containerHeight - marginTop - marginBottom - headerAllowance - footerAllowance - 64);
+    // Available text region dimensions considering widthPercent if configured
+    const effectiveWidthFactor = widthPercent ? Math.min(1, Math.max(0.25, widthPercent / 100)) : 0.90;
+    const rawAvailableWidth = (containerWidth - marginLeft - marginRight) * effectiveWidthFactor - 48;
+    const availableWidth = Math.max(200, rawAvailableWidth);
+    const headerAllowance = hasHeader ? Math.min(60, containerHeight * 0.08) : 0;
+    const footerAllowance = hasFooter ? Math.min(50, containerHeight * 0.07) : 0;
+    const availableHeight = Math.max(180, containerHeight - marginTop - marginBottom - headerAllowance - footerAllowance - 48);
 
     const targetFontSize = Math.min(maxFontSize, Math.max(minFontSize, baseFontSize));
 
-    // Test if target font size fits without exceeding available canvas height
+    // Test if target font size fits without exceeding available canvas height or width
     const targetMeasurement = ThemeEngine.measurePresentationText({
       text,
       fontFamily,
@@ -371,12 +410,12 @@ export class ThemeEngine {
       isUppercase,
     });
 
-    // If base font size fits comfortably, keep base font size (e.g. 90pt)
-    if (targetMeasurement.height <= availableHeight) {
+    // If base font size fits comfortably in both dimensions, keep base font size
+    if (targetMeasurement.height <= availableHeight && targetMeasurement.width <= availableWidth) {
       return Math.round(targetFontSize * scale);
     }
 
-    // Binary search ONLY when real vertical overflow occurs
+    // Binary search when overflow occurs
     let low = minFontSize;
     let high = targetFontSize;
     let bestFit = minFontSize;
@@ -394,7 +433,7 @@ export class ThemeEngine {
         isUppercase,
       });
 
-      if (m.height <= availableHeight) {
+      if (m.height <= availableHeight && m.width <= availableWidth) {
         bestFit = mid;
         low = mid + 1;
       } else {

@@ -567,6 +567,21 @@ export interface AlertState {
   routerId?: string;
 }
 
+export interface AlertPreset {
+  id: string;
+  title?: string;
+  message: string;
+  position?: 'top' | 'bottom';
+  backgroundColor?: string;
+  textColor?: string;
+  showNursery?: boolean;
+  nurseryText?: string;
+  targetGroup?: string;
+  autoDismissSecs?: number;
+  isDefault?: boolean;
+  createdAt?: number;
+}
+
 export type AnnotationToolType = 'pen' | 'highlighter' | 'laser' | 'rectangle' | 'arrow' | 'spotlight' | 'eraser';
 
 export interface AnnotationPoint {

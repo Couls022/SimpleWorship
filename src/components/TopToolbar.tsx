@@ -797,6 +797,33 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={() => { 
+                    onOpenAlerts(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 text-amber-300">
+                    <Bell size={12} />
+                    <span>Nursery & Screen Alert...</span>
+                  </span>
+                  {alertState?.active && <span className="text-[9px] px-1 bg-amber-500 text-black font-bold rounded">LIVE</span>}
+                </button>
+                <button 
+                  onClick={() => { 
+                    if (onOpenRemoteControl) onOpenRemoteControl(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 text-purple-300">
+                    <Radio size={12} />
+                    <span>Mobile Remote Control Hub...</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-gray-400">QR / PIN</span>
+                </button>
+                <div className="border-t border-[#313540] my-1"></div>
+                <button 
+                  onClick={() => { 
                     toggleMasterLive(activeControlGroupId || store.outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 

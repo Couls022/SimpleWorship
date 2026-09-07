@@ -104,17 +104,39 @@ function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {
     case 'go_live':
       store.goLive();
       break;
+    case 'select_item':
+    case 'go_live_item':
+      if (cmd.params?.itemId) {
+        store.goLiveItem(cmd.params.itemId, cmd.params.slideIndex || 0, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+      }
+      break;
+    case 'select_slide':
+    case 'go_live_slide':
+      if (cmd.params?.slideIndex !== undefined) {
+        store.goLiveSlide(cmd.params.slideIndex, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+      }
+      break;
     case 'set_alert':
       if (cmd.params) {
         store.setAlert({
           active: cmd.params.active ?? cmd.params.enabled ?? true,
-          message: cmd.params.message || cmd.params.text || '',
-          position: cmd.params.position || 'bottom'
+          message: cmd.params.message || cmd.params.text || store.alert.message,
+          position: cmd.params.position || store.alert.position || 'bottom',
+          backgroundColor: cmd.params.backgroundColor || store.alert.backgroundColor,
+          textColor: cmd.params.textColor || store.alert.textColor
+        }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+      }
+      break;
+    case 'set_nursery':
+      if (cmd.params) {
+        store.setAlert({
+          showNursery: cmd.params.active ?? true,
+          nurseryText: cmd.params.code || cmd.params.nurseryText || ''
         }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
       }
       break;
     case 'clear_alert':
-      store.setAlert({ active: false, message: '' }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+      store.setAlert({ active: false, showNursery: false }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
       break;
     default:
       console.log('[Sync] Unknown remote command:', cmd.action);
@@ -228,6 +250,10 @@ export function initSync(isProjector: boolean = false) {
       } else if (payload.type === 'ALERT_UPDATE') {
         if (data.alert) {
           useStore.setState({ alert: data.alert });
+        }
+      } else if (payload.type === 'ALERT_PRESETS_UPDATE') {
+        if (data.presets && Array.isArray(data.presets)) {
+          useStore.setState({ alertPresets: data.presets });
         }
       } else if (payload.type === 'ANNOTATION_UPDATE') {
         if (data.annotationState) {

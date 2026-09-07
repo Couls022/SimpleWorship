@@ -1429,13 +1429,17 @@ function SongEditorModal({
                           ...ThemeEngine.getTextStyle(previewThemeStyles, (zoomPercent / 35)),
                           fontSize: `${ThemeEngine.calculateAutoFitFontSize({
                             text: activeSlide.text,
-                            baseFontSize: fontSize,
+                            baseFontSize: previewThemeStyles.fontSize || fontSize,
+                            fontFamily: previewThemeStyles.fontFamily,
+                            fontWeight: previewThemeStyles.fontWeight,
+                            fontStyle: previewThemeStyles.fontStyle,
                             hasHeader: Boolean(activeSlide.label),
                             scale: (zoomPercent / 100) * 1.35,
                             minFontSize: 16,
                             maxFontSize: 160,
-                            lineSpacing: lineHeight,
-                            isUppercase: textTransform === 'uppercase',
+                            lineSpacing: previewThemeStyles.lineHeight || lineHeight,
+                            widthPercent: previewThemeStyles.widthPercent || widthPercent,
+                            isUppercase: previewThemeStyles.textTransform === 'uppercase' || textTransform === 'uppercase',
                             margins: useStore.getState().systemOptions.mainOutput.general.margins
                           })}px`,
                         }}

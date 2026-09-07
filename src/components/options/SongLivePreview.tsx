@@ -173,6 +173,7 @@ const PREVIEW_BACKGROUNDS = [
 
 const RESOLUTION_PRESETS = [
   { label: '16:9 Full HD (1920 × 1080)', width: 1920, height: 1080, ratio: '16:9' },
+  { label: '16:9 HD (1366 × 768)', width: 1366, height: 768, ratio: '16:9' },
   { label: '16:9 HD (1280 × 720)', width: 1280, height: 720, ratio: '16:9' },
   { label: '16:9 4K UHD (3840 × 2160)', width: 3840, height: 2160, ratio: '16:9' },
   { label: '4:3 Standard Projector (1024 × 768)', width: 1024, height: 768, ratio: '4:3' },
@@ -474,14 +475,20 @@ export default function SongLivePreview({
               const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
                 text: rawLyrics,
                 baseFontSize: ThemeEngine.normalizeFontSize(songThemeStyles.fontSize || songOptions?.songFont?.maxSize),
+                fontFamily: songThemeStyles.fontFamily,
+                fontWeight: songThemeStyles.fontWeight,
+                fontStyle: songThemeStyles.fontStyle,
                 hasHeader: showLabel && labelLoc === 'Header',
                 hasFooter: isCopyrightVisible,
                 scale: 1,
                 minFontSize: songOptions?.minFontSize || 24,
                 maxFontSize: 160,
-                isUppercase: allCapsLyrics || songOptions?.songFont?.casing === 'uppercase',
-                lineSpacing: songOptions?.lineSpacing || songOptions?.songFont?.lineSpacing || 1.35,
+                isUppercase: allCapsLyrics || songOptions?.songFont?.casing === 'uppercase' || songThemeStyles.textTransform === 'uppercase',
+                lineSpacing: songOptions?.lineSpacing || songOptions?.songFont?.lineSpacing || songThemeStyles.lineHeight || 1.35,
+                widthPercent: songThemeStyles.widthPercent,
                 margins: margins,
+                containerWidth: width,
+                containerHeight: height,
               });
 
               return (

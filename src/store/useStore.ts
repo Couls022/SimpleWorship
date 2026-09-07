@@ -11,6 +11,7 @@ import {
   Asset, 
   Theme, 
   AlertState, 
+  AlertPreset,
   SystemOptions, 
   ShortcutSettings,
   SlideAnnotationState,
@@ -88,6 +89,96 @@ const getStoredOptions = (): SystemOptions => {
     console.error('Error loading stored options', e);
   }
   return defaultSystemOptions;
+};
+
+export const DEFAULT_ALERT_PRESETS: AlertPreset[] = [
+  {
+    id: 'preset-nursery-304',
+    title: 'Nursery Room #304',
+    message: 'Nursery #304 is requested in the Toddler Room',
+    position: 'bottom',
+    backgroundColor: '#0F172A',
+    textColor: '#FACC15',
+    showNursery: true,
+    nurseryText: '#304',
+    autoDismissSecs: 0,
+    targetGroup: 'all',
+    isDefault: true,
+  },
+  {
+    id: 'preset-nursery-102',
+    title: 'Nursery Parents Notice',
+    message: 'Nursery #102: Parents please report to the nursery',
+    position: 'bottom',
+    backgroundColor: '#0F172A',
+    textColor: '#FACC15',
+    showNursery: true,
+    nurseryText: '#102',
+    autoDismissSecs: 0,
+    targetGroup: 'all',
+    isDefault: true,
+  },
+  {
+    id: 'preset-vehicle-move',
+    title: 'Vehicle Parking Notice',
+    message: 'Driver of White SUV (Plate # ABC-1234), please move your vehicle',
+    position: 'bottom',
+    backgroundColor: '#7F1D1D',
+    textColor: '#FEF08A',
+    showNursery: false,
+    autoDismissSecs: 60,
+    targetGroup: 'all',
+    isDefault: true,
+  },
+  {
+    id: 'preset-sunday-school',
+    title: 'Sunday School Class Dismissal',
+    message: 'Children are dismissed to Sunday School Class',
+    position: 'bottom',
+    backgroundColor: '#1E3A8A',
+    textColor: '#93C5FD',
+    showNursery: false,
+    autoDismissSecs: 30,
+    targetGroup: 'all',
+    isDefault: true,
+  },
+  {
+    id: 'preset-fellowship-lunch',
+    title: 'Fellowship Lunch Announcement',
+    message: 'Special Announcement: Fellowship Lunch right after the service',
+    position: 'top',
+    backgroundColor: '#064E3B',
+    textColor: '#6EE7B7',
+    showNursery: false,
+    autoDismissSecs: 0,
+    targetGroup: 'all',
+    isDefault: true,
+  }
+];
+
+const ALERT_PRESETS_STORAGE_KEY = 'simpleworship_alert_presets_v1';
+
+const getStoredAlertPresets = (): AlertPreset[] => {
+  try {
+    const saved = localStorage.getItem(ALERT_PRESETS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading stored alert presets', e);
+  }
+  return DEFAULT_ALERT_PRESETS;
+};
+
+const saveStoredAlertPresets = (presets: AlertPreset[]) => {
+  try {
+    localStorage.setItem(ALERT_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  } catch (e) {
+    console.error('Error persisting alert presets', e);
+  }
 };
 
 const defaultState: PresentationState = {
@@ -190,6 +281,7 @@ interface AppState {
   // LIVE Navigation & Controls
   goLiveNext: () => void;
   goLivePrev: () => void;
+  goLiveSlide: (slideIndex: number, groupId?: string) => void;
   goNextScheduleItem: () => void;
   goPrevScheduleItem: () => void;
   toggleBlack: (groupId: string) => void;
@@ -200,8 +292,13 @@ interface AppState {
 
   // Alert / Nursery Ticker
   alert: AlertState;
-  setAlert: (alert: Partial<AlertState>, groupId: string) => void;
+  setAlert: (alert: Partial<AlertState>, groupId?: string) => void;
   groupAlerts: Record<string, AlertState>;
+  alertPresets: AlertPreset[];
+  addAlertPreset: (preset: Omit<AlertPreset, 'id'> | Partial<AlertPreset>) => AlertPreset;
+  updateAlertPreset: (id: string, updates: Partial<AlertPreset>) => void;
+  deleteAlertPreset: (id: string) => void;
+  resetAlertPresets: () => void;
 
   // Slide Annotation State
   annotationState: SlideAnnotationState;
@@ -1052,9 +1149,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   // LIVE Navigation & Controls
   goLiveNext: () => {
-    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings } = get();
-    if (!activeControlGroupId) return;
-    const currentState = groupStates[activeControlGroupId] || defaultState;
+    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups } = get();
+    const targetGroupId = activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
+    const currentState = groupStates[targetGroupId] || defaultState;
     const currentItemId = currentState.activeItemId;
 
     let totalSlides = 999;
@@ -1080,13 +1177,13 @@ export const useStore = create<AppState>((set, get) => ({
         nextIndex = Math.max(0, totalSlides - 1);
       }
     }
-    get().setGroupState(activeControlGroupId, { activeSlideIndex: nextIndex });
+    get().setGroupState(targetGroupId, { activeSlideIndex: nextIndex });
   },
   
   goLivePrev: () => {
-    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings } = get();
-    if (!activeControlGroupId) return;
-    const currentState = groupStates[activeControlGroupId] || defaultState;
+    const { activeControlGroupId, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups } = get();
+    const targetGroupId = activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
+    const currentState = groupStates[targetGroupId] || defaultState;
     const currentItemId = currentState.activeItemId;
 
     let prevIndex = currentState.activeSlideIndex - 1;
@@ -1111,12 +1208,18 @@ export const useStore = create<AppState>((set, get) => ({
         prevIndex = 0;
       }
     }
-    get().setGroupState(activeControlGroupId, { activeSlideIndex: prevIndex });
+    get().setGroupState(targetGroupId, { activeSlideIndex: prevIndex });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: `Previous Slide: #${prevIndex + 1}` 
       })
     );
+  },
+
+  goLiveSlide: (slideIndex: number, groupId?: string) => {
+    const { activeControlGroupId, outputGroups, setGroupState } = get();
+    const targetGroupId = groupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
+    setGroupState(targetGroupId, { activeSlideIndex: Math.max(0, slideIndex) });
   },
 
   goNextScheduleItem: () => {
@@ -1245,27 +1348,109 @@ export const useStore = create<AppState>((set, get) => ({
     active: false,
     message: 'Nursery #304 is requested in the Toddler Room',
     position: 'bottom',
-    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    backgroundColor: 'rgba(15, 23, 42, 0.96)',
     textColor: '#FACC15',
     speed: 15,
   },
   groupAlerts: {},
-  setAlert: (alertUpdate: Partial<AlertState>, groupId: string) => set((state) => {
-    if (!groupId) return state;
-    const currentAlert = state.groupAlerts[groupId] || { active: false, showNursery: false, message: '', nurseryText: '' };
-    const nextAlert = { ...currentAlert, ...alertUpdate } as AlertState;
+  setAlert: (alertUpdate: Partial<AlertState>, groupId?: string) => set((state) => {
+    const currentGlobal = state.alert || {
+      active: false,
+      message: 'Nursery #304 is requested in the Toddler Room',
+      position: 'bottom',
+      backgroundColor: 'rgba(15, 23, 42, 0.96)',
+      textColor: '#FACC15',
+      speed: 15,
+    };
+    const nextGlobal = { ...currentGlobal, ...alertUpdate } as AlertState;
     
-    const newGroupAlerts = { ...state.groupAlerts, [groupId]: nextAlert };
-    
+    let newGroupAlerts = { ...state.groupAlerts };
+    if (groupId) {
+      const currentGroup = state.groupAlerts[groupId] || currentGlobal;
+      newGroupAlerts[groupId] = { ...currentGroup, ...alertUpdate } as AlertState;
+    } else {
+      // Sync across all active output groups if no specific group specified
+      Object.keys(newGroupAlerts).forEach((gId) => {
+        newGroupAlerts[gId] = { ...newGroupAlerts[gId], ...alertUpdate };
+      });
+    }
+
     broadcastStateChange({
       type: 'ALERT_UPDATE',
-      data: { alert: state.alert, groupAlerts: newGroupAlerts }
+      data: { alert: nextGlobal, groupAlerts: newGroupAlerts }
     });
 
     return { 
+      alert: nextGlobal,
       groupAlerts: newGroupAlerts
     };
   }),
+
+  // Alert Presets State & Management (Save, Edit, Delete, Reset, Load)
+  alertPresets: getStoredAlertPresets(),
+  addAlertPreset: (presetData) => {
+    const newPreset: AlertPreset = {
+      id: (presetData as any).id || `preset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      title: presetData.title || (presetData.message ? (presetData.message.length > 32 ? presetData.message.slice(0, 32) + '...' : presetData.message) : 'Custom Alert'),
+      message: presetData.message || '',
+      position: presetData.position || 'bottom',
+      backgroundColor: presetData.backgroundColor || 'rgba(15, 23, 42, 0.96)',
+      textColor: presetData.textColor || '#FACC15',
+      showNursery: presetData.showNursery || false,
+      nurseryText: presetData.nurseryText || '',
+      targetGroup: presetData.targetGroup || 'all',
+      autoDismissSecs: presetData.autoDismissSecs || 0,
+      createdAt: Date.now(),
+    };
+
+    set((state) => {
+      const updated = [newPreset, ...state.alertPresets];
+      saveStoredAlertPresets(updated);
+      broadcastStateChange({
+        type: 'ALERT_PRESETS_UPDATE',
+        data: { presets: updated },
+      });
+      return { alertPresets: updated };
+    });
+
+    return newPreset;
+  },
+
+  updateAlertPreset: (id, updates) => {
+    set((state) => {
+      const updated = state.alertPresets.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      saveStoredAlertPresets(updated);
+      broadcastStateChange({
+        type: 'ALERT_PRESETS_UPDATE',
+        data: { presets: updated },
+      });
+      return { alertPresets: updated };
+    });
+  },
+
+  deleteAlertPreset: (id) => {
+    set((state) => {
+      const updated = state.alertPresets.filter((p) => p.id !== id);
+      saveStoredAlertPresets(updated);
+      broadcastStateChange({
+        type: 'ALERT_PRESETS_UPDATE',
+        data: { presets: updated },
+      });
+      return { alertPresets: updated };
+    });
+  },
+
+  resetAlertPresets: () => {
+    set(() => {
+      const updated = [...DEFAULT_ALERT_PRESETS];
+      saveStoredAlertPresets(updated);
+      broadcastStateChange({
+        type: 'ALERT_PRESETS_UPDATE',
+        data: { presets: updated },
+      });
+      return { alertPresets: updated };
+    });
+  },
 
   // Slide Annotation State & Methods
   annotationState: defaultAnnotationState,

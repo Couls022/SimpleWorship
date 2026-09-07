@@ -173,7 +173,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const baseGroupObj = outputGroups.find(g => g.id === orderedLiveGroupIds[0]) || outputGroups[0];
   const winningGroup = outputGroups.find(g => g.id === orderedLiveGroupIds[orderedLiveGroupIds.length - 1]) || outputGroups[0];
 
-  const currentAlert = (winningGroup && groupAlerts?.[winningGroup.id]) || { active: false, showNursery: false, message: '', nurseryText: '' };
+  const currentAlert = (winningGroup && groupAlerts?.[winningGroup.id]) || alert || { active: false, showNursery: false, message: '', nurseryText: '' };
 
   // 1. Get current target resolution and aspect ratio configured on the active output route
   const groupRes = React.useMemo(() => {
@@ -282,7 +282,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         )}
 
         {/* 3. Marquee Alert Banner Overlay */}
-        {orderedLiveGroupIds.length > 0 && currentAlert.active && !isBlackoutActive && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || (winningGroup?.id && currentAlert.targetGroupIds.includes(winningGroup.id))) && (
+        {currentAlert.active && !isBlackoutActive && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || (winningGroup?.id && currentAlert.targetGroupIds.includes(winningGroup.id))) && (
           <div 
             className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
             style={{
@@ -302,7 +302,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         )}
 
         {/* 4. Nursery Alert Badge Overlay */}
-        {orderedLiveGroupIds.length > 0 && currentAlert.showNursery && (currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || (winningGroup?.id && currentAlert.targetGroupIds.includes(winningGroup.id))) && (
+        {currentAlert.showNursery && (currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || (winningGroup?.id && currentAlert.targetGroupIds.includes(winningGroup.id))) && (
           <div 
             className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
               systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
@@ -463,6 +463,7 @@ function ProjectorLayer({
     elementOverride
   );
 
+  const layerRes = resolveGroupResolution(group, systemOptions);
   const generalOpts = systemOptions?.mainOutput?.general;
   const songOpts = systemOptions?.mainOutput?.song;
   const showVerseChorusLabel = activeItem?.type === 'song' ? (songOpts?.showVerseChorusLabel ?? true) : true;
@@ -1029,7 +1030,10 @@ function ProjectorLayer({
                   maxFontSize: 160,
                   isUppercase: Boolean(isUpper),
                   lineSpacing: spacing,
+                  widthPercent: resolvedStyles.widthPercent,
                   margins: generalOpts?.margins,
+                  containerWidth: layerRes.width,
+                  containerHeight: layerRes.height,
                 });
 
                 return (

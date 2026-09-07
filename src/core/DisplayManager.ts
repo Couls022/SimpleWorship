@@ -103,6 +103,20 @@ export class DisplayManager {
   }
 
   /**
+   * Synchronously returns the currently cached physical displays.
+   */
+  static getCachedDisplays(): NativeDisplayTarget[] {
+    return this.cachedDisplays;
+  }
+
+  /**
+   * Finds a display by its unique ID or display name from cache.
+   */
+  static findDisplayById(displayId: string): NativeDisplayTarget | undefined {
+    return this.cachedDisplays.find(d => d.id === displayId || d.name === displayId);
+  }
+
+  /**
    * Listen to display hot-plug events (connect, disconnect, resolution changes).
    */
   static listenToDisplays(callback: (displays: NativeDisplayTarget[]) => void): () => void {

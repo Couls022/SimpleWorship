@@ -11,8 +11,18 @@ let currentServerState: {
   outputGroups?: any[];
   themesList?: any[];
   systemOptions?: any;
+  remotePin?: string;
   lastUpdated: number;
 } = {
+  remotePin: '8492',
+  alert: {
+    active: false,
+    message: 'Nursery #304 is requested in the Toddler Room',
+    position: 'bottom',
+    backgroundColor: 'rgba(15, 23, 42, 0.96)',
+    textColor: '#FACC15',
+    speed: 15,
+  },
   lastUpdated: Date.now()
 };
 
@@ -94,38 +104,83 @@ async function startServer() {
     res.json({
       success: true,
       data: currentServerState,
+      remotePin: currentServerState.remotePin || '8492',
       pendingCommands: pendingCommands.slice(-10)
     });
   });
 
   app.post('/api/sync/state', (req, res) => {
     try {
-      const { groupStates, alert, activeSchedule, activeControlGroupId, outputGroups, themesList, systemOptions } = req.body;
+      const { groupStates, alert, activeSchedule, activeControlGroupId, outputGroups, themesList, systemOptions, remotePin } = req.body;
       currentServerState = {
         groupStates: groupStates || currentServerState.groupStates,
-        alert: alert || currentServerState.alert,
+        alert: alert !== undefined ? alert : currentServerState.alert,
         activeSchedule: activeSchedule || currentServerState.activeSchedule,
         activeControlGroupId: activeControlGroupId !== undefined ? activeControlGroupId : currentServerState.activeControlGroupId,
         outputGroups: outputGroups || currentServerState.outputGroups,
         themesList: themesList || currentServerState.themesList,
         systemOptions: systemOptions || currentServerState.systemOptions,
+        remotePin: remotePin || currentServerState.remotePin || '8492',
         lastUpdated: Date.now()
       };
       logServerEvent('info', `State synchronized across backend. Schedule: "${activeSchedule?.name || currentServerState.activeSchedule?.name || 'Untitled'}"`);
-      res.json({ success: true, timestamp: currentServerState.lastUpdated });
+      res.json({ success: true, timestamp: currentServerState.lastUpdated, remotePin: currentServerState.remotePin });
     } catch (err: any) {
       logServerEvent('error', `Sync state failed: ${err.message}`);
       res.status(500).json({ success: false, error: err.message });
     }
   });
 
-  // 4. Remote presentation command dispatch
+  // 4. Remote PIN Pairing Management
+  app.get('/api/remote/pin', (req, res) => {
+    res.json({
+      success: true,
+      pin: currentServerState.remotePin || '8492'
+    });
+  });
+
+  app.post('/api/remote/pin', (req, res) => {
+    try {
+      const { pin } = req.body;
+      if (pin && typeof pin === 'string' && pin.trim().length >= 4) {
+        currentServerState.remotePin = pin.trim();
+        currentServerState.lastUpdated = Date.now();
+        logServerEvent('info', `Remote pairing PIN updated to: ${currentServerState.remotePin}`);
+        res.json({ success: true, pin: currentServerState.remotePin });
+      } else {
+        res.status(400).json({ success: false, error: 'Invalid PIN. Must be at least 4 digits.' });
+      }
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5. Remote presentation command dispatch
   app.post('/api/remote/command', (req, res) => {
     try {
       const { action, params } = req.body;
       if (!action) {
         return res.status(400).json({ success: false, error: 'Missing action field' });
       }
+
+      // If action modifies alert directly, update server-side alert cache immediately
+      if (action === 'set_alert' && params) {
+        currentServerState.alert = {
+          ...(currentServerState.alert || {}),
+          active: params.active ?? params.enabled ?? true,
+          message: params.message || params.text || currentServerState.alert?.message || '',
+          position: params.position || currentServerState.alert?.position || 'bottom',
+          backgroundColor: params.backgroundColor || currentServerState.alert?.backgroundColor || 'rgba(15, 23, 42, 0.96)',
+          textColor: params.textColor || currentServerState.alert?.textColor || '#FACC15',
+        };
+        currentServerState.lastUpdated = Date.now();
+      } else if (action === 'clear_alert') {
+        if (currentServerState.alert) {
+          currentServerState.alert = { ...currentServerState.alert, active: false };
+          currentServerState.lastUpdated = Date.now();
+        }
+      }
+
       const cmd = {
         id: `cmd-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         action,
@@ -135,7 +190,7 @@ async function startServer() {
       pendingCommands.push(cmd);
       if (pendingCommands.length > 50) pendingCommands.shift();
       logServerEvent('info', `Remote command queued: ${action} (${cmd.id})`);
-      res.json({ success: true, commandId: cmd.id, timestamp: cmd.timestamp });
+      res.json({ success: true, commandId: cmd.id, timestamp: cmd.timestamp, currentAlert: currentServerState.alert });
     } catch (err: any) {
       res.status(400).json({ success: false, error: err.message });
     }

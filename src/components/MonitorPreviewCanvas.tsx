@@ -5,7 +5,8 @@ import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { dbApi } from '../db';
 import { Sparkles, Music, Volume2 } from 'lucide-react';
-import { OutputGroup, PresentationState, SystemOptions } from '../types';
+import { OutputGroup, PresentationState, SystemOptions, NativeDisplayTarget } from '../types';
+import { DisplayManager } from '../core/DisplayManager';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
 import CameraLiveRenderer from './CameraLiveRenderer';
@@ -26,7 +27,8 @@ interface MonitorPreviewCanvasProps {
 
 export function resolveGroupResolution(
   group: OutputGroup | undefined,
-  systemOptions: SystemOptions | undefined
+  systemOptions: SystemOptions | undefined,
+  availableDisplays?: NativeDisplayTarget[]
 ): { width: number; height: number; aspectRatio: number; aspectLabel: string; margins: { left: number; top: number; right: number; bottom: number } } {
   const defaultMargins = { left: 0, top: 0, right: 0, bottom: 0 };
 
@@ -58,11 +60,34 @@ export function resolveGroupResolution(
       return { width: 1920, height: 1200, aspectRatio: 16 / 10, aspectLabel: '16:10', margins: defaultMargins };
     }
     if (group.aspectRatio === '16:9') {
+      const sysPos = systemOptions?.mainOutput?.general?.position;
+      if (sysPos && sysPos.width > 0 && sysPos.height > 0 && Math.abs(sysPos.width / sysPos.height - 16 / 9) < 0.05) {
+        return { width: sysPos.width, height: sysPos.height, aspectRatio: sysPos.width / sysPos.height, aspectLabel: '16:9', margins: systemOptions?.mainOutput?.general?.margins || defaultMargins };
+      }
       return { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
     }
   }
 
-  // 3. If group is 'confidence' (Foldback) and foldback options has custom position:
+  // 3. Physical Target Monitor lookup via targetDisplayId / displayIds
+  const targetId = (group?.displayIds && group.displayIds.length > 0) ? group.displayIds[0] : group?.targetDisplayId;
+  if (targetId) {
+    const displays = availableDisplays || DisplayManager.getCachedDisplays();
+    const matchedDisplay = displays.find(d => d.id === targetId || d.name === targetId);
+    if (matchedDisplay?.bounds && matchedDisplay.bounds.width > 0 && matchedDisplay.bounds.height > 0) {
+      const w = matchedDisplay.bounds.width;
+      const h = matchedDisplay.bounds.height;
+      const ratio = w / h;
+      const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
+      const groupMargins = group?.role === 'confidence' 
+        ? (systemOptions?.foldback?.margins || defaultMargins)
+        : (group?.role === 'broadcast' || group?.role === 'lobby')
+          ? (systemOptions?.alternateOutput?.margins || defaultMargins)
+          : (systemOptions?.mainOutput?.general?.margins || defaultMargins);
+      return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: groupMargins };
+    }
+  }
+
+  // 4. If group is 'confidence' (Foldback) and foldback options has custom position:
   if (group?.role === 'confidence' && systemOptions?.foldback?.position && systemOptions.foldback.position.width > 0 && systemOptions.foldback.position.height > 0) {
     const w = systemOptions.foldback.position.width;
     const h = systemOptions.foldback.position.height;
@@ -71,7 +96,7 @@ export function resolveGroupResolution(
     return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: systemOptions.foldback.margins || defaultMargins };
   }
 
-  // 4. If group is 'broadcast' or 'lobby' (Alternate Output) and alternateOutput options has custom position:
+  // 5. If group is 'broadcast' or 'lobby' (Alternate Output) and alternateOutput options has custom position:
   if ((group?.role === 'broadcast' || group?.role === 'lobby') && systemOptions?.alternateOutput?.position && systemOptions.alternateOutput.position.width > 0 && systemOptions.alternateOutput.position.height > 0) {
     const w = systemOptions.alternateOutput.position.width;
     const h = systemOptions.alternateOutput.position.height;
@@ -80,7 +105,7 @@ export function resolveGroupResolution(
     return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: systemOptions.alternateOutput.margins || defaultMargins };
   }
 
-  // 5. Default: Main Output General settings
+  // 6. Default: Main Output General settings
   const sysPos = systemOptions?.mainOutput?.general?.position;
   if (sysPos && sysPos.width > 0 && sysPos.height > 0) {
     const w = sysPos.width;
@@ -115,7 +140,7 @@ export default function MonitorPreviewCanvas({
     systemOptions 
   } = store;
 
-  const currentAlert = (groupId && groupAlerts?.[groupId]) || { active: false, showNursery: false, message: '', nurseryText: '' };
+  const currentAlert = (groupId && groupAlerts?.[groupId]) || alert || { active: false, showNursery: false, message: '', nurseryText: '' };
 
   const group = customGroup || outputGroups.find(g => g.id === groupId) || outputGroups[0];
   const presentationState = customState || groupStates[groupId] || ({
@@ -867,7 +892,10 @@ export default function MonitorPreviewCanvas({
                     maxFontSize: 160,
                     isUppercase: Boolean(isUpper),
                     lineSpacing: spacing,
+                    widthPercent: resolvedStyles.widthPercent,
                     margins: margins,
+                    containerWidth: targetWidth,
+                    containerHeight: targetHeight,
                   });
 
                   return (
