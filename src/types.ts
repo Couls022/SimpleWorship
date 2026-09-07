@@ -550,6 +550,8 @@ export interface RouterPanelState {
   active: boolean;
   visible: boolean;
   focused: boolean;
+  previewItemId?: string | null;
+  previewSlideIndex?: number;
 }
 
 export interface AlertState {
@@ -561,6 +563,8 @@ export interface AlertState {
   speed?: number;
   nurseryText?: string;
   showNursery?: boolean;
+  targetGroupIds?: string[];
+  routerId?: string;
 }
 
 export type AnnotationToolType = 'pen' | 'highlighter' | 'laser' | 'rectangle' | 'arrow' | 'spotlight' | 'eraser';
@@ -600,6 +604,8 @@ export interface SlideAnnotationState {
   strokes: AnnotationStroke[];
   redoStack: AnnotationStroke[];
   laserPointer?: LaserPointerState;
+  groupId?: string;
+  routerId?: string;
 }
 
 export interface PresentationState {

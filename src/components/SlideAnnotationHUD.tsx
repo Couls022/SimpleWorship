@@ -220,7 +220,7 @@ export const SlideAnnotationHUD: React.FC<SlideAnnotationHUDProps> = ({
         <div className="flex items-center gap-1 border-l border-slate-800 pl-2">
           <button
             id="btn-undo-annotation"
-            onClick={undoAnnotation}
+            onClick={() => undoAnnotation()}
             disabled={strokes.length === 0}
             className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors"
             title="Undo Last Stroke (Ctrl+Z)"
@@ -230,7 +230,7 @@ export const SlideAnnotationHUD: React.FC<SlideAnnotationHUDProps> = ({
 
           <button
             id="btn-redo-annotation"
-            onClick={redoAnnotation}
+            onClick={() => redoAnnotation()}
             disabled={redoStack.length === 0}
             className="p-1.5 rounded text-slate-300 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors"
             title="Redo Stroke (Ctrl+Y)"
@@ -240,7 +240,7 @@ export const SlideAnnotationHUD: React.FC<SlideAnnotationHUDProps> = ({
 
           <button
             id="btn-clear-annotations"
-            onClick={clearAnnotations}
+            onClick={() => clearAnnotations()}
             disabled={strokes.length === 0}
             className="flex items-center gap-1 px-2 py-1 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-950/50 border border-transparent hover:border-red-800/50 disabled:opacity-30 disabled:pointer-events-none transition-colors"
             title="Clear All Annotations on Screen"

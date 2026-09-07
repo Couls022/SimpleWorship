@@ -251,7 +251,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         }
         // Go live with the first dropped item immediately on this output panel
         const targetLiveItem = dropResult.items[0];
-        store.goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem);
+        store.goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem, routerId);
         store.setGroupState(groupId, {
           activeItemId: targetLiveItem.id,
           activeSlideIndex: 0,
@@ -308,7 +308,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           if (payload.source !== 'schedule') {
             store.addScheduleItem(newItem);
           }
-          store.goLiveItem(itemId, 0, groupId); 
+          store.goLiveItem(itemId, 0, groupId, undefined, routerId); 
           store.setGroupState(groupId, {
             activeItemId: itemId,
             activeSlideIndex: 0,
@@ -332,7 +332,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     if (activeControlState?.activeItemId === liveItem?.id) {
       store.setGroupState(groupId, { activeSlideIndex: idx });
     } else if (liveItem) {
-      store.goLiveItem(liveItem.id, idx, groupId, liveItem);
+      store.goLiveItem(liveItem.id, idx, groupId, liveItem, routerId);
     }
   };
 

@@ -4,6 +4,7 @@ import { AnnotationStroke, AnnotationPoint, AnnotationToolType, LaserPointerStat
 import { v4 as uuidv4 } from 'uuid';
 
 interface SlideAnnotationLayerProps {
+  groupId?: string;
   interactive?: boolean;
   className?: string;
   stageWidth?: number;
@@ -11,6 +12,7 @@ interface SlideAnnotationLayerProps {
 }
 
 export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
+  groupId,
   interactive = false,
   className = '',
   stageWidth = 1920,
@@ -20,13 +22,15 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
   const svgRef = useRef<SVGSVGElement>(null);
 
   const { 
-    annotationState, 
+    getAnnotationState,
     addAnnotationStroke, 
     updateLaserPointer,
     clearAnnotations,
     undoAnnotation,
     redoAnnotation
   } = useStore();
+
+  const annotationState = getAnnotationState(groupId);
 
   const { 
     enabled, 
@@ -166,7 +170,7 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
         color: activeColor,
         size: strokeSize * 2,
         lastUpdated: Date.now()
-      });
+      }, groupId);
       return;
     }
 
@@ -221,7 +225,7 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
     }
 
     if (currentStroke && currentStroke.points.length > 0) {
-      addAnnotationStroke(currentStroke);
+      addAnnotationStroke(currentStroke, groupId);
     }
 
     setCurrentStroke(null);
@@ -230,7 +234,7 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
 
   const handlePointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
     if (activeTool === 'laser') {
-      updateLaserPointer(null);
+      updateLaserPointer(null, groupId);
     }
   };
 

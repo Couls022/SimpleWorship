@@ -182,10 +182,10 @@ interface AppState {
   // PREVIEW State (Independent from Live, matching EasyWorship design)
   previewItemId: string | null;
   previewSlideIndex: number;
-  setPreviewItem: (itemOrId: string | null | Partial<PresentationItem>, slideIndex?: number) => void;
-  setPreviewSlide: (index: number) => void;
-  goLive: () => void; // Pushes preview state to live
-  goLiveItem: (itemId: string, slideIndex?: number, targetGroupId?: string, directItem?: PresentationItem) => void; // Directly sends item to live
+  setPreviewItem: (itemOrId: string | null | Partial<PresentationItem>, slideIndex?: number, routerId?: string) => void;
+  setPreviewSlide: (index: number, routerId?: string) => void;
+  goLive: (routerId?: string) => void; // Pushes preview state to live
+  goLiveItem: (itemId: string, slideIndex?: number, targetGroupId?: string, directItem?: PresentationItem, routerId?: string) => void; // Directly sends item to live
 
   // LIVE Navigation & Controls
   goLiveNext: () => void;
@@ -204,17 +204,19 @@ interface AppState {
 
   // Slide Annotation State
   annotationState: SlideAnnotationState;
-  setAnnotationTool: (tool: AnnotationToolType) => void;
-  setAnnotationColor: (color: string) => void;
-  setAnnotationSize: (size: number) => void;
-  setAnnotationOpacity: (opacity: number) => void;
-  setAnnotationPersist: (persist: boolean) => void;
-  toggleAnnotationMode: (enabled?: boolean) => void;
-  addAnnotationStroke: (stroke: AnnotationStroke) => void;
-  clearAnnotations: () => void;
-  undoAnnotation: () => void;
-  redoAnnotation: () => void;
-  updateLaserPointer: (laser: Partial<LaserPointerState> | null) => void;
+  groupAnnotations: Record<string, SlideAnnotationState>;
+  getAnnotationState: (groupId?: string) => SlideAnnotationState;
+  setAnnotationTool: (tool: AnnotationToolType, groupId?: string) => void;
+  setAnnotationColor: (color: string, groupId?: string) => void;
+  setAnnotationSize: (size: number, groupId?: string) => void;
+  setAnnotationOpacity: (opacity: number, groupId?: string) => void;
+  setAnnotationPersist: (persist: boolean, groupId?: string) => void;
+  toggleAnnotationMode: (enabled?: boolean, groupId?: string) => void;
+  addAnnotationStroke: (stroke: AnnotationStroke, groupId?: string) => void;
+  clearAnnotations: (groupId?: string) => void;
+  undoAnnotation: (groupId?: string) => void;
+  redoAnnotation: (groupId?: string) => void;
+  updateLaserPointer: (laser: Partial<LaserPointerState> | null, groupId?: string) => void;
 
   // Resources Data State
   resourcesTab: 'songs' | 'scriptures' | 'media' | 'presentations' | 'themes' | 'cameras';
@@ -391,14 +393,18 @@ export const useStore = create<AppState>((set, get) => ({
       targetOutputGroupId: 'group-congregation',
       active: true,
       visible: true,
-      focused: true
+      focused: true,
+      previewItemId: 'item-gen-1',
+      previewSlideIndex: 0
     },
     {
       routerId: 'router-2',
       targetOutputGroupId: 'group-stage',
       active: false,
       visible: true,
-      focused: false
+      focused: false,
+      previewItemId: null,
+      previewSlideIndex: 0
     }
   ],
   activeRouterId: 'router-1',
@@ -443,7 +449,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     const updatedPanel: RouterPanelState = {
       ...panel,
-      targetOutputGroupId: targetGroupId
+      targetOutputGroupId: targetGroupId,
+      previewItemId: panel.previewItemId ?? null,
+      previewSlideIndex: panel.previewSlideIndex ?? 0
     };
 
     const panels = state.routerPanels.map(p => ({
@@ -457,28 +465,36 @@ export const useStore = create<AppState>((set, get) => ({
       groupStates: newGroupStates,
       routerPanels: panels,
       activeRouterId: updatedPanel.routerId,
-      activeControlGroupId: targetGroupId
+      activeControlGroupId: targetGroupId,
+      previewItemId: updatedPanel.previewItemId ?? state.previewItemId,
+      previewSlideIndex: updatedPanel.previewSlideIndex ?? state.previewSlideIndex
     };
   }),
   removeRouterPanel: (id) => set((state) => {
     const panels = state.routerPanels.filter(p => p.routerId !== id);
     const newActiveId = state.activeRouterId === id ? (panels[0]?.routerId || null) : state.activeRouterId;
-    const newActiveTarget = panels.find(p => p.routerId === newActiveId)?.targetOutputGroupId || null;
+    const activePanel = panels.find(p => p.routerId === newActiveId);
+    const newActiveTarget = activePanel?.targetOutputGroupId || null;
     return {
       routerPanels: panels.map(p => ({
         ...p,
         active: p.routerId === newActiveId
       })),
       activeRouterId: newActiveId,
-      activeControlGroupId: newActiveTarget
+      activeControlGroupId: newActiveTarget,
+      previewItemId: activePanel?.previewItemId ?? null,
+      previewSlideIndex: activePanel?.previewSlideIndex ?? 0
     };
   }),
   updateRouterPanel: (id, updates) => set((state) => {
     const panels = state.routerPanels.map(p => p.routerId === id ? { ...p, ...updates } : p);
-    const activeTarget = panels.find(p => p.routerId === state.activeRouterId)?.targetOutputGroupId || null;
+    const activePanel = panels.find(p => p.routerId === state.activeRouterId);
+    const activeTarget = activePanel?.targetOutputGroupId || null;
     return { 
       routerPanels: panels,
-      activeControlGroupId: activeTarget
+      activeControlGroupId: activeTarget,
+      previewItemId: activePanel?.previewItemId ?? state.previewItemId,
+      previewSlideIndex: activePanel?.previewSlideIndex ?? state.previewSlideIndex
     };
   }),
   setActiveRouterId: (id) => {
@@ -488,11 +504,14 @@ export const useStore = create<AppState>((set, get) => ({
         active: p.routerId === id,
         focused: p.routerId === id ? true : p.focused
       }));
-      const newActiveTarget = panels.find(p => p.routerId === id)?.targetOutputGroupId || null;
+      const activePanel = panels.find(p => p.routerId === id);
+      const newActiveTarget = activePanel?.targetOutputGroupId || null;
       return {
         activeRouterId: id,
         routerPanels: panels,
-        activeControlGroupId: newActiveTarget
+        activeControlGroupId: newActiveTarget,
+        previewItemId: activePanel?.previewItemId ?? null,
+        previewSlideIndex: activePanel?.previewSlideIndex ?? 0
       };
     });
     const { outputGroups, groupStates, activeControlGroupId } = get();
@@ -854,20 +873,21 @@ export const useStore = create<AppState>((set, get) => ({
   // PREVIEW
   previewItemId: 'item-gen-1', // Default preview item (Genesis 1:1) matching screenshot
   previewSlideIndex: 0,
-  setPreviewItem: (itemOrId, slideIndex = 0) => {
+  setPreviewItem: (itemOrId, slideIndex = 0, routerId) => {
+    const state = get();
+    const routerIdToUse = routerId || state.activeRouterId || state.routerPanels[0]?.routerId || 'router-1';
+
+    let resolvedItemId: string | null = null;
     if (!itemOrId) {
-      set({ previewItemId: null, previewSlideIndex: slideIndex });
-      return;
-    }
-    if (typeof itemOrId === 'string') {
-      set({ previewItemId: itemOrId, previewSlideIndex: slideIndex });
+      resolvedItemId = null;
+    } else if (typeof itemOrId === 'string') {
+      resolvedItemId = itemOrId;
     } else {
-      const state = get();
       const existing = state.activeSchedule?.items.find(
         i => i.id === itemOrId.id || (itemOrId.contentId && i.contentId === itemOrId.contentId)
       );
       if (existing) {
-        set({ previewItemId: existing.id, previewSlideIndex: slideIndex });
+        resolvedItemId = existing.id;
       } else {
         const newItem: PresentationItem = {
           id: itemOrId.id || `item-${Date.now()}`,
@@ -884,27 +904,63 @@ export const useStore = create<AppState>((set, get) => ({
             ...state.activeSchedule,
             items: [...state.activeSchedule.items, newItem]
           };
-          set({ activeSchedule: updatedSchedule, previewItemId: newItem.id, previewSlideIndex: slideIndex });
-        } else {
-          set({ previewItemId: newItem.id, previewSlideIndex: slideIndex });
+          set({ activeSchedule: updatedSchedule });
         }
+        resolvedItemId = newItem.id;
       }
     }
+
+    const updatedPanels = state.routerPanels.map(p => {
+      if (p.routerId === routerIdToUse) {
+        return { ...p, previewItemId: resolvedItemId, previewSlideIndex: slideIndex };
+      }
+      return p;
+    });
+
+    const activePanel = updatedPanels.find(p => p.routerId === (state.activeRouterId || routerIdToUse)) || updatedPanels[0];
+
+    set({
+      routerPanels: updatedPanels,
+      previewItemId: activePanel?.previewItemId ?? null,
+      previewSlideIndex: activePanel?.previewSlideIndex ?? 0
+    });
+
+    broadcastStateChange({
+      type: 'PREVIEW_UPDATE',
+      data: { routerId: routerIdToUse, previewItemId: resolvedItemId, previewSlideIndex: slideIndex }
+    });
   },
-  setPreviewSlide: (index) => set({ previewSlideIndex: index }),
+  setPreviewSlide: (index, routerId) => {
+    const state = get();
+    const routerIdToUse = routerId || state.activeRouterId || state.routerPanels[0]?.routerId || 'router-1';
+    const updatedPanels = state.routerPanels.map(p => {
+      if (p.routerId === routerIdToUse) {
+        return { ...p, previewSlideIndex: index };
+      }
+      return p;
+    });
+    const activePanel = updatedPanels.find(p => p.routerId === (state.activeRouterId || routerIdToUse)) || updatedPanels[0];
+    set({
+      routerPanels: updatedPanels,
+      previewSlideIndex: activePanel?.previewSlideIndex ?? index
+    });
+  },
 
-  goLive: () => {
-    const { previewItemId, previewSlideIndex, activeControlGroupId, activeSchedule, groupStates, setRoutingRequest, goLiveItem } = get();
-    
-    let itemIdToUse = previewItemId;
-    let slideIdxToUse = previewSlideIndex;
+  goLive: (routerId) => {
+    const state = get();
+    const routerIdToUse = routerId || state.activeRouterId || state.routerPanels[0]?.routerId || 'router-1';
+    const routerPanel = state.routerPanels.find(p => p.routerId === routerIdToUse) || state.routerPanels[0];
+    const targetGroupId = routerPanel?.targetOutputGroupId || state.activeControlGroupId || state.outputGroups[0]?.id;
 
-    if (!itemIdToUse && activeSchedule && activeSchedule.items.length > 0) {
-      itemIdToUse = activeSchedule.items[0].id;
+    let itemIdToUse = routerPanel?.previewItemId ?? state.previewItemId;
+    let slideIdxToUse = routerPanel?.previewSlideIndex ?? state.previewSlideIndex ?? 0;
+
+    if (!itemIdToUse && state.activeSchedule && state.activeSchedule.items.length > 0) {
+      itemIdToUse = state.activeSchedule.items[0].id;
       slideIdxToUse = 0;
-    } else if (!itemIdToUse && activeControlGroupId && groupStates[activeControlGroupId]?.activeItemId) {
-      itemIdToUse = groupStates[activeControlGroupId].activeItemId;
-      slideIdxToUse = groupStates[activeControlGroupId].activeSlideIndex || 0;
+    } else if (!itemIdToUse && targetGroupId && state.groupStates[targetGroupId]?.activeItemId) {
+      itemIdToUse = state.groupStates[targetGroupId].activeItemId;
+      slideIdxToUse = state.groupStates[targetGroupId].activeSlideIndex || 0;
     }
 
     if (!itemIdToUse) {
@@ -916,19 +972,26 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
-    const itemToRoute = activeSchedule?.items?.find(i => i.id === itemIdToUse);
+    const itemToRoute = state.activeSchedule?.items?.find(i => i.id === itemIdToUse);
     if (itemToRoute) {
-      setRoutingRequest({ item: itemToRoute, isNew: false, slideIndex: slideIdxToUse });
+      state.setRoutingRequest({ item: itemToRoute, isNew: false, slideIndex: slideIdxToUse });
     } else {
-      get().goLiveItem(itemIdToUse, slideIdxToUse, activeControlGroupId);
+      get().goLiveItem(itemIdToUse, slideIdxToUse, targetGroupId, undefined, routerIdToUse);
     }
   },
 
-  goLiveItem: (itemId, slideIndex = 0, targetGroupId, directItem) => {
-    const { activeControlGroupId, setGroupState, outputGroups, activeSchedule, songsList } = get();
-    const groupToUpdate = targetGroupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : undefined);
+  goLiveItem: (itemId, slideIndex = 0, targetGroupId, directItem, routerId) => {
+    const { activeControlGroupId, setGroupState, outputGroups, activeSchedule, songsList, routerPanels, activeRouterId } = get();
+    const routerIdToUse = routerId || activeRouterId || routerPanels[0]?.routerId || 'router-1';
+    const routerPanel = routerPanels.find(p => p.routerId === routerIdToUse);
+    const groupToUpdate = targetGroupId || routerPanel?.targetOutputGroupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : undefined);
 
-    set({ previewItemId: itemId, previewSlideIndex: slideIndex });
+    const updatedPanels = routerPanels.map(p => {
+      if (p.routerId === routerIdToUse) {
+        return { ...p, previewItemId: itemId, previewSlideIndex: slideIndex };
+      }
+      return p;
+    });
 
     // Find presentation item or construct one for direct live persistence
     let liveItem: PresentationItem | undefined = directItem || activeSchedule?.items?.find(i => i.id === itemId);
@@ -947,6 +1010,14 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
+    const activePanel = updatedPanels.find(p => p.routerId === (activeRouterId || routerIdToUse)) || updatedPanels[0];
+
+    set({
+      routerPanels: updatedPanels,
+      previewItemId: activePanel?.previewItemId ?? itemId,
+      previewSlideIndex: activePanel?.previewSlideIndex ?? slideIndex
+    });
+
     if (groupToUpdate) {
       setGroupState(groupToUpdate, {
         activeItemId: itemId,
@@ -955,8 +1026,8 @@ export const useStore = create<AppState>((set, get) => ({
         isBlack: false,
         isClear: false,
       });
-      if (groupToUpdate !== activeControlGroupId) {
-        set({ activeControlGroupId: groupToUpdate });
+      if (routerIdToUse !== activeRouterId || groupToUpdate !== activeControlGroupId) {
+        set({ activeControlGroupId: groupToUpdate, activeRouterId: routerIdToUse });
         DisplayManager.syncPhysicalDisplays(outputGroups, get().groupStates, groupToUpdate).catch(() => {});
       }
     } else if (outputGroups.length > 0) {
@@ -1209,116 +1280,176 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Slide Annotation State & Methods
   annotationState: defaultAnnotationState,
+  groupAnnotations: {},
+  getAnnotationState: (groupId) => {
+    const state = get();
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    return state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+  },
   
-  setAnnotationTool: (tool) => set((state) => ({
-    annotationState: { 
-      ...state.annotationState, 
+  setAnnotationTool: (tool, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const updated = { 
+      ...current, 
       activeTool: tool,
-      opacity: tool === 'highlighter' ? 0.4 : (tool === 'spotlight' ? 0.8 : (state.annotationState.opacity === 0.4 ? 0.9 : state.annotationState.opacity))
-    }
-  })),
-
-  setAnnotationColor: (color) => set((state) => ({
-    annotationState: { ...state.annotationState, activeColor: color }
-  })),
-
-  setAnnotationSize: (size) => set((state) => ({
-    annotationState: { ...state.annotationState, strokeSize: size }
-  })),
-
-  setAnnotationOpacity: (opacity) => set((state) => ({
-    annotationState: { ...state.annotationState, opacity }
-  })),
-
-  setAnnotationPersist: (persist) => set((state) => ({
-    annotationState: { ...state.annotationState, persistAcrossSlides: persist }
-  })),
-
-  toggleAnnotationMode: (enabled) => set((state) => {
-    const nextEnabled = enabled !== undefined ? enabled : !state.annotationState.enabled;
+      opacity: tool === 'highlighter' ? 0.4 : (tool === 'spotlight' ? 0.8 : (current.opacity === 0.4 ? 0.9 : current.opacity))
+    };
     return {
-      annotationState: {
-        ...state.annotationState,
-        enabled: nextEnabled,
-        laserPointer: nextEnabled ? state.annotationState.laserPointer : undefined
-      }
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
     };
   }),
 
-  addAnnotationStroke: (stroke) => set((state) => {
-    const newStrokes = [...state.annotationState.strokes, stroke];
+  setAnnotationColor: (color, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const updated = { ...current, activeColor: color };
     return {
-      annotationState: {
-        ...state.annotationState,
-        strokes: newStrokes,
-        redoStack: []
-      }
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
     };
   }),
 
-  clearAnnotations: () => set((state) => ({
-    annotationState: {
-      ...state.annotationState,
+  setAnnotationSize: (size, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const updated = { ...current, strokeSize: size };
+    return {
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+    };
+  }),
+
+  setAnnotationOpacity: (opacity, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const updated = { ...current, opacity };
+    return {
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+    };
+  }),
+
+  setAnnotationPersist: (persist, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const updated = { ...current, persistAcrossSlides: persist };
+    return {
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+    };
+  }),
+
+  toggleAnnotationMode: (enabled, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const nextEnabled = enabled !== undefined ? enabled : !current.enabled;
+    const updated = {
+      ...current,
+      enabled: nextEnabled,
+      laserPointer: nextEnabled ? current.laserPointer : undefined
+    };
+    return {
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+    };
+  }),
+
+  addAnnotationStroke: (stroke, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const newStrokes = [...current.strokes, stroke];
+    const updated = {
+      ...current,
+      strokes: newStrokes,
+      redoStack: []
+    };
+    return {
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+    };
+  }),
+
+  clearAnnotations: (groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    const updated = {
+      ...current,
       strokes: [],
       redoStack: [],
       laserPointer: undefined
-    }
-  })),
+    };
+    return {
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+    };
+  }),
 
-  undoAnnotation: () => set((state) => {
-    if (state.annotationState.strokes.length === 0) return state;
-    const strokes = [...state.annotationState.strokes];
+  undoAnnotation: (groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    if (current.strokes.length === 0) return state;
+    const strokes = [...current.strokes];
     const popped = strokes.pop();
     if (!popped) return state;
+    const updated = {
+      ...current,
+      strokes,
+      redoStack: [...current.redoStack, popped]
+    };
     return {
-      annotationState: {
-        ...state.annotationState,
-        strokes,
-        redoStack: [...state.annotationState.redoStack, popped]
-      }
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
     };
   }),
 
-  redoAnnotation: () => set((state) => {
-    if (state.annotationState.redoStack.length === 0) return state;
-    const redoStack = [...state.annotationState.redoStack];
+  redoAnnotation: (groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const current = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+    if (current.redoStack.length === 0) return state;
+    const redoStack = [...current.redoStack];
     const restored = redoStack.pop();
     if (!restored) return state;
+    const updated = {
+      ...current,
+      strokes: [...current.strokes, restored],
+      redoStack
+    };
     return {
-      annotationState: {
-        ...state.annotationState,
-        strokes: [...state.annotationState.strokes, restored],
-        redoStack
-      }
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
     };
   }),
 
-  updateLaserPointer: (laserUpdate) => set((state) => {
+  updateLaserPointer: (laserUpdate, groupId) => set((state) => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    const currentAnn = state.groupAnnotations[targetGroup] || state.annotationState || defaultAnnotationState;
+
     if (!laserUpdate) {
+      const updated = { ...currentAnn, laserPointer: undefined };
       return {
-        annotationState: {
-          ...state.annotationState,
-          laserPointer: undefined
-        }
+        annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+        groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
       };
     }
-    const currentLaser = state.annotationState.laserPointer || {
+    const currentLaser = currentAnn.laserPointer || {
       active: true,
       x: 0.5,
       y: 0.5,
-      color: state.annotationState.activeColor,
-      size: state.annotationState.strokeSize * 2,
+      color: currentAnn.activeColor,
+      size: currentAnn.strokeSize * 2,
       lastUpdated: Date.now()
     };
+    const updatedLaser = {
+      ...currentLaser,
+      ...laserUpdate,
+      lastUpdated: Date.now()
+    };
+    const updated = { ...currentAnn, laserPointer: updatedLaser };
     return {
-      annotationState: {
-        ...state.annotationState,
-        laserPointer: {
-          ...currentLaser,
-          ...laserUpdate,
-          lastUpdated: Date.now()
-        }
-      }
+      annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
+      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
     };
   }),
 

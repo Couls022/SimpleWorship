@@ -1019,6 +1019,7 @@ export default function MonitorPreviewCanvas({
           {/* Slide Annotation Layer (Semi-transparent vector overlay that persists across transitions) */}
           {!presentationState.isBlack && (
             <SlideAnnotationLayer 
+              groupId={groupId}
               interactive={true} 
               stageWidth={targetWidth}
               stageHeight={targetHeight}
@@ -1027,7 +1028,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Marquee Alert Banner */}
-          {alert.active && !presentationState.isBlack && (
+          {alert.active && !presentationState.isBlack && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || alert.targetGroupIds.includes(groupId)) && (
             <div 
               className="absolute left-0 right-0 z-40 py-4 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
               style={{

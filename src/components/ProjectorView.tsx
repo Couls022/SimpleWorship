@@ -182,13 +182,14 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       {/* 2. Slide Annotation Layer */}
       {!isBlackoutActive && (
         <SlideAnnotationLayer 
+          groupId={winningGroup?.id}
           interactive={false} 
           className="z-35"
         />
       )}
 
       {/* 3. Marquee Alert Banner Overlay */}
-      {alert.active && !isBlackoutActive && (
+      {alert.active && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
         <div 
           className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
           style={{
@@ -208,7 +209,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       )}
 
       {/* 4. Nursery Alert Badge Overlay */}
-      {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (
+      {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
         <div 
           className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
             systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
