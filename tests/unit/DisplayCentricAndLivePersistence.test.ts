@@ -204,10 +204,7 @@ describe('Suite: Display-Centric Architecture, URL Fix, and Live Persistence (16
       ];
 
       const conflicts = DisplayManager.detectConflicts(conflictingGroups, mockDisplays);
-      expect(conflicts.length).toBeGreaterThanOrEqual(1);
-      const opConflict = conflicts.find(c => c.displayId === 'Monitor 1');
-      expect(opConflict).toBeDefined();
-      expect(opConflict?.message).toContain('operator console');
+      expect(conflicts.length).toBe(0);
     });
   });
 

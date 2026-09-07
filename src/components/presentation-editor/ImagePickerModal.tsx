@@ -23,79 +23,8 @@ interface ImagePickerModalProps {
   title?: string;
 }
 
-// Curated high-resolution presentation and church worship backgrounds
-const CURATED_PRESENTATION_IMAGES = [
-  {
-    id: 'worship-cross',
-    name: 'Cross at Sunrise',
-    category: 'Worship & Cross',
-    url: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'worship-hands',
-    name: 'Hands in Praise & Worship',
-    category: 'Worship & Cross',
-    url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'nature-mountains',
-    name: 'Majestic Alpine Mountains',
-    category: 'Creation & Nature',
-    url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'nature-forest-mist',
-    name: 'Sunlight Through Forest Mist',
-    category: 'Creation & Nature',
-    url: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'space-nebula',
-    name: 'Cosmic Starry Night Galaxy',
-    category: 'Cosmic & Atmospheric',
-    url: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'space-particles',
-    name: 'Golden Worship Particles',
-    category: 'Cosmic & Atmospheric',
-    url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'minimal-abstract-dark',
-    name: 'Dark Slate Geometric Waves',
-    category: 'Modern & Minimal',
-    url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'minimal-blue-glow',
-    name: 'Deep Blue Stage Lighting Flare',
-    category: 'Modern & Minimal',
-    url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'church-sanctuary',
-    name: 'Cathedral Stained Glass Glow',
-    category: 'Sanctuary & Sacred',
-    url: 'https://images.unsplash.com/photo-1548625361-195fe2109033?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1548625361-195fe2109033?auto=format&fit=crop&w=400&q=80',
-  },
-  {
-    id: 'church-candles',
-    name: 'Prayer Candles Reverence',
-    category: 'Sanctuary & Sacred',
-    url: 'https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=400&q=80',
-  },
-];
+// Curated user assets / empty default
+const CURATED_PRESENTATION_IMAGES: Array<{ id: string; name: string; category: string; url: string; thumbnail: string }> = [];
 
 export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   isOpen,
@@ -103,7 +32,7 @@ export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
   onSelectImage,
   title = 'Select or Upload Image',
 }) => {
-  const [activeTab, setActiveTab] = useState<'upload' | 'library' | 'curated' | 'url'>('curated');
+  const [activeTab, setActiveTab] = useState<'upload' | 'library' | 'curated' | 'url'>('upload');
   
   // Local File Upload state
   const [dragOver, setDragOver] = useState(false);
@@ -444,7 +373,7 @@ export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
               <div className="flex gap-2">
                 <input
                   type="url"
-                  placeholder="https://images.unsplash.com/... or any online image"
+                  placeholder="https://example.com/image.jpg or any online image URL"
                   className="flex-1 px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder:text-slate-500 focus:border-sky-500 outline-none font-mono"
                   value={urlInput}
                   onChange={(e) => {

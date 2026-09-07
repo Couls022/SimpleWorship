@@ -604,7 +604,7 @@ export default function MonitorPreviewCanvas({
             ) : isGradient ? (
               <div className="w-full h-full" style={{ background: gradientVal }} />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-black" />
+              <div className="w-full h-full bg-black" />
             )}
 
             {/* Tint Overlay */}

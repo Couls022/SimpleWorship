@@ -155,21 +155,6 @@ export class DisplayManager {
 
     // 2. Web Standalone Mode (No external browser popups to prevent 403 Google auth bridge errors)
     if (typeof window !== 'undefined') {
-      const displays = this.cachedDisplays.length > 0 ? this.cachedDisplays : await this.getDisplays();
-      const targetDisplay = displays.find(d => d.id === displayId || d.name === displayId) || displays[0];
-
-      // Operator console protection: if targeting the operator/primary display, block with SAME_DISPLAY_CONFLICT
-      const isOperatorDisplay = !displayId || displayId === 'primary-display' || targetDisplay?.isPrimary || displays.length <= 1;
-      if (isOperatorDisplay) {
-        this.localStatuses[groupId] = 'DISCONNECTED';
-        return {
-          success: false,
-          status: 'DISCONNECTED',
-          conflict: 'SAME_DISPLAY_CONFLICT',
-          error: 'The selected Live Output monitor is currently being used by the SimpleWorship operator console.'
-        };
-      }
-
       this.localStatuses[groupId] = 'CONNECTED';
       
       // Dispatch in-app activation event so the internal Live Display canvas activates/fullscreens
@@ -182,12 +167,6 @@ export class DisplayManager {
       window.dispatchEvent(
         new CustomEvent('simpleworship:projector-status', {
           detail: { groupId, status: 'CONNECTED' },
-        })
-      );
-
-      window.dispatchEvent(
-        new CustomEvent('simpleworship:notify', { 
-          detail: `Standalone Live Display connected for Output Route!` 
         })
       );
 
@@ -403,37 +382,7 @@ export class DisplayManager {
   ): DisplayConflict[] {
     const conflicts: DisplayConflict[] = [];
 
-    // 1. Operator Console Conflict Protection:
-    // If an output group targets the operator console monitor (Primary / Monitor 1),
-    // report a conflict so the operator console is protected.
-    const operatorDisplay = availableDisplays.find((d) => d.isPrimary) || availableDisplays[0];
-    if (operatorDisplay) {
-      for (const group of outputGroups) {
-        if (group.displayIds && group.displayIds.length > 0) {
-          for (const dispId of group.displayIds) {
-            const isTargetingOperator =
-              dispId === operatorDisplay.id ||
-              dispId === operatorDisplay.name ||
-              (operatorDisplay.isPrimary &&
-                (dispId === 'primary-display' ||
-                  dispId.toLowerCase().includes('primary') ||
-                  operatorDisplay.name.toLowerCase().includes(dispId.toLowerCase())));
-
-            if (isTargetingOperator) {
-              conflicts.push({
-                displayId: dispId,
-                displayName: operatorDisplay.name,
-                groupIds: [group.id],
-                groupNames: [group.name],
-                message: `Output Monitor Conflict: "${group.name}" is targeting the operator console monitor (${operatorDisplay.name}). The operator console will be kept intact and cannot be overtaken.`,
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Detect conflicts between multiple groups targeting the same display
+    // Detect conflicts between multiple groups targeting the same display
     const displayToGroups = new Map<string, { groupIds: string[]; groupNames: string[] }>();
 
     for (const group of outputGroups) {

@@ -32,6 +32,8 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
   // Extract clean font name for display
   const primaryFamily = value.split(',')[0].replace(/['"]/g, '').trim();
 
+  const [visibleLimit, setVisibleLimit] = useState(40);
+
   // Reload font list whenever fonts are updated
   useEffect(() => {
     const handleUpdate = () => {
@@ -40,6 +42,11 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
     window.addEventListener('simpleworship:fonts-updated', handleUpdate);
     return () => window.removeEventListener('simpleworship:fonts-updated', handleUpdate);
   }, []);
+
+  // Reset limit when search query changes for snappy response
+  useEffect(() => {
+    setVisibleLimit(40);
+  }, [searchQuery]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -173,14 +180,22 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
           </div>
 
           {/* Font List Categories */}
-          <div className="max-h-64 overflow-y-auto custom-scrollbar p-1">
+          <div 
+            className="max-h-64 overflow-y-auto custom-scrollbar p-1"
+            onScroll={(e) => {
+              const target = e.currentTarget;
+              if (target.scrollHeight - target.scrollTop <= target.clientHeight + 60) {
+                setVisibleLimit(prev => prev + 50);
+              }
+            }}
+          >
             {customFonts.length > 0 && (
               <div className="mb-2">
                 <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
                   <Type size={10} />
                   <span>Custom Registered Fonts</span>
                 </div>
-                {customFonts.map((f) => {
+                {customFonts.slice(0, visibleLimit).map((f) => {
                   const isSelected = primaryFamily.toLowerCase() === f.family.toLowerCase();
                   return (
                     <button
@@ -212,7 +227,7 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
                   </span>
                   <span className="text-[9px] font-mono text-slate-400">({systemFonts.length})</span>
                 </div>
-                {systemFonts.map((f) => {
+                {systemFonts.slice(0, visibleLimit).map((f) => {
                   const isSelected = primaryFamily.toLowerCase() === f.family.toLowerCase();
                   return (
                     <button
@@ -244,7 +259,7 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
                   </span>
                   <span className="text-[9px] font-mono text-slate-400">({googleFonts.length})</span>
                 </div>
-                {googleFonts.map((f) => {
+                {googleFonts.slice(0, visibleLimit).map((f) => {
                   const isSelected = primaryFamily.toLowerCase() === f.family.toLowerCase();
                   return (
                     <button

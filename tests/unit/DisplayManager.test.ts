@@ -73,18 +73,16 @@ describe('DisplayManager', () => {
     delete (window as any).electronAPI;
   });
 
-  it('Operator = Monitor 1, Projector target = Monitor 1 -> BLOCK -> Output Monitor Conflict -> Operator remains usable (Standalone)', async () => {
+  it('Operator = Monitor 1, Projector target = Monitor 1 -> Standalone Live Display connects smoothly', async () => {
     // Single display / primary display = Monitor 1
     const res = await DisplayManager.openProjector('main-group', 'primary-display');
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('DISCONNECTED');
-    expect(res.conflict).toBe('SAME_DISPLAY_CONFLICT');
-    expect(res.error).toContain('SimpleWorship operator console');
+    expect(res.success).toBe(true);
+    expect(res.status).toBe('CONNECTED');
 
-    expect(DisplayManager.getLocalStatus('main-group')).toBe('DISCONNECTED');
+    expect(DisplayManager.getLocalStatus('main-group')).toBe('CONNECTED');
   });
 
-  it('detects Output Monitor Conflict in detectConflicts when an output group targets the operator display', () => {
+  it('detects no operator blocking conflicts in detectConflicts', () => {
     const mockDisplays = [
       { id: 'disp-1', name: 'Monitor 1', bounds: { x: 0, y: 0, width: 1920, height: 1080 }, isPrimary: true, isInternal: true, workArea: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1, connectionState: 'connected' as const },
       { id: 'disp-2', name: 'Monitor 2', bounds: { x: 1920, y: 0, width: 1920, height: 1080 }, isPrimary: false, isInternal: false, workArea: { x: 1920, y: 0, width: 1920, height: 1080 }, scaleFactor: 1, connectionState: 'connected' as const }
@@ -96,11 +94,6 @@ describe('DisplayManager', () => {
     ];
 
     const conflicts = DisplayManager.detectConflicts(outputGroups, mockDisplays);
-    expect(conflicts.length).toBeGreaterThanOrEqual(1);
-    const opConflict = conflicts.find(c => c.displayId === 'Monitor 1');
-    expect(opConflict).toBeDefined();
-    expect(opConflict?.message).toContain('Output Monitor Conflict');
-    expect(opConflict?.message).toContain('Main Congregation');
-    expect(opConflict?.message).toContain('operator console');
+    expect(conflicts.length).toBe(0);
   });
 });

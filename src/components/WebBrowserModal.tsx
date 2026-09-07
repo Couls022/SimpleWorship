@@ -7,7 +7,6 @@ interface WebBrowserModalProps {
 }
 
 const POPULAR_WORSHIP_WEB_LINKS = [
-  { name: 'Unsplash Worship Backgrounds', url: 'https://unsplash.com/s/photos/worship-background', desc: 'Free high-res background photography' },
   { name: 'Bible Gateway', url: 'https://www.biblegateway.com', desc: 'Online Bible passages and translations' },
   { name: 'Hymnary.org', url: 'https://hymnary.org', desc: 'Comprehensive hymn text & history database' },
   { name: 'PraiseCharts', url: 'https://www.praisecharts.com', desc: 'Sheet music, lyrics, & arrangement database' },
@@ -16,8 +15,8 @@ const POPULAR_WORSHIP_WEB_LINKS = [
 
 export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
   const store = useStore();
-  const [targetUrl, setTargetUrl] = useState('https://unsplash.com/s/photos/worship-background');
-  const [activeIframeUrl, setActiveIframeUrl] = useState('https://unsplash.com/s/photos/worship-background');
+  const [targetUrl, setTargetUrl] = useState('https://www.biblegateway.com');
+  const [activeIframeUrl, setActiveIframeUrl] = useState('https://www.biblegateway.com');
   const [customTitle, setCustomTitle] = useState('Online Web Stream / Asset');
 
   const handleNavigate = () => {

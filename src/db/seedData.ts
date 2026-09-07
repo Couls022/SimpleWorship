@@ -17,9 +17,8 @@ export const defaultThemes: Theme[] = [
       shadowColor: 'rgba(0, 0, 0, 0.85)',
       textOutline: true,
       outlineColor: 'rgba(0, 0, 0, 0.95)',
-      backgroundType: 'video',
-      backgroundVideoUrl: 'https://assets.mixkit.co/videos/preview/mixkit-nebula-clouds-and-bright-stars-in-space-41979-large.mp4',
-      backgroundImageUrl: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80',
+      backgroundType: 'color',
+      backgroundColor: '#000000',
       logoPosition: 'bottom-right',
       logoSize: 72,
       logoOpacity: 0.85,
@@ -41,8 +40,8 @@ export const defaultThemes: Theme[] = [
       textAlign: 'center',
       textShadow: true,
       shadowColor: 'rgba(0, 0, 0, 0.9)',
-      backgroundType: 'image',
-      backgroundImageUrl: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=1920&q=80',
+      backgroundType: 'color',
+      backgroundColor: '#000000',
       padding: '5rem',
       lineHeight: 1.35,
     }
@@ -67,27 +66,36 @@ export const defaultThemes: Theme[] = [
     id: 'theme-song',
     name: 'Default Song Theme',
     type: 'song',
-    styles: {}
+    styles: {
+      backgroundType: 'color',
+      backgroundColor: '#000000',
+    }
   },
   {
     id: 'theme-presentation',
     name: 'Default Presentation Theme',
     type: 'presentation',
-    styles: {}
+    styles: {
+      backgroundType: 'color',
+      backgroundColor: '#000000',
+    }
   },
   {
     id: 'theme-announcement',
     name: 'Default Announcement Theme',
     type: 'announcement',
-    styles: {}
+    styles: {
+      backgroundType: 'color',
+      backgroundColor: '#000000',
+    }
   },
   {
     id: 'theme-logo',
     name: 'Default Logo Theme',
     type: 'logo',
     styles: {
-      backgroundType: 'image',
-      backgroundImageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
+      backgroundType: 'color',
+      backgroundColor: '#000000',
       showLogo: true,
       logoPosition: 'bottom-right',
       logoSize: 120,
@@ -105,7 +113,6 @@ export const defaultSongs: Song[] = [
     ccli: '19530',
     key: 'B',
     tempo: 'Slow',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
     tags: ['Hymn', 'Cross', 'Easter', 'Grace'],
     sections: [
       {
@@ -143,7 +150,6 @@ export const defaultSongs: Song[] = [
     ccli: '2233',
     key: 'Eb',
     tempo: 'Medium',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1920&q=80',
     tags: ['Hymn', 'Blood of Jesus', 'Grace'],
     sections: [
       {
@@ -181,7 +187,6 @@ export const defaultSongs: Song[] = [
     ccli: '22025',
     key: 'G',
     tempo: 'Slow',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=1920&q=80',
     tags: ['Hymn', 'Grace', 'Salvation'],
     sections: [
       {
@@ -214,7 +219,6 @@ export const defaultSongs: Song[] = [
     ccli: '14181',
     key: 'A',
     tempo: 'Medium',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=1920&q=80',
     tags: ['Hymn', 'Creation', 'Praise', 'Worship'],
     sections: [
       {
@@ -248,7 +252,6 @@ export const defaultSongs: Song[] = [
     key: 'Fm',
     tempo: 'Solemn',
     category: 'Special Number',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=1920&q=80',
     tags: ['Special Number', 'Solo', 'Easter', 'Cross'],
     sections: [
       {
@@ -277,7 +280,6 @@ export const defaultSongs: Song[] = [
     key: 'C',
     tempo: 'Slow',
     category: 'Special Number',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
     tags: ['Special Number', 'Solo', 'Hymn', 'Devotion'],
     sections: [
       {
@@ -306,7 +308,6 @@ export const defaultSongs: Song[] = [
     key: 'Ab',
     tempo: 'Medium',
     category: 'Special Number',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80',
     tags: ['Special Number', 'Solo', 'Praise', 'Faithfulness'],
     sections: [
       {
@@ -335,7 +336,6 @@ export const defaultSongs: Song[] = [
     key: 'Eb',
     tempo: 'Medium',
     category: 'Special Number',
-    defaultBackgroundUrl: 'https://images.unsplash.com/photo-1470240731273-7821a6eeb6bd?auto=format&fit=crop&w=1920&q=80',
     tags: ['Special Number', 'Solo', 'Testimony'],
     sections: [
       {
@@ -356,55 +356,6 @@ export const defaultSongs: Song[] = [
 export const defaultScriptures: ScriptureVerse[] = [];
 
 export const defaultAssets: Asset[] = [
-  {
-    id: 'asset-video-nebula',
-    name: 'Cosmic Nebula Motion Loop',
-    type: 'motion',
-    hash: 'h_nebula_01',
-    url: 'https://assets.mixkit.co/videos/preview/mixkit-nebula-clouds-and-bright-stars-in-space-41979-large.mp4',
-    thumbnail: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=400&q=80',
-    duration: 30,
-    isDefaultScope: { songs: true },
-    createdAt: Date.now()
-  },
-  {
-    id: 'asset-video-particles',
-    name: 'Golden Worship Light Particles',
-    type: 'motion',
-    hash: 'h_particles_02',
-    url: 'https://assets.mixkit.co/videos/preview/mixkit-light-particles-in-motion-41870-large.mp4',
-    thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80',
-    duration: 20,
-    isDefaultScope: { scriptures: true },
-    createdAt: Date.now()
-  },
-  {
-    id: 'asset-img-mountains',
-    name: 'Majestic Mountain Dawn',
-    type: 'image',
-    hash: 'h_mountains_03',
-    url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=400&q=80',
-    createdAt: Date.now()
-  },
-  {
-    id: 'asset-img-cross',
-    name: 'Cross Silhouette Sunset',
-    type: 'image',
-    hash: 'h_cross_04',
-    url: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&w=400&q=80',
-    createdAt: Date.now()
-  },
-  {
-    id: 'asset-img-abstract-teal',
-    name: 'Teal Worship Flare',
-    type: 'image',
-    hash: 'h_teal_05',
-    url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
-    thumbnail: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80',
-    createdAt: Date.now()
-  },
   {
     id: 'asset-audio-ambient-pad',
     name: 'Serene Worship Ambient Pad',

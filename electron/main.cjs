@@ -922,7 +922,6 @@ ipcMain.handle('system:get-hardware-info', async () => {
 
 
 
-const { exec } = require("child_process");
 ipcMain.handle("convert-pptx", async (event, filePath) => {
   return new Promise((resolve, reject) => {
     if (process.platform !== "win32") {
@@ -933,8 +932,8 @@ ipcMain.handle("convert-pptx", async (event, filePath) => {
     fs.mkdirSync(outputDir, { recursive: true });
 
     // Sanitize path for PowerShell
-    const psPath = filePath.replace(/\/g, "\\").replace(/"/g, "\"\"");
-    const psOut = outputDir.replace(/\/g, "\\").replace(/"/g, "\"\"");
+    const psPath = filePath.replace(/\//g, "\\").replace(/"/g, '""');
+    const psOut = outputDir.replace(/\//g, "\\").replace(/"/g, '""');
 
     const psScript = `
 $ErrorActionPreference = "Stop"
@@ -955,7 +954,7 @@ try {
     const psFile = path.join(outputDir, "convert.ps1");
     fs.writeFileSync(psFile, psScript);
 
-    exec(\`powershell.exe -ExecutionPolicy Bypass -File "\${psFile}"\`, (error, stdout, stderr) => {
+    exec(`powershell.exe -ExecutionPolicy Bypass -File "${psFile}"`, (error, stdout, stderr) => {
       if (error || !stdout.includes("SUCCESS")) {
         reject(error || new Error(stderr || "PowerPoint conversion failed."));
       } else {

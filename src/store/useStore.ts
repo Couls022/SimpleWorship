@@ -1245,18 +1245,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     // Synchronize physical projector windows immediately
-    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId).then(result => {
-      if (result.conflicts && result.conflicts.length > 0) {
-        const sameDispConflict = result.conflicts.find(c => c.message.includes('operator console'));
-        if (sameDispConflict) {
-          window.dispatchEvent(
-            new CustomEvent('simpleworship:notify', { 
-              detail: sameDispConflict.message 
-            })
-          );
-        }
-      }
-    }).catch(err => {
+    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId).catch(err => {
       console.error('[useStore] DisplayManager.syncPhysicalDisplays error on toggleMasterLive:', err);
     });
 
@@ -1478,18 +1467,40 @@ export const useStore = create<AppState>((set, get) => ({
     ]);
 
     // Ensure all seed songs and Baptist Hymnal songs are populated
-    let mergedSongs = songs;
-    if (songs.length < defaultSongs.length) {
-      const existingIds = new Set(songs.map(s => s.id));
+    let mergedSongs = songs.map(s => {
+      // Strip old default unsplash background URLs from songs
+      if (s.defaultBackgroundUrl && s.defaultBackgroundUrl.includes('unsplash.com')) {
+        const { defaultBackgroundUrl, ...rest } = s;
+        return rest as Song;
+      }
+      return s;
+    });
+    if (mergedSongs.length < defaultSongs.length) {
+      const existingIds = new Set(mergedSongs.map(s => s.id));
       const missing = defaultSongs.filter(s => !existingIds.has(s.id));
-      mergedSongs = [...songs, ...missing];
+      mergedSongs = [...mergedSongs, ...missing];
       missing.forEach(s => dbApi.addSong(s));
     }
     set({ songsList: mergedSongs.length > 0 ? mergedSongs : defaultSongs });
 
-    // Ensure all default themes (including theme-logo, song, bible, etc.) exist
-    let mergedThemes = [...themes];
-    const existingThemeIds = new Set(themes.map(t => t.id));
+    // Ensure all default themes (including theme-logo, song, bible, etc.) exist and are sanitized
+    let mergedThemes = themes.map(t => {
+      // Clear old default unsplash image URLs from theme styles
+      if (t.styles?.backgroundImageUrl && t.styles.backgroundImageUrl.includes('unsplash.com')) {
+        return {
+          ...t,
+          styles: {
+            ...t.styles,
+            backgroundImageUrl: undefined,
+            backgroundVideoUrl: undefined,
+            backgroundType: 'color' as const,
+            backgroundColor: t.styles.backgroundColor || '#000000'
+          }
+        };
+      }
+      return t;
+    });
+    const existingThemeIds = new Set(mergedThemes.map(t => t.id));
     const missingDefaultThemes = defaultThemes.filter(t => !existingThemeIds.has(t.id));
     if (missingDefaultThemes.length > 0) {
       mergedThemes = [...mergedThemes, ...missingDefaultThemes];

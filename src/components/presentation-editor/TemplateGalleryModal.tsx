@@ -665,7 +665,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
         {
           id: 'obj-media-img',
           type: 'image',
-          imageUrl: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=1200&q=80',
+          imageUrl: '',
           x: 120,
           y: 220,
           width: 900,

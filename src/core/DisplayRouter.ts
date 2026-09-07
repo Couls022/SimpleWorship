@@ -28,13 +28,13 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
     
     // STRICT index/positional matching to avoid large-id coincidences
     // Only apply includes matching if the string actually names a display specifically
-    const isTargetPrimary = target.includes('primary') || target.includes('monitor-1') || target === 'monitor 1';
-    const isTarget2 = target.includes('monitor-2') || target === 'monitor 2' || target.includes('secondary') || target.includes('alternate');
-    const isTarget3 = target.includes('monitor-3') || target === 'monitor 3' || target.includes('foldback') || target.includes('stage') || target.includes('tertiary');
+    const isTargetPrimary = target.includes('primary') || target.includes('monitor-1') || target === 'monitor 1' || target.includes('display-1') || target.includes('display 1');
+    const isTarget2 = target.includes('monitor-2') || target === 'monitor 2' || target.includes('secondary') || target.includes('alternate') || target.includes('display-2') || target.includes('display 2') || target.includes('display 2 (');
+    const isTarget3 = target.includes('monitor-3') || target === 'monitor 3' || target.includes('foldback') || target.includes('stage') || target.includes('tertiary') || target.includes('display-3') || target.includes('display 3');
 
-    const isRawPrimary = raw.includes('primary') || raw.includes('monitor-1') || raw === 'monitor 1';
-    const isRaw2 = raw.includes('monitor-2') || raw === 'monitor 2' || raw.includes('secondary') || raw.includes('alternate');
-    const isRaw3 = raw.includes('monitor-3') || raw === 'monitor 3' || raw.includes('foldback') || raw.includes('stage') || raw.includes('tertiary');
+    const isRawPrimary = raw.includes('primary') || raw.includes('monitor-1') || raw === 'monitor 1' || raw.includes('display-1') || raw.includes('display 1');
+    const isRaw2 = raw.includes('monitor-2') || raw === 'monitor 2' || raw.includes('secondary') || raw.includes('alternate') || raw.includes('display-2') || raw.includes('display 2') || raw.includes('display 2 (');
+    const isRaw3 = raw.includes('monitor-3') || raw === 'monitor 3' || raw.includes('foldback') || raw.includes('stage') || raw.includes('tertiary') || raw.includes('display-3') || raw.includes('display 3');
 
     if (isTargetPrimary && isRawPrimary) return true;
     if (isTarget2 && isRaw2) return true;
@@ -79,10 +79,10 @@ export function resolveDisplayAssignments(
   });
 
   const isRouteLive = (gid: string): boolean => {
-    if (!groupStates) return true;
+    if (!groupStates) return false;
     const st = (groupStates as any)[gid];
-    if (!st) return true;
-    return st.isLiveEnabled !== false;
+    if (!st) return false;
+    return st.isLiveEnabled === true;
   };
 
   for (const displayId of displayIdSet) {

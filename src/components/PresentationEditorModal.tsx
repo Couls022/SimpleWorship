@@ -1280,7 +1280,7 @@ export function PresentationEditorModal({
         </div>
 
         {/* Ribbon Tools Panel */}
-        <div className="p-2 px-4 flex items-center justify-between text-xs overflow-x-auto custom-scrollbar">
+        <div className="p-2 px-4 flex items-center justify-between text-xs relative z-30">
           {activeRibbonTab === 'home' && (
             <div className="flex items-center gap-3">
               {/* ALWAYS VISIBLE: Transform (X, Y, W, H, Rotation) */}

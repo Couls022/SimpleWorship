@@ -23,6 +23,8 @@ import { MediaStreamController } from '../core/MediaStreamController';
 import { dbApi } from '../db';
 import { TelemetryManager } from '../utils/TelemetryManager';
 
+import { resolveGroupResolution } from './MonitorPreviewCanvas';
+
 interface ProjectorViewProps {
   groupId: string;
   displayId?: string;
@@ -35,6 +37,22 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   
   const { screens } = useScreens();
   const [identifyActive, setIdentifyActive] = React.useState(false);
+
+  const [windowSize, setWindowSize] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     let timer: any;
@@ -155,91 +173,165 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   const baseGroupObj = outputGroups.find(g => g.id === orderedLiveGroupIds[0]) || outputGroups[0];
   const winningGroup = outputGroups.find(g => g.id === orderedLiveGroupIds[orderedLiveGroupIds.length - 1]) || outputGroups[0];
 
+  // 1. Get current target resolution and aspect ratio configured on the active output route
+  const groupRes = React.useMemo(() => {
+    return resolveGroupResolution(winningGroup || baseGroupObj, systemOptions);
+  }, [winningGroup, baseGroupObj, systemOptions]);
+
+  // 2. Adjust aspect ratio to PowerPoint deck template ratio if active item is a slide deck
+  const isPptx = React.useMemo(() => {
+    const activeItem = orderedLiveGroupIds.length > 0
+      ? PresentationCore.getActiveContent(
+          activeSchedule,
+          groupStates[orderedLiveGroupIds[orderedLiveGroupIds.length - 1]],
+          groupStates[orderedLiveGroupIds[orderedLiveGroupIds.length - 1]]?.directLiveItem
+        )
+      : null;
+    return activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
+  }, [orderedLiveGroupIds, activeSchedule, groupStates]);
+
+  const activeItem = React.useMemo(() => {
+    if (orderedLiveGroupIds.length === 0) return null;
+    const winningGroupId = orderedLiveGroupIds[orderedLiveGroupIds.length - 1];
+    return PresentationCore.getActiveContent(
+      activeSchedule,
+      groupStates[winningGroupId],
+      groupStates[winningGroupId]?.directLiveItem
+    );
+  }, [orderedLiveGroupIds, activeSchedule, groupStates]);
+
+  const slides = React.useMemo(() => {
+    return activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
+  }, [activeItem, songsList, systemOptions]);
+
+  const activeSlideState = orderedLiveGroupIds.length > 0 ? groupStates[orderedLiveGroupIds[orderedLiveGroupIds.length - 1]] : null;
+  const currentSlide = React.useMemo(() => {
+    return activeSlideState ? slides[activeSlideState.activeSlideIndex] : null;
+  }, [activeSlideState, slides]);
+
+  const templateAspectRatio = currentSlide?.aspectRatio || activeItem?.data?.aspectRatio;
+  const aspectRatio = (isPptx && templateAspectRatio && templateAspectRatio > 0) ? templateAspectRatio : groupRes.aspectRatio;
+
+  // 3. Compute fitted box dimensions with letterbox/pillarbox inside windowSize
+  const { width: fittedWidth } = React.useMemo(() => {
+    const availWidth = windowSize.width;
+    const availHeight = windowSize.height;
+    const containerAspect = availWidth / availHeight;
+    
+    let w = availWidth;
+    let h = availHeight;
+    
+    if (containerAspect > aspectRatio) {
+      // Height is the constraint
+      h = availHeight;
+      w = Math.round(h * aspectRatio);
+    } else {
+      // Width is the constraint
+      w = availWidth;
+      h = Math.round(w / aspectRatio);
+    }
+    
+    return { width: w, height: h };
+  }, [windowSize, aspectRatio]);
+
+  const scale = fittedWidth / groupRes.width;
+
   return (
     <div 
       data-canvas-preview="true"
-      className="w-screen h-screen overflow-hidden relative bg-black select-none projector-canvas"
+      className="w-screen h-screen overflow-hidden relative bg-black select-none projector-canvas flex items-center justify-center"
     >
-      {/* 1. Multi-Layer Transparent Presentation Stacking */}
-      {orderedLiveGroupIds.map((gId, index) => {
-        const isBaseLayer = index === 0;
-        const currentGroupObj = outputGroups.find(g => g.id === gId) || outputGroups[0];
-        return (
-          <ProjectorLayer
-            key={gId}
-            groupId={gId}
-            displayId={displayId}
-            isBaseLayer={isBaseLayer}
-            group={currentGroupObj}
-            songsList={songsList}
-            themesList={themesList}
-            systemOptions={systemOptions}
-            activeSchedule={activeSchedule}
-          />
-        );
-      })}
+      <div
+        className="relative overflow-hidden bg-black select-none shrink-0"
+        style={{
+          width: groupRes.width,
+          height: groupRes.height,
+          transform: `scale(${scale})`,
+          transformOrigin: 'center center',
+          willChange: 'transform'
+        }}
+      >
+        {/* 1. Multi-Layer Transparent Presentation Stacking */}
+        {orderedLiveGroupIds.map((gId, index) => {
+          const isBaseLayer = index === 0;
+          const currentGroupObj = outputGroups.find(g => g.id === gId) || outputGroups[0];
+          return (
+            <ProjectorLayer
+              key={gId}
+              groupId={gId}
+              displayId={displayId}
+              isBaseLayer={isBaseLayer}
+              group={currentGroupObj}
+              songsList={songsList}
+              themesList={themesList}
+              systemOptions={systemOptions}
+              activeSchedule={activeSchedule}
+            />
+          );
+        })}
 
-      {/* 2. Slide Annotation Layer */}
-      {!isBlackoutActive && (
-        <SlideAnnotationLayer 
-          groupId={winningGroup?.id}
-          interactive={false} 
-          className="z-35"
-        />
-      )}
-
-      {/* 3. Marquee Alert Banner Overlay */}
-      {alert.active && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
-        <div 
-          className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
-          style={{
-            bottom: alert.position === 'bottom' ? 0 : 'auto',
-            top: alert.position === 'top' ? 0 : 'auto',
-            backgroundColor: alert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
-            color: alert.textColor || '#FACC15',
-          }}
-        >
-          <div className="text-lg md:text-xl font-bold whitespace-nowrap animate-marquee flex items-center gap-3">
-            <span className="px-2.5 py-0.5 rounded bg-amber-500 text-black text-sm font-black uppercase tracking-wider">
-              ALERT
-            </span>
-            <span>{alert.message}</span>
-          </div>
-        </div>
-      )}
-
-      {/* 4. Nursery Alert Badge Overlay */}
-      {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
-        <div 
-          className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
-            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
-            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Left' ? 'bottom-6 left-6' :
-            systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Right' ? 'bottom-6 right-6' : 'top-6 right-6'
-          }`}
-          style={{
-            backgroundColor: systemOptions?.mainOutput?.alerts?.nursery?.backgroundColor || '#FF0000',
-            color: systemOptions?.mainOutput?.alerts?.nursery?.font?.color || '#FFFFFF',
-            fontSize: `${Math.min(32, systemOptions?.mainOutput?.alerts?.nursery?.font?.maxSize || 32)}px`,
-            fontFamily: systemOptions?.mainOutput?.alerts?.nursery?.font?.family || 'Tahoma, sans-serif'
-          }}
-        >
-          <span className="text-xs uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded text-white font-mono">NURSERY</span>
-          <span>{alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
-        </div>
-      )}
-
-      {/* 5. Master Black Screen curtain */}
-      <AnimatePresence>
-        {isBlackoutActive && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="absolute inset-0 z-50 bg-black"
+        {/* 2. Slide Annotation Layer */}
+        {!isBlackoutActive && (
+          <SlideAnnotationLayer 
+            groupId={winningGroup?.id}
+            interactive={false} 
+            className="z-35"
           />
         )}
-      </AnimatePresence>
+
+        {/* 3. Marquee Alert Banner Overlay */}
+        {alert.active && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
+          <div 
+            className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
+            style={{
+              bottom: alert.position === 'bottom' ? 0 : 'auto',
+              top: alert.position === 'top' ? 0 : 'auto',
+              backgroundColor: alert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
+              color: alert.textColor || '#FACC15',
+            }}
+          >
+            <div className="text-lg md:text-xl font-bold whitespace-nowrap animate-marquee flex items-center gap-3">
+              <span className="px-2.5 py-0.5 rounded bg-amber-500 text-black text-sm font-black uppercase tracking-wider">
+                ALERT
+              </span>
+              <span>{alert.message}</span>
+            </div>
+          </div>
+        )}
+
+        {/* 4. Nursery Alert Badge Overlay */}
+        {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
+          <div 
+            className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
+              systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
+              systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Left' ? 'bottom-6 left-6' :
+              systemOptions?.mainOutput?.alerts?.nursery?.location === 'Bottom Right' ? 'bottom-6 right-6' : 'top-6 right-6'
+            }`}
+            style={{
+              backgroundColor: systemOptions?.mainOutput?.alerts?.nursery?.backgroundColor || '#FF0000',
+              color: systemOptions?.mainOutput?.alerts?.nursery?.font?.color || '#FFFFFF',
+              fontSize: `${Math.min(32, systemOptions?.mainOutput?.alerts?.nursery?.font?.maxSize || 32)}px`,
+              fontFamily: systemOptions?.mainOutput?.alerts?.nursery?.font?.family || 'Tahoma, sans-serif'
+            }}
+          >
+            <span className="text-xs uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded text-white font-mono">NURSERY</span>
+            <span>{alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
+          </div>
+        )}
+
+        {/* 5. Master Black Screen curtain */}
+        <AnimatePresence>
+          {isBlackoutActive && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0 z-50 bg-black"
+            />
+          )}
+        </AnimatePresence>
+      </div>
 
       {/* 6. Visual Identification Overlay for connected monitors */}
       <AnimatePresence>
@@ -692,7 +784,7 @@ function ProjectorLayer({
           ) : isGradient ? (
             <div className="w-full h-full" style={{ background: gradientVal }} />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-[#0e121a] via-[#151a26] to-[#0b0d12]" />
+            <div className="w-full h-full bg-black" />
           )}
 
           {/* Dimmer / Tint Overlay */}

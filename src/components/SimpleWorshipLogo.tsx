@@ -36,7 +36,7 @@ export function SimpleWorshipLogo({
           const target = e.currentTarget;
           if (!target.dataset.fallback) {
             target.dataset.fallback = 'true';
-            target.src = './branding/logo/SimpleWorship-icon.svg';
+            target.src = '/branding/logo/SimpleWorship-icon.svg';
           }
         }}
       />

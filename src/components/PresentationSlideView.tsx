@@ -79,7 +79,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
       }
     }
     // 5. Presentation default canvas
-    return { backgroundColor: '#111827' };
+    return { backgroundColor: '#000000' };
   }, [slide.backgroundUrl, slide.backgroundColor, themeStyles, isPptxOrDeck]);
 
   // Determine light vs dark background

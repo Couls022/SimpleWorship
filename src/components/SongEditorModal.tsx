@@ -275,7 +275,7 @@ export default function SongEditorModal({
     matchedMasterSong?.defaultBackgroundUrl || 
     defaultTypeBg ||
     assetsList[0]?.url ||
-    'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1920&q=80'
+    ''
   );
 
   // Selected Slide Index

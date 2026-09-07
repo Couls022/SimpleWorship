@@ -9,30 +9,20 @@ export class PresentationCore {
     state: PresentationState | null | undefined,
     directItemFallback?: PresentationItem | null
   ): PresentationItem | null {
-    if (!state || !state.activeItemId) return null;
+    if (!state) return null;
 
-    // 1. Direct explicit live item attached to presentation state (persists across navigation)
-    if (state.directLiveItem && (state.directLiveItem.id === state.activeItemId || !state.activeScheduleId)) {
-      return state.directLiveItem;
-    }
-
-    // 2. Direct fallback item supplied as parameter
-    if (directItemFallback && (directItemFallback.id === state.activeItemId || !state.activeScheduleId)) {
-      return directItemFallback;
-    }
-
-    // 3. Search in schedule items
-    if (schedule && schedule.items && schedule.items.length > 0) {
+    // 1. If activeItemId matches an item in the active schedule, return it
+    if (state.activeItemId && schedule && schedule.items && schedule.items.length > 0) {
       const found = schedule.items.find(i => i.id === state.activeItemId);
       if (found) return found;
     }
 
-    // 4. If not found in active schedule (e.g. user navigated to Scriptures, Songs, or another schedule),
-    // retain the directLiveItem so projector output NEVER drops to blank/standby!
+    // 2. Return direct explicit live item attached to presentation state (persists across navigation and slide clicks)
     if (state.directLiveItem) {
       return state.directLiveItem;
     }
 
+    // 3. Return direct fallback item supplied as parameter
     if (directItemFallback) {
       return directItemFallback;
     }

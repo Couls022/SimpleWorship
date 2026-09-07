@@ -184,13 +184,15 @@ export function initSync(isProjector: boolean = false) {
   initialized = true;
 
   if (isProjector) {
-    // Projector listens for full sync state updates
+    // Projector listens for real-time state updates across all channel message types
     subscribeToBroadcast((payload) => {
-      if (payload.type === 'SYNC_STATE' && payload.data) {
-        syncTelemetry.lastReceivedTime = Date.now();
-        syncTelemetry.messageCount++;
-        
-        const data = payload.data;
+      if (!payload || !payload.data) return;
+      syncTelemetry.lastReceivedTime = Date.now();
+      syncTelemetry.messageCount++;
+
+      const data = payload.data;
+
+      if (payload.type === 'SYNC_STATE') {
         useStore.setState({
           groupStates: data.groupStates || {},
           alert: data.alert || useStore.getState().alert,
@@ -201,9 +203,39 @@ export function initSync(isProjector: boolean = false) {
           ...(data.themesList ? { themesList: data.themesList } : {}),
           ...(data.systemOptions ? { systemOptions: data.systemOptions } : {})
         });
-        
-        window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
+      } else if (payload.type === 'GROUP_STATES_UPDATE') {
+        if (data.groupStates) {
+          useStore.setState({ groupStates: data.groupStates });
+        }
+      } else if (payload.type === 'GO_LIVE') {
+        if (data.groupId && data.state) {
+          const currentGroupStates = useStore.getState().groupStates;
+          useStore.setState({
+            groupStates: {
+              ...currentGroupStates,
+              [data.groupId]: data.state
+            }
+          });
+        }
+      } else if (payload.type === 'SCHEDULE_UPDATE') {
+        if (data.activeSchedule) {
+          useStore.setState({ activeSchedule: data.activeSchedule });
+        }
+      } else if (payload.type === 'SYSTEM_UPDATE' || payload.type === 'SYSTEM_OPTIONS') {
+        if (data.systemOptions) {
+          useStore.setState({ systemOptions: data.systemOptions });
+        }
+      } else if (payload.type === 'ALERT_UPDATE') {
+        if (data.alert) {
+          useStore.setState({ alert: data.alert });
+        }
+      } else if (payload.type === 'ANNOTATION_UPDATE') {
+        if (data.annotationState) {
+          useStore.setState({ annotationState: data.annotationState });
+        }
       }
+
+      window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
     });
     
     // Request initial state via robust sync channel
