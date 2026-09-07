@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, RefreshCw, Plus, Check, ChevronDown, Monitor, Type, Sparkles } from 'lucide-react';
 import { getAvailableSystemFonts, queryNativeSystemFonts, addCustomUserFont, SystemFontEntry } from '../../utils/systemFonts';
 
@@ -33,8 +34,34 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
   const primaryFamily = value.split(',')[0].replace(/['"]/g, '').trim();
 
   const [visibleLimit, setVisibleLimit] = useState(40);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   // Reload font list whenever fonts are updated
+  const updateDropdownPosition = () => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width > 288 ? rect.width : 288,
+        zIndex: 1000000
+      });
+    }
+  };
+
+  useLayoutEffect(() => {
+    updateDropdownPosition();
+    if (isOpen) {
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
+    }
+    return () => {
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+      window.removeEventListener('resize', updateDropdownPosition);
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     const handleUpdate = () => {
       setFontList(getAvailableSystemFonts());
@@ -113,8 +140,12 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
       </button>
 
       {/* Dropdown Menu */}
-      {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 overflow-hidden flex flex-col text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100">
+      {isOpen && typeof document !== 'undefined' && createPortal(
+      <div 
+        className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden flex flex-col text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+        style={dropdownStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
           {/* Search Header & Auto-Detect Button */}
           <div className="p-2 border-b border-slate-800 bg-slate-950 flex flex-col gap-1.5">
             <div className="relative">
@@ -288,7 +319,8 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

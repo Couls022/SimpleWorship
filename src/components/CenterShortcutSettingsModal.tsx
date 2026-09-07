@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -35,7 +36,7 @@ interface CenterShortcutSettingsModalProps {
   onClose: () => void;
 }
 
-export default function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalProps) {
+function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalProps) {
   const store = useStore();
   const { shortcutSettings, updateShortcutSettings, resetShortcutSettings } = store;
 
@@ -176,7 +177,7 @@ export default function CenterShortcutSettingsModal({ onClose }: CenterShortcutS
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 select-none animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 select-none animate-in fade-in duration-150">
       <div className="bg-[#1a1c24] border border-[#323646] rounded-xl shadow-2xl w-[92vw] max-w-4xl h-[85vh] max-h-[720px] flex flex-col overflow-hidden text-gray-200">
         {/* Modal Top Bar */}
         <div className="h-12 bg-[#232732] border-b border-[#2d3242] flex items-center justify-between px-4 shrink-0">
@@ -580,3 +581,5 @@ export default function CenterShortcutSettingsModal({ onClose }: CenterShortcutS
     </div>
   );
 }
+
+export default withPortal(CenterShortcutSettingsModal);

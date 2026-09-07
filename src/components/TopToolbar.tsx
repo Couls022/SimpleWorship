@@ -751,7 +751,7 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={() => { 
-                    toggleLogo(); 
+                    toggleLogo(activeControlGroupId || store.outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
@@ -766,7 +766,7 @@ export default function TopToolbar({
                 </button>
                 <button 
                   onClick={() => { 
-                    toggleBlack(); 
+                    toggleBlack(activeControlGroupId || store.outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
@@ -781,7 +781,7 @@ export default function TopToolbar({
                 </button>
                 <button 
                   onClick={() => { 
-                    toggleClear(); 
+                    toggleClear(activeControlGroupId || store.outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
@@ -797,7 +797,7 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={() => { 
-                    toggleMasterLive(); 
+                    toggleMasterLive(activeControlGroupId || store.outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-bold cursor-pointer"
@@ -1292,7 +1292,7 @@ export default function TopToolbar({
 
           {/* LOGO */}
           <button
-            onClick={toggleLogo}
+            onClick={() => toggleLogo(activeControlGroupId || store.outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.showLogo
                 ? 'bg-blue-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
@@ -1310,7 +1310,7 @@ export default function TopToolbar({
 
           {/* BLACK */}
           <button
-            onClick={toggleBlack}
+            onClick={() => toggleBlack(activeControlGroupId || store.outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isBlack
                 ? 'bg-rose-600/30 text-rose-300 border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
@@ -1328,7 +1328,7 @@ export default function TopToolbar({
 
           {/* CLEAR */}
           <button
-            onClick={toggleClear}
+            onClick={() => toggleClear(activeControlGroupId || store.outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isClear
                 ? 'bg-amber-500/30 text-amber-300 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
@@ -1364,7 +1364,7 @@ export default function TopToolbar({
 
           {/* MASTER LIVE COLOR BARS SWITCH */}
           <button
-            onClick={toggleMasterLive}
+            onClick={() => toggleMasterLive(activeControlGroupId || store.outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isLiveEnabled
                 ? 'bg-gradient-to-b from-blue-700/60 to-blue-900/60 text-blue-200 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.35)]'

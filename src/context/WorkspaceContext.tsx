@@ -5,13 +5,15 @@ import { openDB } from 'idb';
 const STORAGE_KEY = 'simpleworship_workspace_state_v2';
 const PRESETS_STORAGE_KEY = 'simpleworship_workspace_presets_v2';
 
-const dbPromise = openDB('workspace-layout-db', 1, {
-  upgrade(db) {
-    if (!db.objectStoreNames.contains('layout-store')) {
-      db.createObjectStore('layout-store');
-    }
-  },
-});
+const dbPromise = typeof indexedDB !== 'undefined'
+  ? openDB('workspace-layout-db', 1, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('layout-store')) {
+          db.createObjectStore('layout-store');
+        }
+      },
+    })
+  : Promise.resolve(null as any);
 
 export const BUILTIN_PRESETS: WorkspacePreset[] = [
   {
@@ -108,7 +110,7 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
   }
 ];
 
-const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
+export const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
   schedule: {
     id: 'schedule',
     title: 'Schedule',
@@ -119,7 +121,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: true,
     size: 20,
     defaultDockSize: 20,
-    floating: { x: 40, y: 80, width: 340, height: 480, zIndex: 10 }
+    floating: { x: 40, y: 80, width: 340, height: 480, zIndex: 100 }
   },
   preview: {
     id: 'preview',
@@ -131,7 +133,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: true,
     size: 40,
     defaultDockSize: 40,
-    floating: { x: 390, y: 80, width: 440, height: 500, zIndex: 11 }
+    floating: { x: 390, y: 80, width: 440, height: 500, zIndex: 101 }
   },
   live: {
     id: 'live',
@@ -143,7 +145,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: true,
     size: 40,
     defaultDockSize: 40,
-    floating: { x: 480, y: 100, width: 520, height: 540, zIndex: 12 }
+    floating: { x: 480, y: 100, width: 520, height: 540, zIndex: 102 }
   },
   multiGroup: {
     id: 'multiGroup',
@@ -155,7 +157,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: false,
     size: 35,
     defaultDockSize: 0,
-    floating: { x: 100, y: 220, width: 620, height: 260, zIndex: 13 }
+    floating: { x: 100, y: 220, width: 620, height: 260, zIndex: 103 }
   },
   resources: {
     id: 'resources',
@@ -167,7 +169,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: false,
     size: 0,
     defaultDockSize: 0,
-    floating: { x: 60, y: 120, width: 780, height: 460, zIndex: 14 }
+    floating: { x: 60, y: 120, width: 780, height: 460, zIndex: 104 }
   },
   stageMonitor: {
     id: 'stageMonitor',
@@ -179,7 +181,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: false,
     size: 30,
     defaultDockSize: 30,
-    floating: { x: 260, y: 140, width: 480, height: 320, zIndex: 15 }
+    floating: { x: 260, y: 140, width: 480, height: 320, zIndex: 105 }
   },
   quickNotes: {
     id: 'quickNotes',
@@ -191,7 +193,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: false,
     size: 20,
     defaultDockSize: 20,
-    floating: { x: 200, y: 160, width: 380, height: 300, zIndex: 16 }
+    floating: { x: 200, y: 160, width: 380, height: 300, zIndex: 106 }
   },
   mediaLibrary: {
     id: 'mediaLibrary',
@@ -203,7 +205,7 @@ const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
     isDocked: false,
     size: 20,
     defaultDockSize: 20,
-    floating: { x: 300, y: 100, width: 450, height: 400, zIndex: 17 }
+    floating: { x: 300, y: 100, width: 450, height: 400, zIndex: 107 }
   }
 };
 
@@ -288,10 +290,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 isCollapsed: isCollapsed,
                 collapsed: isCollapsed,
                 size: size,
-                floating: {
-                  ...mergedPanels[key].floating,
-                  ...(raw.floating || {})
-                }
+                floating: { ...mergedPanels[key].floating, ...(raw.floating || {}), zIndex: (typeof raw.floating?.zIndex === 'number' && raw.floating.zIndex >= 100) ? raw.floating.zIndex : (mergedPanels[key].floating.zIndex || 100) }
               };
             }
           }
@@ -322,7 +321,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
 
   const [layoutKey, setLayoutKey] = useState(Date.now());
-  const [highestZIndex, setHighestZIndex] = useState(20);
+  const [highestZIndex, setHighestZIndex] = useState(120);
 
   const [isIdbLoaded, setIsIdbLoaded] = useState(false);
 
@@ -347,10 +346,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               isCollapsed: isCollapsed,
               collapsed: isCollapsed,
               size: size,
-              floating: {
-                ...mergedPanels[key].floating,
-                ...(raw.floating || {})
-              }
+              floating: { ...mergedPanels[key].floating, ...(raw.floating || {}), zIndex: (typeof raw.floating?.zIndex === 'number' && raw.floating.zIndex >= 100) ? raw.floating.zIndex : (mergedPanels[key].floating.zIndex || 100) }
             };
           }
         }
@@ -410,7 +406,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       isDocked: true,
       size: 30,
       defaultDockSize: 30,
-      floating: { x: 50, y: 50, width: 400, height: 400, zIndex: 10 }
+      floating: { x: 50, y: 50, width: 400, height: 400, zIndex: 100 }
     };
   }, [layoutState.panels]);
 

@@ -93,13 +93,13 @@ function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {
       store.goPrevScheduleItem();
       break;
     case 'toggle_black':
-      store.toggleBlack();
+      store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "");
       break;
     case 'toggle_clear':
-      store.toggleClear();
+      store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "");
       break;
     case 'toggle_logo':
-      store.toggleLogo();
+      store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "");
       break;
     case 'go_live':
       store.goLive();
@@ -110,11 +110,11 @@ function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {
           active: cmd.params.active ?? cmd.params.enabled ?? true,
           message: cmd.params.message || cmd.params.text || '',
           position: cmd.params.position || 'bottom'
-        });
+        }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
       }
       break;
     case 'clear_alert':
-      store.setAlert({ active: false, message: '' });
+      store.setAlert({ active: false, message: '' }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
       break;
     default:
       console.log('[Sync] Unknown remote command:', cmd.action);

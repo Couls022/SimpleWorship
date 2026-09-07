@@ -111,8 +111,11 @@ export default function MonitorPreviewCanvas({
     songsList, 
     themesList, 
     alert, 
+    groupAlerts,
     systemOptions 
   } = store;
+
+  const currentAlert = (groupId && groupAlerts?.[groupId]) || { active: false, showNursery: false, message: '', nurseryText: '' };
 
   const group = customGroup || outputGroups.find(g => g.id === groupId) || outputGroups[0];
   const presentationState = customState || groupStates[groupId] || ({
@@ -848,6 +851,9 @@ export default function MonitorPreviewCanvas({
                   const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
                     text: currentSlide.text,
                     baseFontSize: baseSize,
+                    fontFamily: resolvedStyles.fontFamily,
+                    fontWeight: resolvedStyles.fontWeight,
+                    fontStyle: resolvedStyles.fontStyle,
                     hasHeader: Boolean(currentSlide.title && (
                       (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
                       (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')
@@ -1028,21 +1034,21 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Marquee Alert Banner */}
-          {alert.active && !presentationState.isBlack && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || alert.targetGroupIds.includes(groupId)) && (
+          {currentAlert.active && !presentationState.isBlack && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || currentAlert.targetGroupIds.includes(groupId)) && (
             <div 
               className="absolute left-0 right-0 z-40 py-4 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
               style={{
-                bottom: alert.position === 'bottom' ? 0 : 'auto',
-                top: alert.position === 'top' ? 0 : 'auto',
-                backgroundColor: alert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
-                color: alert.textColor || '#FACC15',
+                bottom: currentAlert.position === 'bottom' ? 0 : 'auto',
+                top: currentAlert.position === 'top' ? 0 : 'auto',
+                backgroundColor: currentAlert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
+                color: currentAlert.textColor || '#FACC15',
               }}
             >
               <div className="text-2xl font-bold whitespace-nowrap flex items-center gap-4">
                 <span className="px-3 py-1 rounded bg-amber-500 text-black text-base font-black uppercase tracking-wider">
                   ALERT
                 </span>
-                <span>{alert.message}</span>
+                <span>{currentAlert.message}</span>
               </div>
             </div>
           )}
@@ -1065,7 +1071,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Nursery Alert Badge Overlay */}
-          {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !presentationState.isBlack && (
+          {currentAlert.showNursery && (currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !presentationState.isBlack && (
             <div 
               className={`absolute z-40 px-3 py-1.5 rounded-lg shadow-xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
                 systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-4 left-4' :
@@ -1080,7 +1086,7 @@ export default function MonitorPreviewCanvas({
               }}
             >
               <span className="text-[10px] uppercase tracking-wider bg-black/40 px-1.5 py-0.5 rounded text-white font-mono">NURSERY</span>
-              <span>{alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
+              <span>{currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
             </div>
           )}
 

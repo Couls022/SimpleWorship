@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useRef } from 'react';
 import { X, Printer, FileText, Calendar, Clock, Download, Check } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -7,7 +8,7 @@ interface PrintScheduleModalProps {
   onClose: () => void;
 }
 
-export default function PrintScheduleModal({ onClose }: PrintScheduleModalProps) {
+function PrintScheduleModal({ onClose }: PrintScheduleModalProps) {
   const store = useStore();
   const schedule = store.activeSchedule;
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -155,3 +156,5 @@ export default function PrintScheduleModal({ onClose }: PrintScheduleModalProps)
     </div>
   );
 }
+
+export default withPortal(PrintScheduleModal);

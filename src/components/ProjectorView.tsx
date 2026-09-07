@@ -32,7 +32,7 @@ interface ProjectorViewProps {
 
 export default function ProjectorView({ groupId: initialGroupId, displayId }: ProjectorViewProps) {
   const store = useStore();
-  const { groupStates, activeSchedule, songsList, themesList, outputGroups, alert, loadAllData, systemOptions, activeControlGroupId } = store;
+  const { groupStates, activeSchedule, songsList, themesList, outputGroups, alert, groupAlerts, loadAllData, systemOptions, activeControlGroupId } = store;
   const [routedGroupId, setRoutedGroupId] = React.useState<string>(initialGroupId);
   
   const { screens } = useScreens();
@@ -142,11 +142,11 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
   // Resolves the ordered array of live groups targeting this physical display
   const orderedLiveGroupIds = React.useMemo(() => {
-    if (!displayId || outputGroups.length === 0) return [routedGroupId || initialGroupId];
+    if (!displayId || outputGroups.length === 0) return [];
     const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
     const match = assignments.get(displayId);
     if (!match || match.liveGroupIds.length === 0) {
-      return [routedGroupId || initialGroupId];
+      return [];
     }
     
     // Stacking Priority: Sort so that the activeControlGroupId (the active panel being operated) is ALWAYS last
@@ -157,11 +157,11 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       return [...filtered, activeControlGroupId];
     }
     return list;
-  }, [displayId, outputGroups, groupStates, activeControlGroupId, routedGroupId, initialGroupId]);
+  }, [displayId, outputGroups, groupStates, activeControlGroupId]);
 
   // Global blackout state (active if the winning target group is black)
   const isBlackoutActive = React.useMemo(() => {
-    if (orderedLiveGroupIds.length === 0) return true;
+    if (orderedLiveGroupIds.length === 0) return false;
     const winningGroupId = orderedLiveGroupIds[orderedLiveGroupIds.length - 1];
     const winState = groupStates[winningGroupId];
     if (winState && winState.isBlack) {
@@ -172,6 +172,8 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
   const baseGroupObj = outputGroups.find(g => g.id === orderedLiveGroupIds[0]) || outputGroups[0];
   const winningGroup = outputGroups.find(g => g.id === orderedLiveGroupIds[orderedLiveGroupIds.length - 1]) || outputGroups[0];
+
+  const currentAlert = (winningGroup && groupAlerts?.[winningGroup.id]) || { active: false, showNursery: false, message: '', nurseryText: '' };
 
   // 1. Get current target resolution and aspect ratio configured on the active output route
   const groupRes = React.useMemo(() => {
@@ -271,7 +273,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         })}
 
         {/* 2. Slide Annotation Layer */}
-        {!isBlackoutActive && (
+        {!isBlackoutActive && orderedLiveGroupIds.length > 0 && (
           <SlideAnnotationLayer 
             groupId={winningGroup?.id}
             interactive={false} 
@@ -280,27 +282,27 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         )}
 
         {/* 3. Marquee Alert Banner Overlay */}
-        {alert.active && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
+        {orderedLiveGroupIds.length > 0 && currentAlert.active && !isBlackoutActive && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || (winningGroup?.id && currentAlert.targetGroupIds.includes(winningGroup.id))) && (
           <div 
             className="absolute left-0 right-0 z-40 py-3 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
             style={{
-              bottom: alert.position === 'bottom' ? 0 : 'auto',
-              top: alert.position === 'top' ? 0 : 'auto',
-              backgroundColor: alert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
-              color: alert.textColor || '#FACC15',
+              bottom: currentAlert.position === 'bottom' ? 0 : 'auto',
+              top: currentAlert.position === 'top' ? 0 : 'auto',
+              backgroundColor: currentAlert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
+              color: currentAlert.textColor || '#FACC15',
             }}
           >
             <div className="text-lg md:text-xl font-bold whitespace-nowrap animate-marquee flex items-center gap-3">
               <span className="px-2.5 py-0.5 rounded bg-amber-500 text-black text-sm font-black uppercase tracking-wider">
                 ALERT
               </span>
-              <span>{alert.message}</span>
+              <span>{currentAlert.message}</span>
             </div>
           </div>
         )}
 
         {/* 4. Nursery Alert Badge Overlay */}
-        {alert.showNursery && (alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!alert.targetGroupIds || alert.targetGroupIds.length === 0 || (winningGroup?.id && alert.targetGroupIds.includes(winningGroup.id))) && (
+        {orderedLiveGroupIds.length > 0 && currentAlert.showNursery && (currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !isBlackoutActive && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || (winningGroup?.id && currentAlert.targetGroupIds.includes(winningGroup.id))) && (
           <div 
             className={`absolute z-40 px-4 py-2 rounded-lg shadow-2xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
               systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-6 left-6' :
@@ -315,7 +317,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
             }}
           >
             <span className="text-xs uppercase tracking-wider bg-black/40 px-2 py-0.5 rounded text-white font-mono">NURSERY</span>
-            <span>{alert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
+            <span>{currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode}</span>
           </div>
         )}
 
@@ -1011,6 +1013,9 @@ function ProjectorLayer({
                 const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
                   text: currentSlide.text,
                   baseFontSize: baseSize,
+                  fontFamily: resolvedStyles.fontFamily,
+                  fontWeight: resolvedStyles.fontWeight,
+                  fontStyle: resolvedStyles.fontStyle,
                   hasHeader: Boolean(currentSlide.title && (
                     (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
                     (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')

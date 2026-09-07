@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState } from 'react';
 import { X, Bell, Play, Power, AlertTriangle, Check } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -6,9 +7,11 @@ interface AlertModalProps {
   onClose: () => void;
 }
 
-export default function AlertModal({ onClose }: AlertModalProps) {
+function AlertModal({ onClose }: AlertModalProps) {
   const store = useStore();
-  const { alert, setAlert } = store;
+  const { alert: globalAlert, groupAlerts, setAlert, activeControlGroupId } = store;
+  
+  const alert = (activeControlGroupId && groupAlerts[activeControlGroupId]) || globalAlert;
 
   const [message, setMessage] = useState(alert.message);
   const [position, setPosition] = useState(alert.position);
@@ -30,7 +33,7 @@ export default function AlertModal({ onClose }: AlertModalProps) {
       position,
       backgroundColor: bgColor,
       textColor
-    });
+    }, activeControlGroupId || undefined);
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -41,7 +44,7 @@ export default function AlertModal({ onClose }: AlertModalProps) {
       backgroundColor: bgColor,
       textColor,
       active: true
-    });
+    }, activeControlGroupId || undefined);
     onClose();
   };
 
@@ -187,3 +190,5 @@ export default function AlertModal({ onClose }: AlertModalProps) {
     </div>
   );
 }
+
+export default withPortal(AlertModal);

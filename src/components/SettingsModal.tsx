@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect } from 'react';
 import { X, Monitor, Plus, Trash2, ExternalLink, Settings, Check, Search } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -8,7 +9,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
+function SettingsModal({ onClose }: SettingsModalProps) {
   const store = useStore();
   const { outputGroups, addOutputGroup, removeOutputGroup, updateOutputGroup, themesList, systemOptions, updateSystemOptions } = store;
 
@@ -83,7 +84,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div className="bg-[#1c1f26] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 text-xs">
         {/* Header */}
         <div className="px-4 py-3 bg-[#242833] border-b border-[#181a20] flex items-center justify-between">
@@ -410,3 +411,5 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     </div>
   );
 }
+
+export default withPortal(SettingsModal);

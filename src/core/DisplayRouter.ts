@@ -24,21 +24,36 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
     
     // Support matching display names like "Monitor 2" vs "disp-2" or "display-2"
     if (raw.replace(/\s+/g, '') === target.replace(/\s+/g, '')) return true;
-    if (raw.includes(target) || target.includes(raw)) return true;
     
-    // STRICT index/positional matching to avoid large-id coincidences
-    // Only apply includes matching if the string actually names a display specifically
-    const isTargetPrimary = target.includes('primary') || target.includes('monitor-1') || target === 'monitor 1' || target.includes('display-1') || target.includes('display 1');
-    const isTarget2 = target.includes('monitor-2') || target === 'monitor 2' || target.includes('secondary') || target.includes('alternate') || target.includes('display-2') || target.includes('display 2') || target.includes('display 2 (');
-    const isTarget3 = target.includes('monitor-3') || target === 'monitor 3' || target.includes('foldback') || target.includes('stage') || target.includes('tertiary') || target.includes('display-3') || target.includes('display 3');
+    // Strict boundary-aware exact matching
+    // Extract numbers from both strings and compare if they both have numbers
+    const targetMatch = target.match(/\d+/);
+    const rawMatch = raw.match(/\d+/);
+    
+    if (targetMatch && rawMatch) {
+      if (targetMatch[0] === rawMatch[0]) {
+         const isTargetPrimary = target.includes('primary') || target.includes('monitor-1') || target === 'monitor 1' || target.includes('display-1') || target.includes('display 1');
+         const isRawPrimary = raw.includes('primary') || raw.includes('monitor-1') || raw === 'monitor 1' || raw.includes('display-1') || raw.includes('display 1');
+         if (isTargetPrimary && isRawPrimary) return true;
+         
+         if (raw.includes('monitor') && target.includes('monitor') || raw.includes('display') && target.includes('display')) {
+             return true;
+         }
+      }
+    }
+    
+    // Lexical matching for known primary/secondary identifiers
+    const isTargetPrimaryFallback = target.includes('primary');
+    const isTarget2Fallback = target.includes('secondary') || target.includes('alternate');
+    const isTarget3Fallback = target.includes('foldback') || target.includes('stage') || target.includes('tertiary');
 
-    const isRawPrimary = raw.includes('primary') || raw.includes('monitor-1') || raw === 'monitor 1' || raw.includes('display-1') || raw.includes('display 1');
-    const isRaw2 = raw.includes('monitor-2') || raw === 'monitor 2' || raw.includes('secondary') || raw.includes('alternate') || raw.includes('display-2') || raw.includes('display 2') || raw.includes('display 2 (');
-    const isRaw3 = raw.includes('monitor-3') || raw === 'monitor 3' || raw.includes('foldback') || raw.includes('stage') || raw.includes('tertiary') || raw.includes('display-3') || raw.includes('display 3');
+    const isRawPrimaryFallback = raw.includes('primary');
+    const isRaw2Fallback = raw.includes('secondary') || raw.includes('alternate');
+    const isRaw3Fallback = raw.includes('foldback') || raw.includes('stage') || raw.includes('tertiary');
 
-    if (isTargetPrimary && isRawPrimary) return true;
-    if (isTarget2 && isRaw2) return true;
-    if (isTarget3 && isRaw3) return true;
+    if (isTargetPrimaryFallback && isRawPrimaryFallback) return true;
+    if (isTarget2Fallback && isRaw2Fallback) return true;
+    if (isTarget3Fallback && isRaw3Fallback) return true;
 
     return false;
   });

@@ -192,15 +192,16 @@ interface AppState {
   goLivePrev: () => void;
   goNextScheduleItem: () => void;
   goPrevScheduleItem: () => void;
-  toggleBlack: () => void;
-  toggleClear: () => void;
-  toggleLogo: () => void;
+  toggleBlack: (groupId: string) => void;
+  toggleClear: (groupId: string) => void;
+  toggleLogo: (groupId: string) => void;
   isMasterLive?: boolean; // Deprecated, keep for backwards compatibility if needed, but we don't need it.
-  toggleMasterLive: () => void;
+  toggleMasterLive: (groupId: string) => void;
 
   // Alert / Nursery Ticker
   alert: AlertState;
-  setAlert: (alert: Partial<AlertState>) => void;
+  setAlert: (alert: Partial<AlertState>, groupId: string) => void;
+  groupAlerts: Record<string, AlertState>;
 
   // Slide Annotation State
   annotationState: SlideAnnotationState;
@@ -1164,16 +1165,12 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   
-  toggleBlack: () => {
-    const { activeControlGroupId, outputGroups, groupStates } = get();
-    const targetId = activeControlGroupId || outputGroups[0]?.id;
-    if (!targetId) return;
-    const currentState = groupStates[targetId] || defaultState;
+  toggleBlack: (groupId: string) => {
+    if (!groupId) return;
+    const { groupStates } = get();
+    const currentState = groupStates[groupId] || defaultState;
     const nextBlack = !currentState.isBlack;
-    const targetGroups = activeControlGroupId ? [activeControlGroupId] : outputGroups.map(g => g.id);
-    targetGroups.forEach(gId => {
-      get().setGroupState(gId, { isBlack: nextBlack, showLogo: false });
-    });
+    get().setGroupState(groupId, { isBlack: nextBlack, showLogo: false });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextBlack ? 'Blackout Enabled on Live Output (F6 / B)' : 'Blackout Disabled' 
@@ -1181,16 +1178,12 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
   
-  toggleClear: () => {
-    const { activeControlGroupId, outputGroups, groupStates } = get();
-    const targetId = activeControlGroupId || outputGroups[0]?.id;
-    if (!targetId) return;
-    const currentState = groupStates[targetId] || defaultState;
+  toggleClear: (groupId: string) => {
+    if (!groupId) return;
+    const { groupStates } = get();
+    const currentState = groupStates[groupId] || defaultState;
     const nextClear = !currentState.isClear;
-    const targetGroups = activeControlGroupId ? [activeControlGroupId] : outputGroups.map(g => g.id);
-    targetGroups.forEach(gId => {
-      get().setGroupState(gId, { isClear: nextClear });
-    });
+    get().setGroupState(groupId, { isClear: nextClear });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextClear ? 'Clear Text Enabled on Live Output (F7 / C)' : 'Text Restored on Live Output' 
@@ -1198,16 +1191,12 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
 
-  toggleLogo: () => {
-    const { activeControlGroupId, outputGroups, groupStates } = get();
-    const targetId = activeControlGroupId || outputGroups[0]?.id;
-    if (!targetId) return;
-    const currentState = groupStates[targetId] || defaultState;
+  toggleLogo: (groupId: string) => {
+    if (!groupId) return;
+    const { groupStates } = get();
+    const currentState = groupStates[groupId] || defaultState;
     const nextLogo = !currentState.showLogo;
-    const targetGroups = activeControlGroupId ? [activeControlGroupId] : outputGroups.map(g => g.id);
-    targetGroups.forEach(gId => {
-      get().setGroupState(gId, { showLogo: nextLogo, isBlack: false });
-    });
+    get().setGroupState(groupId, { showLogo: nextLogo, isBlack: false });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextLogo ? 'Logo Display Enabled on Live Output (F8 / L)' : 'Logo Display Disabled' 
@@ -1215,22 +1204,17 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
 
-  toggleMasterLive: () => {
-    const { activeControlGroupId, outputGroups, groupStates } = get();
-    const targetId = activeControlGroupId || outputGroups[0]?.id;
-    if (!targetId) return;
-    const currentState = groupStates[targetId] || defaultState;
+  toggleMasterLive: (groupId: string) => {
+    if (!groupId) return;
+    const { groupStates, outputGroups, activeControlGroupId } = get();
+    const currentState = groupStates[groupId] || defaultState;
     const nextLive = !currentState.isLiveEnabled;
-    const targetGroups = [targetId];
     const updatedStates = { ...groupStates };
-    targetGroups.forEach(gId => {
-      const currentG = updatedStates[gId] || defaultState;
-      updatedStates[gId] = {
-        ...currentG,
-        isLiveEnabled: nextLive,
-        timestamp: Date.now(),
-      };
-    });
+    updatedStates[groupId] = {
+      ...currentState,
+      isLiveEnabled: nextLive,
+      timestamp: Date.now(),
+    };
 
     set({ groupStates: updatedStates });
 
@@ -1265,7 +1249,23 @@ export const useStore = create<AppState>((set, get) => ({
     textColor: '#FACC15',
     speed: 15,
   },
-  setAlert: (alertUpdate) => set((state) => ({ alert: { ...state.alert, ...alertUpdate } })),
+  groupAlerts: {},
+  setAlert: (alertUpdate: Partial<AlertState>, groupId: string) => set((state) => {
+    if (!groupId) return state;
+    const currentAlert = state.groupAlerts[groupId] || { active: false, showNursery: false, message: '', nurseryText: '' };
+    const nextAlert = { ...currentAlert, ...alertUpdate } as AlertState;
+    
+    const newGroupAlerts = { ...state.groupAlerts, [groupId]: nextAlert };
+    
+    broadcastStateChange({
+      type: 'ALERT_UPDATE',
+      data: { alert: state.alert, groupAlerts: newGroupAlerts }
+    });
+
+    return { 
+      groupAlerts: newGroupAlerts
+    };
+  }),
 
   // Slide Annotation State & Methods
   annotationState: defaultAnnotationState,

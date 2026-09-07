@@ -1191,7 +1191,7 @@ export function PresentationEditorModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col select-none overflow-hidden"
+      className="fixed inset-0 z-[99999] bg-slate-950/90 backdrop-blur-md flex flex-col select-none overflow-hidden"
       onMouseMove={handleContainerMouseMove}
       onMouseUp={handleContainerMouseUp}
     >

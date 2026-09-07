@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Plus, Play, Music, Tv } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -8,7 +9,7 @@ interface QuickSongSearchModalProps {
   onClose: () => void;
 }
 
-export default function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
+function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
   const store = useStore();
   const { songsList, addScheduleItem } = store;
   const [search, setSearch] = useState('');
@@ -204,3 +205,5 @@ export default function QuickSongSearchModal({ onClose }: QuickSongSearchModalPr
     </div>
   );
 }
+
+export default withPortal(QuickSongSearchModal);

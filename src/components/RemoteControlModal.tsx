@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState } from 'react';
 import { X, Radio, Smartphone, QrCode, Copy, Check, Shield, RefreshCw, Play, EyeOff, Tv, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -6,7 +7,7 @@ interface RemoteControlModalProps {
   onClose: () => void;
 }
 
-export default function RemoteControlModal({ onClose }: RemoteControlModalProps) {
+function RemoteControlModal({ onClose }: RemoteControlModalProps) {
   const store = useStore();
   const [pin, setPin] = useState('8492');
   const [copied, setCopied] = useState(false);
@@ -200,21 +201,21 @@ export default function RemoteControlModal({ onClose }: RemoteControlModalProps)
 
               <div className="grid grid-cols-3 gap-1.5">
                 <button
-                  onClick={() => store.toggleBlack()}
+                  onClick={() => store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "")}
                   className="py-2 bg-[#2d1b22] hover:bg-rose-900 text-rose-300 rounded-lg text-[10px] font-bold border border-rose-800/40 active:scale-95 transition-all flex flex-col items-center"
                 >
                   <EyeOff size={12} className="mb-0.5" />
                   BLACK
                 </button>
                 <button
-                  onClick={() => store.toggleClear()}
+                  onClick={() => store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "")}
                   className="py-2 bg-[#1b2533] hover:bg-cyan-900 text-cyan-300 rounded-lg text-[10px] font-bold border border-cyan-800/40 active:scale-95 transition-all flex flex-col items-center"
                 >
                   <Radio size={12} className="mb-0.5" />
                   CLEAR
                 </button>
                 <button
-                  onClick={() => store.toggleLogo()}
+                  onClick={() => store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "")}
                   className="py-2 bg-[#292215] hover:bg-amber-900 text-amber-300 rounded-lg text-[10px] font-bold border border-amber-800/40 active:scale-95 transition-all flex flex-col items-center"
                 >
                   <Tv size={12} className="mb-0.5" />
@@ -244,3 +245,5 @@ export default function RemoteControlModal({ onClose }: RemoteControlModalProps)
     </div>
   );
 }
+
+export default withPortal(RemoteControlModal);

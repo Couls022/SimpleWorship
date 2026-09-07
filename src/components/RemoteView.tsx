@@ -159,7 +159,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
       active: true,
       message: alertText.trim(),
       position: 'bottom'
-    });
+    }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
     setAlertText('');
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
@@ -349,7 +349,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
             {/* OVERRIDES BUTTON GRID */}
             <div className="grid grid-cols-3 gap-2 shrink-0">
               <button
-                onClick={() => store.toggleBlack()}
+                onClick={() => store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "")}
                 className={`py-3.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 active:scale-95 ${
                   groupState?.isBlack 
                     ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-600/20' 
@@ -360,7 +360,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 <span>BLACK</span>
               </button>
               <button
-                onClick={() => store.toggleClear()}
+                onClick={() => store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "")}
                 className={`py-3.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 active:scale-95 ${
                   groupState?.isClear 
                     ? 'bg-cyan-600 border-cyan-500 text-white shadow-lg shadow-cyan-600/20' 
@@ -371,7 +371,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 <span>CLEAR</span>
               </button>
               <button
-                onClick={() => store.toggleLogo()}
+                onClick={() => store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "")}
                 className={`py-3.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 active:scale-95 ${
                   groupState?.showLogo 
                     ? 'bg-amber-600 border-amber-500 text-white shadow-lg shadow-amber-600/20' 

@@ -1,4 +1,9 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
 import { 
   X, 
   Minus, 
@@ -44,7 +49,69 @@ interface SongEditorModalProps {
   onSaveScheduleItem?: (updatedFields: Partial<PresentationItem>, updateMasterToo?: boolean) => void;
 }
 
-export default function SongEditorModal({ 
+
+interface SortableSlideItemProps {
+  slide: { label: string; text: string };
+  idx: number;
+  activeSlideIndex: number;
+  setActiveSlideIndex: (idx: number) => void;
+  id: string;
+}
+
+function SortableSlideItem({ slide, idx, activeSlideIndex, setActiveSlideIndex, id }: SortableSlideItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.8 : 1,
+  };
+
+  return (
+    
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={() => setActiveSlideIndex(idx)}
+      className={`p-2.5 rounded cursor-pointer transition-all border ${
+        activeSlideIndex === idx
+          ? 'bg-[#293245] border-cyan-400 shadow-md ring-1 ring-cyan-400'
+          : 'bg-[#141519] border-[#292c36] hover:bg-[#1e222b]'
+      }`}
+    >
+      <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+        <span className={`px-1.5 py-0.5 rounded ${
+          (() => {
+            const t = slide.label.toLowerCase();
+            if (t.includes('chorus') || t.includes('koro') || t.includes('refrain')) return 'bg-emerald-900/50 text-emerald-300 border border-emerald-700/50';
+            if (t.includes('bridge') || t.includes('tulay')) return 'bg-purple-900/50 text-purple-300 border border-purple-700/50';
+            if (t.includes('pre-chorus')) return 'bg-amber-900/50 text-amber-300 border border-amber-700/50';
+            if (t.includes('tag') || t.includes('ending') || t.includes('coda')) return 'bg-rose-900/50 text-rose-300 border border-rose-700/50';
+            if (t.includes('verse') || t.includes('talatâ') || t.match(/^v\d+$/)) return 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50';
+            return 'bg-[#293245] text-cyan-300 border border-cyan-700/50';
+          })()
+        }`}>{slide.label}</span>
+        <span className="text-gray-500 text-[10px] font-mono">#{idx + 1}</span>
+      </div>
+      <p className="text-[11px] text-gray-200 line-clamp-3 font-serif leading-tight">
+        {slide.text}
+      </p>
+    </div>
+    
+  );
+}
+
+function SongEditorModal({ 
   mode = 'library',
   song, 
   scheduleItem,
@@ -145,23 +212,23 @@ export default function SongEditorModal({
 
   // Formatting & Theme overrides
   const initialTheme = scheduleItem?.themeOverride || song?.themeOverride || matchedMasterSong?.themeOverride;
-  const [fontFamily, setFontFamily] = useState(initialTheme?.fontFamily || 'Montserrat, sans-serif');
-  const [fontSize, setFontSize] = useState<number>(initialTheme?.fontSize || 42);
-  const [fontColor, setFontColor] = useState(initialTheme?.fontColor || '#FFFFFF');
-  const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right' | 'justify'>(initialTheme?.textAlign || 'center');
-  const [alignVertical, setAlignVertical] = useState<'top' | 'middle' | 'bottom'>(initialTheme?.alignVertical || 'middle');
-  const [boxStyle, setBoxStyle] = useState<'none' | 'glass' | 'solid' | 'light-glass' | 'border'>(initialTheme?.boxStyle || 'none');
-  const [widthPercent, setWidthPercent] = useState<number>(initialTheme?.widthPercent || 88);
+  const [fontFamily, setFontFamily] = useState<string | undefined>(initialTheme?.fontFamily);
+  const [fontSize, setFontSize] = useState<number | undefined>(initialTheme?.fontSize);
+  const [fontColor, setFontColor] = useState<string | undefined>(initialTheme?.fontColor);
+  const [textAlign, setTextAlign] = useState<'left' | 'center' | 'right' | 'justify' | undefined>(initialTheme?.textAlign);
+  const [alignVertical, setAlignVertical] = useState<'top' | 'middle' | 'bottom' | undefined>(initialTheme?.alignVertical);
+  const [boxStyle, setBoxStyle] = useState<'none' | 'glass' | 'solid' | 'light-glass' | 'border' | undefined>(initialTheme?.boxStyle);
+  const [widthPercent, setWidthPercent] = useState<number | undefined>(initialTheme?.widthPercent);
   const [positionX, setPositionX] = useState<number | undefined>(initialTheme?.positionX);
   const [positionY, setPositionY] = useState<number | undefined>(initialTheme?.positionY);
-  const [layoutPreset, setLayoutPreset] = useState<'center' | 'lower-third' | 'glass-card' | 'top-header' | 'split-two-column' | 'editorial' | 'border'>(initialTheme?.layoutPreset || 'center');
+  const [layoutPreset, setLayoutPreset] = useState<'center' | 'lower-third' | 'glass-card' | 'top-header' | 'split-two-column' | 'editorial' | 'border' | undefined>(initialTheme?.layoutPreset);
   
-  const [hasOutline, setHasOutline] = useState(initialTheme?.textOutline ?? true);
-  const [outlineColor, setOutlineColor] = useState(initialTheme?.outlineColor || '#000000');
-  const [hasShadow, setHasShadow] = useState(initialTheme?.textShadow ?? true);
-  const [shadowColor, setShadowColor] = useState(initialTheme?.shadowColor || 'rgba(0,0,0,0.85)');
-  const [lineHeight, setLineHeight] = useState<number>(initialTheme?.lineHeight || 1.35);
-  const [textTransform, setTextTransform] = useState<'none' | 'uppercase' | 'lowercase' | 'capitalize'>(initialTheme?.textTransform || 'none');
+  const [hasOutline, setHasOutline] = useState<boolean | undefined>(initialTheme?.textOutline);
+  const [outlineColor, setOutlineColor] = useState<string | undefined>(initialTheme?.outlineColor);
+  const [hasShadow, setHasShadow] = useState<boolean | undefined>(initialTheme?.textShadow);
+  const [shadowColor, setShadowColor] = useState<string | undefined>(initialTheme?.shadowColor);
+  const [lineHeight, setLineHeight] = useState<number | undefined>(initialTheme?.lineHeight);
+  const [textTransform, setTextTransform] = useState<'none' | 'uppercase' | 'lowercase' | 'capitalize' | undefined>(initialTheme?.textTransform);
 
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '4:3'>('16:9');
   const [transitionType, setTransitionType] = useState('Blend');
@@ -258,7 +325,8 @@ export default function SongEditorModal({
       window.addEventListener('touchend', handleMouseUp);
     }
 
-    return () => {
+    return (
+    ) => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('touchmove', handleMouseMove);
@@ -276,6 +344,7 @@ export default function SongEditorModal({
     defaultTypeBg ||
     assetsList[0]?.url ||
     ''
+    
   );
 
   // Selected Slide Index
@@ -392,14 +461,16 @@ export default function SongEditorModal({
     const newLyrics = rawLyrics.replace(
       activeSlide.text,
       `${chunk1}\n\n[${activeSlide.label} Part 2]\n${chunk2}`
-    );
+      
+  );
 
     setRawLyrics(newLyrics);
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: 'Passage auto-split into balanced slides!' 
       })
-    );
+      
+  );
   };
 
   // Apply layout preset shortcuts
@@ -449,7 +520,7 @@ export default function SongEditorModal({
       text: s.text
     }));
 
-    const themeOverride: ThemeStyles = {
+        const rawThemeOverride: ThemeStyles = {
       fontFamily,
       fontSize,
       fontColor,
@@ -468,6 +539,10 @@ export default function SongEditorModal({
       textTransform,
       backgroundImageUrl: backgroundUrl
     };
+
+    const themeOverride = Object.fromEntries(
+      Object.entries(rawThemeOverride).filter(([_, v]) => v !== undefined)
+    ) as ThemeStyles;
 
     // Mode 1: SCHEDULE ITEM EDIT
     if (mode === 'schedule-item' && scheduleItem) {
@@ -512,7 +587,8 @@ export default function SongEditorModal({
         new CustomEvent('simpleworship:notify', { 
           detail: `Schedule item "${title.trim()}" updated successfully!` 
         })
-      );
+        
+  );
 
       if (andClose) onClose();
       return;
@@ -559,37 +635,88 @@ export default function SongEditorModal({
       new CustomEvent('simpleworship:notify', { 
         detail: `Saved "${updatedSong.title}" to library!` 
       })
-    );
+      
+  );
 
     if (andClose) {
       onClose();
     }
   };
 
+    const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+    
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (active && over && active.id !== over.id) {
+      const oldIndex = parsedSlides.findIndex((_, i) => `slide-${i}` === active.id);
+      const newIndex = parsedSlides.findIndex((_, i) => `slide-${i}` === over.id);
+      
+      const newSlides = arrayMove(parsedSlides, oldIndex, newIndex);
+      
+      const newLyrics = newSlides.map(s => `[${s.label}]\n${s.text}`).join('\n\n');
+      setRawLyrics(newLyrics);
+      
+      if (activeSlideIndex === oldIndex) {
+         setActiveSlideIndex(newIndex);
+      } else if (activeSlideIndex > oldIndex && activeSlideIndex <= newIndex) {
+         setActiveSlideIndex(activeSlideIndex - 1);
+      } else if (activeSlideIndex < oldIndex && activeSlideIndex >= newIndex) {
+         setActiveSlideIndex(activeSlideIndex + 1);
+      }
+    }
+  };
+
   const activeSlide = parsedSlides[activeSlideIndex] || parsedSlides[0];
 
   // Active theme styles object for preview canvas
-  const previewThemeStyles: ThemeStyles = {
-    fontFamily,
-    fontSize,
-    fontColor,
-    textAlign,
-    alignVertical,
-    boxStyle,
-    widthPercent,
-    positionX,
-    positionY,
-    layoutPreset,
-    textOutline: hasOutline,
-    outlineColor,
-    textShadow: hasShadow,
-    shadowColor,
-    lineHeight,
-    textTransform
-  };
+    const itemContentType = mode === 'library' ? 'song' : (scheduleItem?.type || 'song');
+  const systemFontOverride = ThemeEngine.getSystemFontForContent(store.systemOptions, itemContentType);
+  const typeTheme = store.themesList?.find(t => t.type === itemContentType || (itemContentType === 'song' && t.id === 'theme-song'));
+  const baseThemeStyles = ThemeEngine.resolveStyles(
+    store.themesList?.find(t => t.type === 'global')?.styles || ThemeEngine.getDefaultGlobalTheme(),
+    undefined,
+    typeTheme?.styles,
+    systemFontOverride,
+    initialTheme
+    
+  );
+  const previewThemeStyles: ThemeStyles = ThemeEngine.resolveStyles(
+    baseThemeStyles,
+    undefined, undefined, undefined, undefined,
+    {
+      fontFamily,
+      fontSize,
+      fontColor,
+      textAlign,
+      alignVertical,
+      boxStyle,
+      widthPercent,
+      positionX,
+      positionY,
+      layoutPreset,
+      textOutline: hasOutline,
+      outlineColor,
+      textShadow: hasShadow,
+      shadowColor,
+      lineHeight,
+      textTransform
+    }
+    
+  );
 
   if (isMinimized) {
     return (
+    
       <div className="fixed bottom-4 right-4 z-50 bg-[#1f2229] border border-cyan-500/50 shadow-2xl rounded-lg px-4 py-2 flex items-center gap-3 text-gray-200 animate-in slide-in-from-bottom-5">
         <span className="text-xs font-semibold text-cyan-400">Editor Minimized:</span>
         <span className="text-xs text-gray-300 font-medium truncate max-w-[200px]">{title || 'Untitled'}</span>
@@ -607,10 +734,12 @@ export default function SongEditorModal({
           <X size={14} />
         </button>
       </div>
-    );
+      
+  );
   }
 
   return (
+    
     <div className={`fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center select-none animate-in fade-in duration-150 ${isMaximized ? 'p-0' : 'p-2'}`}>
       <div className={`bg-[#1f2229] border border-[#363a47] shadow-2xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 ${
         isMaximized ? 'w-full h-full rounded-none' : 'w-full max-w-7xl h-[94vh] rounded-md'
@@ -777,7 +906,7 @@ export default function SongEditorModal({
             <div className="flex items-center gap-1.5">
               <span className="text-gray-400 text-[11px]">Font:</span>
               <SystemFontPicker
-                value={fontFamily}
+                value={fontFamily || previewThemeStyles.fontFamily || 'Montserrat, sans-serif'}
                 onChange={(family) => setFontFamily(family)}
                 buttonClassName="bg-[#242732] border-[#3b3f4f] text-xs py-0.5 px-2"
               />
@@ -790,7 +919,7 @@ export default function SongEditorModal({
                 type="number"
                 min="16"
                 max="100"
-                value={fontSize}
+                value={fontSize || previewThemeStyles.fontSize || 42}
                 onChange={(e) => setFontSize(Number(e.target.value))}
                 className="w-14 bg-[#242732] border border-[#3b3f4f] rounded px-1.5 py-0.5 text-xs text-white text-center font-bold"
               />
@@ -802,7 +931,7 @@ export default function SongEditorModal({
               <span className="text-gray-400 text-[11px]">Color:</span>
               <input
                 type="color"
-                value={fontColor}
+                value={fontColor || previewThemeStyles.fontColor || '#FFFFFF'}
                 onChange={(e) => setFontColor(e.target.value)}
                 className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent"
               />
@@ -1139,36 +1268,30 @@ export default function SongEditorModal({
                 </div>
               ) : (
                 /* Slides Thumbnail List */
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                  {parsedSlides.map((slide, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => setActiveSlideIndex(idx)}
-                      className={`p-2.5 rounded cursor-pointer transition-all border ${
-                        activeSlideIndex === idx
-                          ? 'bg-[#293245] border-cyan-400 shadow-md ring-1 ring-cyan-400'
-                          : 'bg-[#141519] border-[#292c36] hover:bg-[#1e222b]'
-                      }`}
+                <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                  <DndContext 
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext 
+                      items={parsedSlides.map((_, i) => `slide-${i}`)}
+                      strategy={verticalListSortingStrategy}
                     >
-                      <div className="flex items-center justify-between text-[11px] font-bold mb-1">
-                        <span className={`px-1.5 py-0.5 rounded ${
-                          (() => {
-                            const t = slide.label.toLowerCase();
-                            if (t.includes('chorus') || t.includes('koro') || t.includes('refrain')) return 'bg-emerald-900/50 text-emerald-300 border border-emerald-700/50';
-                            if (t.includes('bridge') || t.includes('tulay')) return 'bg-purple-900/50 text-purple-300 border border-purple-700/50';
-                            if (t.includes('pre-chorus')) return 'bg-amber-900/50 text-amber-300 border border-amber-700/50';
-                            if (t.includes('tag') || t.includes('ending') || t.includes('coda')) return 'bg-rose-900/50 text-rose-300 border border-rose-700/50';
-                            if (t.includes('verse') || t.includes('talatâ') || t.match(/^v\d+$/)) return 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50';
-                            return 'bg-[#293245] text-cyan-300 border border-cyan-700/50';
-                          })()
-                        }`}>{slide.label}</span>
-                        <span className="text-gray-500 text-[10px] font-mono">#{idx + 1}</span>
+                      <div className="space-y-2">
+                        {parsedSlides.map((slide, idx) => (
+                          <SortableSlideItem
+                            key={`slide-${idx}`}
+                            id={`slide-${idx}`}
+                            slide={slide}
+                            idx={idx}
+                            activeSlideIndex={activeSlideIndex}
+                            setActiveSlideIndex={setActiveSlideIndex}
+                          />
+                        ))}
                       </div>
-                      <p className="text-[11px] text-gray-200 line-clamp-3 font-serif leading-tight">
-                        {slide.text}
-                      </p>
-                    </div>
-                  ))}
+                    </SortableContext>
+                  </DndContext>
                 </div>
               )}
             </div>
@@ -1457,5 +1580,8 @@ export default function SongEditorModal({
 
       </div>
     </div>
+    
   );
 }
+
+export default withPortal(SongEditorModal);

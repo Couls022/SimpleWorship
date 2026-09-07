@@ -1,3 +1,4 @@
+import { withPortal } from '../common/withPortal';
 import React, { useState } from 'react';
 import {
   X,
@@ -748,7 +749,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
   },
 ];
 
-export function TemplateGalleryModal({
+function TemplateGalleryModalBase({
   onClose,
   onSelectTemplate,
 }: TemplateGalleryModalProps) {
@@ -759,7 +760,7 @@ export function TemplateGalleryModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none">
+    <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden text-slate-100 animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
@@ -850,3 +851,5 @@ export function TemplateGalleryModal({
     </div>
   );
 }
+
+export const TemplateGalleryModal = withPortal(TemplateGalleryModalBase);

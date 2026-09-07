@@ -171,7 +171,7 @@ export default function FloatingPanel({ id, children, icon }: FloatingPanelProps
         top: isMaximized ? 42 : y,
         width: isMaximized ? 'calc(100vw - 16px)' : width,
         height: isMaximized ? 'calc(100vh - 50px)' : (isMinimized ? 'auto' : height),
-        zIndex
+        zIndex: zIndex || 100
       }}
       className={`flex flex-col bg-[#1a1c23] border border-[#3b404d] rounded-lg shadow-2xl overflow-hidden backdrop-blur-xs select-none transition-shadow ${
         isDragging ? 'opacity-95 shadow-cyan-500/20' : ''

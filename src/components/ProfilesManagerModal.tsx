@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, 
@@ -27,7 +28,7 @@ interface ProfilesManagerModalProps {
   initialCreateOpen?: boolean;
 }
 
-export default function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesManagerModalProps) {
+function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesManagerModalProps) {
   const { 
     profiles, 
     activeProfileId, 
@@ -719,3 +720,5 @@ export default function ProfilesManagerModal({ onClose, initialCreateOpen = fals
     </div>
   );
 }
+
+export default withPortal(ProfilesManagerModal);

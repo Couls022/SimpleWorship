@@ -1,3 +1,4 @@
+import { withPortal } from '../common/withPortal';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
@@ -26,7 +27,7 @@ interface ImagePickerModalProps {
 // Curated user assets / empty default
 const CURATED_PRESENTATION_IMAGES: Array<{ id: string; name: string; category: string; url: string; thumbnail: string }> = [];
 
-export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
+const ImagePickerModalBase = ({
   isOpen,
   onClose,
   onSelectImage,
@@ -118,7 +119,7 @@ export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
     : CURATED_PRESENTATION_IMAGES.filter((c) => c.category === curatedCategory);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150">
       <div 
         className="bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden text-slate-100"
         onClick={(e) => e.stopPropagation()}
@@ -429,3 +430,5 @@ export const ImagePickerModal: React.FC<ImagePickerModalProps> = ({
     </div>
   );
 };
+
+export const ImagePickerModal = withPortal(ImagePickerModalBase);

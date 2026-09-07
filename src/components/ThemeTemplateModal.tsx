@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -124,7 +125,7 @@ const PRESET_TEMPLATES: { name: string; type: ThemeType; styles: ThemeStyles }[]
   }
 ];
 
-export default function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps) {
+function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps) {
   const store = useStore();
   const { themesList, saveTheme, deleteTheme, activeSchedule } = store;
 
@@ -562,3 +563,5 @@ export default function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTem
     </div>
   );
 }
+
+export default withPortal(ThemeTemplateModal);

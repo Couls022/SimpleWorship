@@ -1,8 +1,9 @@
+import { withPortal } from './common/withPortal';
 import React, { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { X, MonitorPlay, Radio, Send } from 'lucide-react';
 
-export default function TargetSelectionModal() {
+function TargetSelectionModal() {
   const { 
     routingRequest, 
     setRoutingRequest, 
@@ -204,3 +205,5 @@ export default function TargetSelectionModal() {
     </div>
   );
 }
+
+export default withPortal(TargetSelectionModal);

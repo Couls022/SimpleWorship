@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect } from 'react';
 import { DisplayManager } from '../core/DisplayManager';
 import { 
@@ -38,7 +39,7 @@ interface SystemDiagnosticsModalProps {
   onClose: () => void;
 }
 
-export default function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
+function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
   const store = useStore();
   const [activeTab, setActiveTab] = useState<'server' | 'hardware' | 'gpu-diag' | 'storage' | 'broadcaster' | 'remote'>('hardware');
   
@@ -1064,3 +1065,5 @@ export default function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsMod
     </div>
   );
 }
+
+export default withPortal(SystemDiagnosticsModal);

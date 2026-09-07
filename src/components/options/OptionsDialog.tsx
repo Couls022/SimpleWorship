@@ -1,3 +1,4 @@
+import { withPortal } from '../common/withPortal';
 import React, { useState } from 'react';
 import { 
   X, 
@@ -49,7 +50,7 @@ interface OptionsDialogProps {
 type MainCategory = 'Main Output' | 'Alternate Output' | 'Foldback' | 'Service Intervals' | 'Slide Labels' | 'Appearance' | 'Advanced';
 type OutputTab = 'General' | 'Song' | 'Scripture' | 'Presentations' | 'Transitions' | 'Alerts';
 
-export default function OptionsDialog({ onClose }: OptionsDialogProps) {
+function OptionsDialog({ onClose }: OptionsDialogProps) {
   const store = useStore();
   const { systemOptions, updateSystemOptions, resetSystemOptions, shortcutSettings, updateShortcutSettings } = store;
 
@@ -1529,7 +1530,7 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                             const code = prompt('Enter nursery alert numbers (e.g. 12, 5):', localOptions.mainOutput.alerts.nursery.currentCode || '12, 5');
                             if (code !== null) {
                               updateMainAlertsNursery({ currentCode: code });
-                              store.setAlert({ nurseryText: code, showNursery: !!code });
+                              store.setAlert({ nurseryText: code, showNursery: !!code }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
                             }
                           }}
                           className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded"
@@ -2570,3 +2571,5 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
     </div>
   );
 }
+
+export default withPortal(OptionsDialog);

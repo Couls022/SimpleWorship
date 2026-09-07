@@ -207,7 +207,7 @@ export default function ModeratorView() {
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'c' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        store.toggleClear();
+        store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "");
         return;
       }
 
@@ -259,7 +259,7 @@ export default function ModeratorView() {
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'b' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        store.toggleBlack();
+        store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "");
         return;
       }
       if (
@@ -268,7 +268,7 @@ export default function ModeratorView() {
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'l' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        store.toggleLogo();
+        store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "");
         return;
       }
 
@@ -308,9 +308,9 @@ export default function ModeratorView() {
       if (e.key === 'Escape') {
         const activeGroup = store.activeControlGroupId ? store.groupStates[store.activeControlGroupId] : null;
         if (activeGroup && (activeGroup.isBlack || activeGroup.isClear || activeGroup.showLogo)) {
-          if (activeGroup.isBlack) store.toggleBlack();
-          if (activeGroup.isClear) store.toggleClear();
-          if (activeGroup.showLogo) store.toggleLogo();
+          if (activeGroup.isBlack) store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "");
+          if (activeGroup.isClear) store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "");
+          if (activeGroup.showLogo) store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "");
         }
         setIsShortcutsOpen(false);
         setIsQuickSearchOpen(false);

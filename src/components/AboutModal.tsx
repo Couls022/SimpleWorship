@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React from 'react';
 import { X, CheckCircle, ShieldCheck, Cpu, HardDrive, Sparkles, ExternalLink, RefreshCw, Keyboard, Radio, Database } from 'lucide-react';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
@@ -10,7 +11,7 @@ interface AboutModalProps {
   onOpenDiagnostics?: () => void;
 }
 
-export default function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalProps) {
+function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalProps) {
   const store = useStore();
 
   return (
@@ -136,3 +137,5 @@ export default function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics
     </div>
   );
 }
+
+export default withPortal(AboutModal);

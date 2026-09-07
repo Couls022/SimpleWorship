@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 
@@ -9,7 +10,7 @@ interface UnsavedChangesModalProps {
   actionName?: string;
 }
 
-export default function UnsavedChangesModal({
+function UnsavedChangesModal({
   isOpen,
   onSave,
   onDiscard,
@@ -57,3 +58,5 @@ export default function UnsavedChangesModal({
     </div>
   );
 }
+
+export default withPortal(UnsavedChangesModal);

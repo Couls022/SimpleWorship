@@ -44,7 +44,7 @@ describe('Store Routing Independence', () => {
     
     // Set Route A Black
     useStore.setState({ activeControlGroupId: 'group-1' });
-    useStore.getState().toggleBlack(); // toggles group-1 black
+    useStore.getState().toggleBlack('group-1'); // toggles group-1 black
 
     const states1 = useStore.getState().groupStates;
     expect(states1['group-1'].isBlack).toBe(true);
@@ -52,7 +52,7 @@ describe('Store Routing Independence', () => {
 
     // Set Route B Clear
     useStore.setState({ activeControlGroupId: 'group-2' });
-    useStore.getState().toggleClear(); // toggles group-2 clear
+    useStore.getState().toggleClear('group-2'); // toggles group-2 clear
 
     const states2 = useStore.getState().groupStates;
     expect(states2['group-1'].isBlack).toBe(true); // Still black

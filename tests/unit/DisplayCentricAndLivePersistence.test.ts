@@ -227,11 +227,11 @@ describe('Suite: Display-Centric Architecture, URL Fix, and Live Persistence (16
       expect(useStore.getState().groupStates['group-congregation'].isLiveEnabled).toBe(false);
 
       // Toggle LIVE ON
-      useStore.getState().toggleMasterLive();
+      useStore.getState().toggleMasterLive('group-congregation');
       expect(useStore.getState().groupStates['group-congregation'].isLiveEnabled).toBe(true);
 
       // Toggle LIVE OFF
-      useStore.getState().toggleMasterLive();
+      useStore.getState().toggleMasterLive('group-congregation');
       expect(useStore.getState().groupStates['group-congregation'].isLiveEnabled).toBe(false);
     });
 
@@ -380,23 +380,23 @@ describe('Suite: Display-Centric Architecture, URL Fix, and Live Persistence (16
       store.goLiveItem('song-1', 1, 'group-congregation');
 
       // Toggle Black ON
-      store.toggleBlack();
+      store.toggleBlack('group-congregation');
       expect(useStore.getState().groupStates['group-congregation'].isBlack).toBe(true);
       expect(useStore.getState().groupStates['group-congregation'].activeItemId).toBe('song-1');
 
       // Toggle Black OFF
-      store.toggleBlack();
+      store.toggleBlack('group-congregation');
       expect(useStore.getState().groupStates['group-congregation'].isBlack).toBe(false);
       expect(useStore.getState().groupStates['group-congregation'].activeItemId).toBe('song-1');
       expect(useStore.getState().groupStates['group-congregation'].activeSlideIndex).toBe(1);
 
       // Toggle Clear ON
-      store.toggleClear();
+      store.toggleClear('group-congregation');
       expect(useStore.getState().groupStates['group-congregation'].isClear).toBe(true);
       expect(useStore.getState().groupStates['group-congregation'].activeItemId).toBe('song-1');
 
       // Toggle Clear OFF
-      store.toggleClear();
+      store.toggleClear('group-congregation');
       expect(useStore.getState().groupStates['group-congregation'].isClear).toBe(false);
       expect(useStore.getState().groupStates['group-congregation'].activeItemId).toBe('song-1');
     });

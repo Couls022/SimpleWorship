@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, FileText, Check, Download } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -9,7 +10,7 @@ interface SaveScheduleAsModalProps {
   onClose: () => void;
 }
 
-export default function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
+function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
   const store = useStore();
   const { activeSchedule, setActiveSchedule, systemOptions, outputGroups } = store;
   
@@ -147,3 +148,5 @@ export default function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProp
     </div>
   );
 }
+
+export default withPortal(SaveScheduleAsModal);

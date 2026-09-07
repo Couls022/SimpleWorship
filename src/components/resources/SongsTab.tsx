@@ -1,14 +1,14 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Music, 
-  Edit3, 
-  Trash2, 
-  GripVertical, 
-  Copy, 
-  Tag, 
-  PlusCircle, 
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import {
+  Plus,
+  Search,
+  Music,
+  Edit3,
+  Trash2,
+  GripVertical,
+  Copy,
+  Tag,
+  PlusCircle,
   Sparkles,
   Download,
   Upload,
@@ -16,108 +16,100 @@ import {
   FolderUp,
   FolderDown,
   Check,
-  RefreshCw
-} from 'lucide-react';
-import { useStore } from '../../store/useStore';
-import { Song } from '../../types';
-import { handleRangeSelection } from '../../utils/selectionUtils';
-import { BAPTIST_HYMNAL_SONGS } from '../../data/baptistHymnal';
-import { OfflineSearchEngine } from '../../core/OfflineSearchEngine';
+  RefreshCw,
+} from "lucide-react";
+import { useStore } from "../../store/useStore";
+import { Song } from "../../types";
+import { handleRangeSelection } from "../../utils/selectionUtils";
+import { BAPTIST_HYMNAL_SONGS } from "../../data/baptistHymnal";
+import { OfflineSearchEngine } from "../../core/OfflineSearchEngine";
+import { PortalDropdown } from "../common/PortalDropdown";
 
 interface SongsTabProps {
   onOpenNewSong: () => void;
   onEditSong: (song: Song) => void;
 }
 
-const CATEGORIES = ['All', 'Hymns', 'Special Number'] as const;
-type CategoryType = typeof CATEGORIES[number];
+const CATEGORIES = ["All", "Hymns", "Special Number"] as const;
+type CategoryType = (typeof CATEGORIES)[number];
 
 export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
   const store = useStore();
   const { songsList, addScheduleItem, addSong, deleteSong } = store;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(() => songsList[0]?.id ? [songsList[0].id] : []);
-  const [anchorSongId, setAnchorSongId] = useState<string | null>(() => songsList[0]?.id || null);
-  const [activeCategory, setActiveCategory] = useState<CategoryType>('All');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>(() =>
+    songsList[0]?.id ? [songsList[0].id] : [],
+  );
+  const [anchorSongId, setAnchorSongId] = useState<string | null>(
+    () => songsList[0]?.id || null,
+  );
+  const [activeCategory, setActiveCategory] = useState<CategoryType>("All");
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isImportExportOpen, setIsImportExportOpen] = useState(false);
   const [categoryWidth, setCategoryWidth] = useState(140);
   const [actionsWidth, setActionsWidth] = useState(90);
-  const [resizingColumn, setResizingColumn] = useState<'category' | 'actions' | null>(null);
+  const [resizingColumn, setResizingColumn] = useState<
+    "category" | "actions" | null
+  >(null);
 
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const importExportDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(target)) {
-        setIsCategoryOpen(false);
-      }
-      if (importExportDropdownRef.current && !importExportDropdownRef.current.contains(target)) {
-        setIsImportExportOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
 
   // Resizing Category Column (between Title and Category)
   const handleCategoryResize = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setResizingColumn('category');
+    setResizingColumn("category");
     const startX = e.clientX;
     const startWidth = categoryWidth;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       // Dragging left makes category wider; dragging right makes category narrower
-      const delta = startX - moveEvent.clientX; 
+      const delta = startX - moveEvent.clientX;
       setCategoryWidth(Math.max(105, Math.min(260, startWidth + delta)));
     };
 
     const onMouseUp = () => {
       setResizingColumn(null);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
 
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   };
 
   // Resizing Actions Column (between Category and Actions)
   const handleActionsResize = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setResizingColumn('actions');
+    setResizingColumn("actions");
     const startX = e.clientX;
     const startWidth = actionsWidth;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       // Dragging left makes actions column wider; dragging right makes actions narrower
-      const delta = startX - moveEvent.clientX; 
+      const delta = startX - moveEvent.clientX;
       setActionsWidth(Math.max(75, Math.min(160, startWidth + delta)));
     };
 
     const onMouseUp = () => {
       setResizingColumn(null);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     };
 
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
   };
 
   // Context menu state
@@ -131,33 +123,47 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+      if (
+        contextMenuRef.current &&
+        !contextMenuRef.current.contains(e.target as Node)
+      ) {
         setContextMenu(null);
       }
     };
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleExportSongs = (songsToExport: Song[] = songsList, fileNamePrefix: string = 'simpleworship_songs') => {
+  const handleExportSongs = (
+    songsToExport: Song[] = songsList,
+    fileNamePrefix: string = "simpleworship_songs",
+  ) => {
     try {
       const songsData = JSON.stringify(songsToExport, null, 2);
-      const blob = new Blob([songsData], { type: 'application/json' });
+      const blob = new Blob([songsData], { type: "application/json" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `${fileNamePrefix}_${new Date().toISOString().split('T')[0]}.sws`;
+      a.download = `${fileNamePrefix}_${new Date().toISOString().split("T")[0]}.sws`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Exported ${songsToExport.length} songs successfully.` }));
+      window.dispatchEvent(
+        new CustomEvent("simpleworship:notify", {
+          detail: `Exported ${songsToExport.length} songs successfully.`,
+        }),
+      );
     } catch (err) {
-      console.error('Failed to export songs:', err);
-      window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Failed to export songs.' }));
+      console.error("Failed to export songs:", err);
+      window.dispatchEvent(
+        new CustomEvent("simpleworship:notify", {
+          detail: "Failed to export songs.",
+        }),
+      );
     }
   };
 
@@ -171,7 +177,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         const content = event.target?.result as string;
         let importedSongs: Song[] = [];
         const parsed = JSON.parse(content);
-        
+
         if (Array.isArray(parsed)) {
           importedSongs = parsed;
         } else if (parsed && Array.isArray(parsed.songs)) {
@@ -180,7 +186,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
           throw new Error("Invalid format: expected an array of songs.");
         }
 
-        const validSongs = importedSongs.filter(s => s && s.title);
+        const validSongs = importedSongs.filter((s) => s && s.title);
 
         if (validSongs.length === 0) {
           throw new Error("No valid songs found in the file.");
@@ -188,30 +194,47 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
 
         for (const song of validSongs) {
           const formattedSong: Song = {
-            id: song.id || `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            id:
+              song.id ||
+              `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
             title: song.title,
-            author: song.author || '',
-            category: song.category || 'Hymns',
-            lyrics: song.lyrics || '',
-            sections: Array.isArray(song.sections) && song.sections.length > 0 
-              ? song.sections 
-              : [{ id: `sec-${Date.now()}`, name: 'Verse 1', text: song.lyrics || song.title }],
+            author: song.author || "",
+            category: song.category || "Hymns",
+            lyrics: song.lyrics || "",
+            sections:
+              Array.isArray(song.sections) && song.sections.length > 0
+                ? song.sections
+                : [
+                    {
+                      id: `sec-${Date.now()}`,
+                      name: "Verse 1",
+                      text: song.lyrics || song.title,
+                    },
+                  ],
             ccli: song.ccli,
             ccliNumber: song.ccliNumber,
-            key: song.key || 'G',
-            tempo: song.tempo || 'Moderate'
+            key: song.key || "G",
+            tempo: song.tempo || "Moderate",
           };
           await addSong(formattedSong);
         }
 
-        window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Imported ${validSongs.length} songs successfully.` }));
+        window.dispatchEvent(
+          new CustomEvent("simpleworship:notify", {
+            detail: `Imported ${validSongs.length} songs successfully.`,
+          }),
+        );
       } catch (err) {
-        console.error('Failed to import songs:', err);
-        window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Failed to import songs. Please ensure it is a valid .sws or JSON file.` }));
+        console.error("Failed to import songs:", err);
+        window.dispatchEvent(
+          new CustomEvent("simpleworship:notify", {
+            detail: `Failed to import songs. Please ensure it is a valid .sws or JSON file.`,
+          }),
+        );
       }
-      
+
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     };
     reader.readAsText(file);
@@ -221,49 +244,66 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
     try {
       let restored = 0;
       for (const hymn of BAPTIST_HYMNAL_SONGS) {
-        if (!songsList.some(s => s.id === hymn.id || s.title.toLowerCase() === hymn.title.toLowerCase())) {
+        if (
+          !songsList.some(
+            (s) =>
+              s.id === hymn.id ||
+              s.title.toLowerCase() === hymn.title.toLowerCase(),
+          )
+        ) {
           await addSong(hymn);
           restored++;
         }
       }
       window.dispatchEvent(
-        new CustomEvent('simpleworship:notify', { 
-          detail: restored > 0 
-            ? `Restored ${restored} standard hymns to song library.` 
-            : 'All standard hymns are already present in library.' 
-        })
+        new CustomEvent("simpleworship:notify", {
+          detail:
+            restored > 0
+              ? `Restored ${restored} standard hymns to song library.`
+              : "All standard hymns are already present in library.",
+        }),
       );
     } catch (err) {
-      console.error('Failed to restore hymnal:', err);
+      console.error("Failed to restore hymnal:", err);
     }
   };
 
   useEffect(() => {
     const handleFocusSearch = (e: CustomEvent) => {
-      if (e.detail?.target === 'songs' || !e.detail?.target) {
+      if (e.detail?.target === "songs" || !e.detail?.target) {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       }
     };
-    window.addEventListener('simpleworship:focus-search' as any, handleFocusSearch);
-    return () => window.removeEventListener('simpleworship:focus-search' as any, handleFocusSearch);
+    window.addEventListener(
+      "simpleworship:focus-search" as any,
+      handleFocusSearch,
+    );
+    return () =>
+      window.removeEventListener(
+        "simpleworship:focus-search" as any,
+        handleFocusSearch,
+      );
   }, []);
 
-  const getNormalizedCategory = (song: Song): 'Hymns' | 'Special Number' => {
-    const cat = (song.category || '').toLowerCase();
-    if (cat.includes('special') || (song.tags && song.tags.some(t => t.toLowerCase().includes('special')))) {
-      return 'Special Number';
+  const getNormalizedCategory = (song: Song): "Hymns" | "Special Number" => {
+    const cat = (song.category || "").toLowerCase();
+    if (
+      cat.includes("special") ||
+      (song.tags && song.tags.some((t) => t.toLowerCase().includes("special")))
+    ) {
+      return "Special Number";
     }
-    return 'Hymns';
+    return "Hymns";
   };
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {
-      'All': songsList.length,
-      'Hymns': 0,
-      'Special Number': 0,
+      All: songsList.length,
+      Hymns: 0,
+      "Special Number": 0,
     };
-    songsList.forEach(s => {
+    songsList.forEach((s) => {
       const cat = getNormalizedCategory(s);
       counts[cat] = (counts[cat] || 0) + 1;
     });
@@ -271,15 +311,21 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
   }, [songsList]);
 
   const filteredSongs = useMemo(() => {
-    return OfflineSearchEngine.filterSongs(songsList, searchQuery, activeCategory);
+    return OfflineSearchEngine.filterSongs(
+      songsList,
+      searchQuery,
+      activeCategory,
+    );
   }, [songsList, activeCategory, searchQuery]);
 
   const handleAddToSchedule = (song: Song) => {
     store.addScheduleItem({
-      type: 'song',
+      type: "song",
       contentId: song.id,
       name: song.title,
-      notes: song.author ? `Key of ${song.key || 'G'} • By ${song.author}` : undefined,
+      notes: song.author
+        ? `Key of ${song.key || "G"} • By ${song.author}`
+        : undefined,
       customBackgroundUrl: song.defaultBackgroundUrl,
       themeOverride: song.themeOverride,
       data: {
@@ -289,26 +335,28 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         key: song.key,
         lyrics: song.lyrics,
         sections: song.sections,
-        ccliNumber: song.ccliNumber
-      }
+        ccliNumber: song.ccliNumber,
+      },
     });
     window.dispatchEvent(
-      new CustomEvent('simpleworship:notify', { 
-        detail: `Added "${song.title}" to schedule!` 
-      })
+      new CustomEvent("simpleworship:notify", {
+        detail: `Added "${song.title}" to schedule!`,
+      }),
     );
   };
 
   // Drag-and-drop start handler with full metadata
   const handleDragStart = (e: React.DragEvent, song: Song) => {
     const payload = {
-      type: 'song',
+      type: "song",
       item: {
         id: `song-${song.id}-${Date.now()}`,
-        type: 'song',
+        type: "song",
         contentId: song.id,
         name: song.title,
-        notes: song.author ? `Key of ${song.key || 'G'} • By ${song.author}` : undefined,
+        notes: song.author
+          ? `Key of ${song.key || "G"} • By ${song.author}`
+          : undefined,
         customBackgroundUrl: song.defaultBackgroundUrl,
         themeOverride: song.themeOverride,
         data: {
@@ -318,15 +366,15 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
           key: song.key,
           lyrics: song.lyrics,
           sections: song.sections,
-          ccliNumber: song.ccliNumber
-        }
-      }
+          ccliNumber: song.ccliNumber,
+        },
+      },
     };
     const jsonStr = JSON.stringify(payload);
-    e.dataTransfer.setData('application/json', jsonStr);
-    e.dataTransfer.setData('application/x-simpleworship-item', jsonStr);
-    e.dataTransfer.setData('text/plain', song.title);
-    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData("application/json", jsonStr);
+    e.dataTransfer.setData("application/x-simpleworship-item", jsonStr);
+    e.dataTransfer.setData("text/plain", song.title);
+    e.dataTransfer.effectAllowed = "copyMove";
   };
 
   const handleSongClick = (e: React.MouseEvent, song: Song) => {
@@ -335,7 +383,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
       selectedSongIds,
       song.id,
       e,
-      anchorSongId
+      anchorSongId,
     );
     setSelectedSongIds(selectedIds);
     setAnchorSongId(anchorId);
@@ -350,7 +398,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
     setContextMenu({
       x: Math.min(e.clientX, window.innerWidth - 220),
       y: Math.min(e.clientY, window.innerHeight - 240),
-      song
+      song,
     });
   };
 
@@ -361,7 +409,10 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         <div className="flex items-center gap-1.5 sm:gap-3 flex-1 min-w-0">
           {/* 1. Song Search Input */}
           <div className="relative flex-1 min-w-0 min-w-[100px] max-w-xs shrink">
-            <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none" />
+            <Search
+              size={13}
+              className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none"
+            />
             <input
               ref={searchInputRef}
               type="text"
@@ -372,7 +423,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
+                onClick={() => setSearchQuery("")}
                 className="absolute right-2 top-2 text-gray-400 hover:text-white p-0.5 text-[10px]"
                 title="Clear Search"
               >
@@ -400,83 +451,102 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
             <button
               type="button"
               onClick={() => {
-                setIsCategoryOpen(prev => !prev);
+                setIsCategoryOpen((prev) => !prev);
                 setIsImportExportOpen(false);
               }}
               className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs ${
-                isCategoryOpen || activeCategory !== 'All'
-                  ? 'bg-[#1c2230] border-cyan-500/80 text-cyan-300 ring-1 ring-cyan-500/30'
-                  : 'bg-[#16181e] hover:bg-[#20232e] text-gray-200 border-[#2d3240]'
+                isCategoryOpen || activeCategory !== "All"
+                  ? "bg-[#1c2230] border-cyan-500/80 text-cyan-300 ring-1 ring-cyan-500/30"
+                  : "bg-[#16181e] hover:bg-[#20232e] text-gray-200 border-[#2d3240]"
               }`}
               title="Filter by Category"
             >
-              <Tag size={13} className={activeCategory !== 'All' ? 'text-cyan-300' : 'text-cyan-400'} />
-              <span className="hidden lg:inline">Category: {activeCategory}</span>
-              <span className="inline lg:hidden">{activeCategory === 'All' ? 'Filter' : activeCategory}</span>
-              <ChevronDown 
-                size={12} 
-                className={`ml-1 transition-transform duration-200 hidden sm:block ${isCategoryOpen ? 'rotate-180 text-cyan-400' : 'text-gray-400'}`} 
+              <Tag
+                size={13}
+                className={
+                  activeCategory !== "All" ? "text-cyan-300" : "text-cyan-400"
+                }
+              />
+              <span className="hidden lg:inline">
+                Category: {activeCategory}
+              </span>
+              <span className="inline lg:hidden">
+                {activeCategory === "All" ? "Filter" : activeCategory}
+              </span>
+              <ChevronDown
+                size={12}
+                className={`ml-1 transition-transform duration-200 hidden sm:block ${isCategoryOpen ? "rotate-180 text-cyan-400" : "text-gray-400"}`}
               />
             </button>
 
             {/* Category Dropdown Menu */}
-            {isCategoryOpen && (
-              <div className="absolute top-full left-0 mt-1.5 w-60 bg-[#1a1c24] border border-[#2e3342] rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md">
-                <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-gray-400 uppercase border-b border-[#2a2e3d] mb-1 flex items-center justify-between">
-                  <span>Select Category</span>
-                  <span className="text-gray-500">{songsList.length} Total</span>
-                </div>
+            <PortalDropdown
+              isOpen={isCategoryOpen}
+              onClose={() => setIsCategoryOpen(false)}
+              triggerRef={categoryDropdownRef}
+              className="w-60 bg-[#1a1c24] border border-[#2e3342] rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md"
+            >
+              <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-gray-400 uppercase border-b border-[#2a2e3d] mb-1 flex items-center justify-between">
+                <span>Select Category</span>
+                <span className="text-gray-500">{songsList.length} Total</span>
+              </div>
 
-                <div className="flex flex-col gap-0.5">
-                  {CATEGORIES.map((cat) => {
-                    const isActive = activeCategory === cat;
-                    const count = categoryCounts[cat] || 0;
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => {
-                          setActiveCategory(cat);
-                          setIsCategoryOpen(false);
-                        }}
-                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer w-full text-left ${
-                          isActive
-                            ? 'bg-cyan-600 text-white font-bold shadow-xs'
-                            : 'text-gray-300 hover:bg-[#252936] hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Check size={13} className={isActive ? 'opacity-100 text-white' : 'opacity-0'} />
-                          <span>{cat}</span>
-                        </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-                          isActive 
-                            ? 'bg-cyan-700/80 text-white' 
-                            : 'bg-[#222530] text-gray-400 border border-[#2e3342]'
-                        }`}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {activeCategory !== 'All' && (
-                  <div className="mt-1 pt-1 border-t border-[#2a2e3d]">
+              <div className="flex flex-col gap-0.5">
+                {CATEGORIES.map((cat) => {
+                  const isActive = activeCategory === cat;
+                  const count = categoryCounts[cat] || 0;
+                  return (
                     <button
+                      key={cat}
                       type="button"
                       onClick={() => {
-                        setActiveCategory('All');
+                        setActiveCategory(cat);
                         setIsCategoryOpen(false);
                       }}
-                      className="w-full text-center py-1 text-[11px] text-gray-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                      className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer w-full text-left ${
+                        isActive
+                          ? "bg-cyan-600 text-white font-bold shadow-xs"
+                          : "text-gray-300 hover:bg-[#252936] hover:text-white"
+                      }`}
                     >
-                      Clear Category Filter
+                      <div className="flex items-center gap-2">
+                        <Check
+                          size={13}
+                          className={
+                            isActive ? "opacity-100 text-white" : "opacity-0"
+                          }
+                        />
+                        <span>{cat}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                          isActive
+                            ? "bg-cyan-700/80 text-white"
+                            : "bg-[#222530] text-gray-400 border border-[#2e3342]"
+                        }`}
+                      >
+                        {count}
+                      </span>
                     </button>
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            )}
+
+              {activeCategory !== "All" && (
+                <div className="mt-1 pt-1 border-t border-[#2a2e3d]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory("All");
+                      setIsCategoryOpen(false);
+                    }}
+                    className="w-full text-center py-1 text-[11px] text-gray-400 hover:text-cyan-300 transition-colors cursor-pointer"
+                  >
+                    Clear Category Filter
+                  </button>
+                </div>
+              )}
+            </PortalDropdown>
           </div>
 
           {/* 4. Import / Export Dropdown Button with Full Functional Options */}
@@ -484,108 +554,143 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
             <button
               type="button"
               onClick={() => {
-                setIsImportExportOpen(prev => !prev);
+                setIsImportExportOpen((prev) => !prev);
                 setIsCategoryOpen(false);
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs ${
                 isImportExportOpen
-                  ? 'bg-[#262c3b] border-cyan-500/80 text-cyan-300 ring-1 ring-cyan-500/30'
-                  : 'bg-[#222631] hover:bg-[#2a2f3d] text-gray-200 border-[#383d4e]'
+                  ? "bg-[#262c3b] border-cyan-500/80 text-cyan-300 ring-1 ring-cyan-500/30"
+                  : "bg-[#222631] hover:bg-[#2a2f3d] text-gray-200 border-[#383d4e]"
               }`}
               title="Import or Export Songs (.sws / JSON)"
             >
               <FolderUp size={13} className="text-cyan-400" />
               <span>Import / Export</span>
-              <ChevronDown 
-                size={12} 
-                className={`ml-0.5 transition-transform duration-200 ${isImportExportOpen ? 'rotate-180 text-cyan-400' : 'text-gray-400'}`} 
+              <ChevronDown
+                size={12}
+                className={`ml-0.5 transition-transform duration-200 ${isImportExportOpen ? "rotate-180 text-cyan-400" : "text-gray-400"}`}
               />
             </button>
 
-            {isImportExportOpen && (
-              <div className="absolute top-full left-0 mt-1.5 w-64 bg-[#1a1c24] border border-[#2e3342] rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md">
-                <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-gray-400 uppercase border-b border-[#2a2e3d] mb-1">
-                  Song Library Tools
-                </div>
+            <PortalDropdown
+              isOpen={isImportExportOpen}
+              onClose={() => setIsImportExportOpen(false)}
+              triggerRef={importExportDropdownRef}
+              align="right"
+              className="w-64 bg-[#1a1c24] border border-[#2e3342] rounded-xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md"
+            >
+              <div className="px-2.5 py-1 text-[10px] font-bold tracking-wider text-gray-400 uppercase border-b border-[#2a2e3d] mb-1">
+                Song Library Tools
+              </div>
 
-                <div className="flex flex-col gap-0.5">
-                  {/* Import Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsImportExportOpen(false);
-                      fileInputRef.current?.click();
-                    }}
-                    className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
-                  >
-                    <Upload size={14} className="text-cyan-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-gray-100">Import Songs (.sws / JSON)</span>
-                      <span className="text-[10px] text-gray-400">Load songs from saved backup file</span>
-                    </div>
-                  </button>
-
-                  {/* Export All Songs */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsImportExportOpen(false);
-                      handleExportSongs(songsList, 'simpleworship_songs_all');
-                    }}
-                    className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
-                  >
-                    <Download size={14} className="text-indigo-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-gray-100">Export All Songs (.sws)</span>
-                      <span className="text-[10px] text-gray-400">Backup complete library ({songsList.length} songs)</span>
-                    </div>
-                  </button>
-
-                  {/* Export Filtered Songs */}
-                  {activeCategory !== 'All' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsImportExportOpen(false);
-                        handleExportSongs(filteredSongs, `simpleworship_songs_${activeCategory.toLowerCase().replace(/\s+/g, '_')}`);
-                      }}
-                      className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
-                    >
-                      <FolderDown size={14} className="text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-gray-100">Export "{activeCategory}" ({filteredSongs.length})</span>
-                        <span className="text-[10px] text-gray-400">Export only currently selected category</span>
-                      </div>
-                    </button>
-                  )}
-
-                  {/* Restore Baptist Hymnal Default */}
-                  <div className="pt-1 mt-1 border-t border-[#2a2e3d]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsImportExportOpen(false);
-                        handleRestoreDefaultHymnal();
-                      }}
-                      className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
-                    >
-                      <Sparkles size={14} className="text-yellow-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-yellow-300">Restore Default Hymnal</span>
-                        <span className="text-[10px] text-gray-400">Add 30 standard hymns if missing</span>
-                      </div>
-                    </button>
+              <div className="flex flex-col gap-0.5">
+                {/* Import Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsImportExportOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
+                >
+                  <Upload
+                    size={14}
+                    className="text-cyan-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform"
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-gray-100">
+                      Import Songs (.sws / JSON)
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      Load songs from saved backup file
+                    </span>
                   </div>
+                </button>
+
+                {/* Export All Songs */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsImportExportOpen(false);
+                    handleExportSongs(songsList, "simpleworship_songs_all");
+                  }}
+                  className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
+                >
+                  <Download
+                    size={14}
+                    className="text-indigo-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform"
+                  />
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-gray-100">
+                      Export All Songs (.sws)
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      Backup complete library ({songsList.length} songs)
+                    </span>
+                  </div>
+                </button>
+
+                {/* Export Filtered Songs */}
+                {activeCategory !== "All" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsImportExportOpen(false);
+                      handleExportSongs(
+                        filteredSongs,
+                        `simpleworship_songs_${activeCategory.toLowerCase().replace(/\s+/g, "_")}`,
+                      );
+                    }}
+                    className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
+                  >
+                    <FolderDown
+                      size={14}
+                      className="text-amber-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-gray-100">
+                        Export "{activeCategory}" ({filteredSongs.length})
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        Export only currently selected category
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Restore Baptist Hymnal Default */}
+                <div className="pt-1 mt-1 border-t border-[#2a2e3d]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsImportExportOpen(false);
+                      handleRestoreDefaultHymnal();
+                    }}
+                    className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs text-gray-200 hover:bg-[#252936] hover:text-white transition-colors text-left w-full cursor-pointer group"
+                  >
+                    <Sparkles
+                      size={14}
+                      className="text-yellow-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-yellow-300">
+                        Restore Default Hymnal
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        Add 30 standard hymns if missing
+                      </span>
+                    </div>
+                  </button>
                 </div>
               </div>
-            )}
+            </PortalDropdown>
 
-            <input 
-              type="file" 
-              accept=".sws,.json" 
-              ref={fileInputRef} 
-              onChange={handleImportSongs} 
-              className="hidden" 
+            <input
+              type="file"
+              accept=".sws,.json"
+              ref={fileInputRef}
+              onChange={handleImportSongs}
+              className="hidden"
             />
           </div>
         </div>
@@ -598,14 +703,16 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
           {/* Table Header - Sticky at the top */}
           <div className="sticky top-0 flex h-8 bg-[#20232a] border-b border-[#282b34] text-[11px] font-bold text-gray-400 items-center shrink-0 select-none z-30">
             {/* Index Column */}
-            <div className="w-[46px] shrink-0 h-full flex items-center justify-center text-[10px] text-gray-400">#</div>
-            
+            <div className="w-[46px] shrink-0 h-full flex items-center justify-center text-[10px] text-gray-400">
+              #
+            </div>
+
             {/* Title Column */}
             <div className="relative flex-1 min-w-[180px] h-full flex items-center px-3">
               <span className="truncate">Title (Drag to Schedule)</span>
-              
+
               {/* Invisible Resizer 1 (Between Title and Category) */}
-              <div 
+              <div
                 className="absolute right-0 top-0 bottom-0 w-3 -mr-1.5 cursor-col-resize z-20"
                 onMouseDown={handleCategoryResize}
                 onDoubleClick={() => setCategoryWidth(140)}
@@ -614,16 +721,16 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
             </div>
 
             {/* Category Column - Perfectly Aligned */}
-            <div 
+            <div
               className="relative h-full flex items-center justify-center px-2 shrink-0"
               style={{ width: `${categoryWidth}px` }}
             >
               <span className="truncate uppercase tracking-wider text-[10px] font-bold text-gray-400 text-center w-full select-none">
                 Category
               </span>
-              
+
               {/* Invisible Resizer 2 (Between Category and Actions) */}
-              <div 
+              <div
                 className="absolute right-0 top-0 bottom-0 w-3 -mr-1.5 cursor-col-resize z-20"
                 onMouseDown={handleActionsResize}
                 onDoubleClick={() => setActionsWidth(90)}
@@ -632,7 +739,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
             </div>
 
             {/* Actions Column - Perfectly Aligned */}
-            <div 
+            <div
               className="h-full flex items-center justify-center px-2 shrink-0 text-center"
               style={{ width: `${actionsWidth}px` }}
             >
@@ -671,18 +778,23 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                     onContextMenu={(e) => handleContextMenu(e, song)}
                     className={`flex h-9 text-xs transition-colors items-center cursor-grab active:cursor-grabbing border-b border-[#1b1d24] group ${
                       isSelected
-                        ? 'bg-[#22334d] text-white font-medium border-l-2 border-l-cyan-400 ring-1 ring-cyan-500/30'
-                        : 'hover:bg-[#1c1e25] text-gray-300'
+                        ? "bg-[#22334d] text-white font-medium border-l-2 border-l-cyan-400 ring-1 ring-cyan-500/30"
+                        : "hover:bg-[#1c1e25] text-gray-300"
                     }`}
                   >
                     {/* Grip & Index */}
                     <div className="w-[46px] shrink-0 h-full flex items-center justify-center gap-1 text-gray-500 group-hover:text-gray-300">
-                      <GripVertical size={12} className="shrink-0 opacity-60 group-hover:opacity-100" />
-                      <span className="font-mono text-[10px] text-gray-400">{idx + 1}</span>
+                      <GripVertical
+                        size={12}
+                        className="shrink-0 opacity-60 group-hover:opacity-100"
+                      />
+                      <span className="font-mono text-[10px] text-gray-400">
+                        {idx + 1}
+                      </span>
                     </div>
 
                     {/* Title */}
-                    <div 
+                    <div
                       className="flex-1 min-w-[180px] h-full flex items-center gap-2 font-semibold text-cyan-200 truncate px-3"
                       title={song.title}
                     >
@@ -691,21 +803,23 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                     </div>
 
                     {/* Category Badge - Directly aligned with Category header */}
-                    <div 
+                    <div
                       className="shrink-0 h-full flex items-center justify-center px-2"
                       style={{ width: `${categoryWidth}px` }}
                     >
-                      <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded text-[10px] font-bold border truncate max-w-full text-center select-none ${
-                        normalizedCat === 'Special Number'
-                          ? 'bg-purple-950/80 text-purple-300 border-purple-800/80'
-                          : 'bg-cyan-950/80 text-cyan-300 border-cyan-800/80'
-                      }`}>
+                      <span
+                        className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded text-[10px] font-bold border truncate max-w-full text-center select-none ${
+                          normalizedCat === "Special Number"
+                            ? "bg-purple-950/80 text-purple-300 border-purple-800/80"
+                            : "bg-cyan-950/80 text-cyan-300 border-cyan-800/80"
+                        }`}
+                      >
                         {normalizedCat}
                       </span>
                     </div>
 
                     {/* Action Buttons - Directly aligned with Actions header */}
-                    <div 
+                    <div
                       className="shrink-0 h-full flex items-center justify-center px-2 text-center"
                       style={{ width: `${actionsWidth}px` }}
                     >
@@ -769,7 +883,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
               const dup: Song = {
                 ...contextMenu.song,
                 id: `song-${Date.now()}`,
-                title: `${contextMenu.song.title} (Copy)`
+                title: `${contextMenu.song.title} (Copy)`,
               };
               addSong(dup);
               setContextMenu(null);
