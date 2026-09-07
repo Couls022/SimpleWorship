@@ -199,6 +199,7 @@ export interface AssetReference {
 
 export interface ThemeStyles {
   fontFamily?: string;
+  isExplicitFont?: boolean;
   fontSize?: number;
   fontColor?: string;
   fontWeight?: string;
@@ -623,6 +624,37 @@ export interface SlideAnnotationState {
   routerId?: string;
 }
 
+export interface RenderFrame {
+  groupId: string;
+  targetWidth: number;
+  targetHeight: number;
+  aspectRatio: number;
+  aspectLabel: string;
+  margins: { left: number; top: number; right: number; bottom: number };
+
+  activeItem: PresentationItem | null;
+  activeSlide: Slide | null;
+  resolvedStyles: ThemeStyles;
+  
+  autoFitFontSize: number;
+  baseFontSize: number;
+  
+  // Header / Footer evaluation
+  hasHeader: boolean;
+  headerText: string;
+  headerStyles: React.CSSProperties;
+  
+  hasFooter: boolean;
+  footerText: string;
+  footerStyles: React.CSSProperties;
+
+  isUpper: boolean;
+  lineSpacing: number;
+  widthPercent: number;
+
+  timestamp: number;
+}
+
 export interface PresentationState {
   activeScheduleId: string | null;
   activeItemId: string | null;
@@ -642,6 +674,7 @@ export interface PresentationState {
   isLiveEnabled: boolean;
   directLiveItem?: PresentationItem | null;
   displayId?: string;
+  renderFrame?: RenderFrame;
 }
 
 // Workspace & Panel Management Types

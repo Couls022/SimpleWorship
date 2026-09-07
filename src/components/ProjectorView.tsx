@@ -22,8 +22,8 @@ import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 import { MediaStreamController } from '../core/MediaStreamController';
 import { dbApi } from '../db';
 import { TelemetryManager } from '../utils/TelemetryManager';
-
-import { resolveGroupResolution } from './MonitorPreviewCanvas';
+import { resolveGroupResolution } from '../core/RenderFrameBuilder';
+import { PresentationCanvas } from './presentation/PresentationCanvas';
 
 interface ProjectorViewProps {
   groupId: string;
@@ -962,7 +962,7 @@ function ProjectorLayer({
         )}
 
         {/* Worship Text Slide Content Layer */}
-        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && (
+        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && presentationState.renderFrame && (
           <motion.div 
             key={currentSlide.id || presentationState.activeSlideIndex}
             initial={motionConfig.initial}
@@ -970,123 +970,12 @@ function ProjectorLayer({
             exit={motionConfig.exit}
             transition={motionConfig.transition}
             className="absolute inset-0 z-10 w-full h-full"
-            style={ThemeEngine.getContainerAlignmentStyle(resolvedStyles, generalOpts?.margins)}
           >
-            <div 
-              className={ThemeEngine.getCardStyle(resolvedStyles).className}
-              style={ThemeEngine.getCardStyle(resolvedStyles).style}
-            >
-              {currentSlide.title && (
-                (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
-                (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')
-              ) && (
-                <h2 
-                  className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
-                  style={{
-                    ...(activeItem?.type === 'bible' && referenceStyles
-                      ? ThemeEngine.getTextStyle(referenceStyles, 1)
-                      : (labelStyles ? ThemeEngine.getTextStyle(labelStyles, 1) : {})),
-                    fontSize: (activeItem?.type === 'bible' && referenceStyles?.fontSize)
-                      ? `${referenceStyles.fontSize}px`
-                      : (labelStyles?.fontSize ? `${labelStyles.fontSize}px` : 'clamp(1.2rem, 3vw, 2.2rem)'),
-                    fontFamily: (activeItem?.type === 'bible' && referenceStyles?.fontFamily)
-                      ? referenceStyles.fontFamily
-                      : (labelStyles?.fontFamily || resolvedStyles.fontFamily),
-                    textAlign: resolvedStyles.textAlign || 'center',
-                  }}
-                >
-                  {activeItem?.type === 'song' ? formatSongLabel(currentSlide.title) : currentSlide.title}
-                </h2>
-              )}
-
-              {/* Main Slide Text */}
-              {(() => {
-                const baseSize = ThemeEngine.normalizeFontSize(resolvedStyles.fontSize);
-
-                const isUpper = activeItem?.type === 'song'
-                  ? (songOpts?.allCapsLyrics || songOpts?.songFont?.casing === 'uppercase')
-                  : (activeItem?.type === 'bible' && scriptureOpts?.scriptureFont?.casing === 'uppercase');
-
-                const spacing = activeItem?.type === 'song'
-                  ? (songOpts?.lineSpacing || songOpts?.songFont?.lineSpacing || 1.35)
-                  : (activeItem?.type === 'bible' ? (scriptureOpts?.lineSpacing || scriptureOpts?.scriptureFont?.lineSpacing || 1.35) : 1.35);
-
-                const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
-                  text: currentSlide.text,
-                  baseFontSize: baseSize,
-                  fontFamily: resolvedStyles.fontFamily,
-                  fontWeight: resolvedStyles.fontWeight,
-                  fontStyle: resolvedStyles.fontStyle,
-                  hasHeader: Boolean(currentSlide.title && (
-                    (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
-                    (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')
-                  )),
-                  hasFooter: Boolean(
-                    (activeItem?.type === 'bible' && showReference && refLocation === 'After Each Slide' && currentSlide.title) ||
-                    showCopyright
-                  ),
-                  scale: 1,
-                  minFontSize: activeItem?.type === 'bible' ? (scriptureOpts?.minFontSize || 24) : (activeItem?.type === 'song' ? (songOpts?.minFontSize || 24) : 24),
-                  maxFontSize: 160,
-                  isUppercase: Boolean(isUpper),
-                  lineSpacing: spacing,
-                  widthPercent: resolvedStyles.widthPercent,
-                  margins: generalOpts?.margins,
-                  containerWidth: layerRes.width,
-                  containerHeight: layerRes.height,
-                });
-
-                return (
-                  <div 
-                    className="whitespace-pre-line font-bold max-w-full leading-snug drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
-                    style={{
-                      ...ThemeEngine.getTextStyle(resolvedStyles, 1),
-                      fontSize: `${autoFitSize}px`,
-                      textTransform: isUpper ? 'uppercase' : undefined,
-                      lineHeight: spacing,
-                    }}
-                  >
-                    {activeItem?.type === 'bible' && currentSlide.verses && currentSlide.verses.length > 0 ? (
-                      currentSlide.verses.map((v, idx) => (
-                        <span key={v.verse} className="inline">
-                          {(scriptureOpts?.showVerseNumbers ?? true) && (
-                            <span 
-                              className="font-bold inline-block mr-3 select-none transition-colors"
-                              style={{ 
-                                color: scriptureOpts?.verseFont?.color || scriptureOpts?.verseColor || '#F6E05E',
-                                fontFamily: scriptureOpts?.verseFont?.family || scriptureOpts?.scriptureFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
-                                fontSize: `${Math.max(14, autoFitSize * 0.85)}px`
-                              }}
-                            >
-                              {formatVerseNumber(v.verse, scriptureOpts?.verseNumberStyle)}
-                            </span>
-                          )}
-                          <span>{v.text}</span>
-                          {idx < currentSlide.verses!.length - 1 && '  '}
-                        </span>
-                      ))
-                    ) : (
-                      currentSlide.text
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Footer: Scripture Reference */}
-              {activeItem?.type === 'bible' && showReference && refLocation === 'After Each Slide' && currentSlide.title && (
-                <div 
-                  className="mt-6 pt-2 font-bold max-w-full opacity-90"
-                  style={{
-                    ...(referenceStyles ? ThemeEngine.getTextStyle(referenceStyles, 1) : { color: '#E2E8F0', fontWeight: '700' }),
-                    fontSize: referenceStyles?.fontSize ? `${referenceStyles.fontSize}px` : 'clamp(1rem, 2.5vw, 1.8rem)',
-                    fontFamily: referenceStyles?.fontFamily || resolvedStyles.fontFamily,
-                    textAlign: (referenceStyles?.textAlign as any) || resolvedStyles.textAlign || 'right',
-                  }}
-                >
-                  {currentSlide.title}
-                </div>
-              )}
-            </div>
+            <PresentationCanvas 
+              frame={presentationState.renderFrame}
+              scale={1}
+              systemOptions={systemOptions}
+            />
           </motion.div>
         )}
       </AnimatePresence>

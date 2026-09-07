@@ -16,6 +16,8 @@ import { isValidPptxBinary } from '../utils/pptxValidator';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { MediaStreamController } from '../core/MediaStreamController';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
+import { PresentationCanvas } from './presentation/PresentationCanvas';
+import { resolveGroupResolution } from '../core/RenderFrameBuilder';
 
 interface MonitorPreviewCanvasProps {
   groupId: string;
@@ -23,99 +25,6 @@ interface MonitorPreviewCanvasProps {
   customState?: PresentationState;
   showResolutionTag?: boolean;
   className?: string;
-}
-
-export function resolveGroupResolution(
-  group: OutputGroup | undefined,
-  systemOptions: SystemOptions | undefined,
-  availableDisplays?: NativeDisplayTarget[]
-): { width: number; height: number; aspectRatio: number; aspectLabel: string; margins: { left: number; top: number; right: number; bottom: number } } {
-  const defaultMargins = { left: 0, top: 0, right: 0, bottom: 0 };
-
-  // 1. Check if group has explicit customResolution
-  if (group?.customResolution && group.customResolution.width > 0 && group.customResolution.height > 0) {
-    const w = group.customResolution.width;
-    const h = group.customResolution.height;
-    const ratio = w / h;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${w}×${h}`;
-    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
-  }
-
-  // 2. Check if group has explicit aspectRatio presets or custom resolution strings (e.g., '1366x768', '1920x1080', '1280x720', '1024x768')
-  if (group?.aspectRatio && group.aspectRatio !== 'options' && group.aspectRatio !== 'auto') {
-    if (group.aspectRatio.includes('x')) {
-      const parts = group.aspectRatio.split('x');
-      const w = parseInt(parts[0], 10);
-      const h = parseInt(parts[1], 10);
-      if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
-        const ratio = w / h;
-        const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
-        return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
-      }
-    }
-    if (group.aspectRatio === '4:3') {
-      return { width: 1024, height: 768, aspectRatio: 4 / 3, aspectLabel: '4:3', margins: defaultMargins };
-    }
-    if (group.aspectRatio === '16:10') {
-      return { width: 1920, height: 1200, aspectRatio: 16 / 10, aspectLabel: '16:10', margins: defaultMargins };
-    }
-    if (group.aspectRatio === '16:9') {
-      const sysPos = systemOptions?.mainOutput?.general?.position;
-      if (sysPos && sysPos.width > 0 && sysPos.height > 0 && Math.abs(sysPos.width / sysPos.height - 16 / 9) < 0.05) {
-        return { width: sysPos.width, height: sysPos.height, aspectRatio: sysPos.width / sysPos.height, aspectLabel: '16:9', margins: systemOptions?.mainOutput?.general?.margins || defaultMargins };
-      }
-      return { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
-    }
-  }
-
-  // 3. Physical Target Monitor lookup via targetDisplayId / displayIds
-  const targetId = (group?.displayIds && group.displayIds.length > 0) ? group.displayIds[0] : group?.targetDisplayId;
-  if (targetId) {
-    const displays = availableDisplays || DisplayManager.getCachedDisplays();
-    const matchedDisplay = displays.find(d => d.id === targetId || d.name === targetId);
-    if (matchedDisplay?.bounds && matchedDisplay.bounds.width > 0 && matchedDisplay.bounds.height > 0) {
-      const w = matchedDisplay.bounds.width;
-      const h = matchedDisplay.bounds.height;
-      const ratio = w / h;
-      const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
-      const groupMargins = group?.role === 'confidence' 
-        ? (systemOptions?.foldback?.margins || defaultMargins)
-        : (group?.role === 'broadcast' || group?.role === 'lobby')
-          ? (systemOptions?.alternateOutput?.margins || defaultMargins)
-          : (systemOptions?.mainOutput?.general?.margins || defaultMargins);
-      return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: groupMargins };
-    }
-  }
-
-  // 4. If group is 'confidence' (Foldback) and foldback options has custom position:
-  if (group?.role === 'confidence' && systemOptions?.foldback?.position && systemOptions.foldback.position.width > 0 && systemOptions.foldback.position.height > 0) {
-    const w = systemOptions.foldback.position.width;
-    const h = systemOptions.foldback.position.height;
-    const ratio = w / h;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
-    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: systemOptions.foldback.margins || defaultMargins };
-  }
-
-  // 5. If group is 'broadcast' or 'lobby' (Alternate Output) and alternateOutput options has custom position:
-  if ((group?.role === 'broadcast' || group?.role === 'lobby') && systemOptions?.alternateOutput?.position && systemOptions.alternateOutput.position.width > 0 && systemOptions.alternateOutput.position.height > 0) {
-    const w = systemOptions.alternateOutput.position.width;
-    const h = systemOptions.alternateOutput.position.height;
-    const ratio = w / h;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
-    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: systemOptions.alternateOutput.margins || defaultMargins };
-  }
-
-  // 6. Default: Main Output General settings
-  const sysPos = systemOptions?.mainOutput?.general?.position;
-  if (sysPos && sysPos.width > 0 && sysPos.height > 0) {
-    const w = sysPos.width;
-    const h = sysPos.height;
-    const ratio = w / h;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : Math.abs(ratio - 16 / 10) < 0.05 ? '16:10' : `${w}×${h}`;
-    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: systemOptions.mainOutput.general.margins || defaultMargins };
-  }
-
-  return { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
 }
 
 export default function MonitorPreviewCanvas({
@@ -822,134 +731,12 @@ export default function MonitorPreviewCanvas({
           </AnimatePresence>
 
           {/* Slide Content Layer with Margins for Songs, Scriptures, Announcements */}
-          {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && (
-            <div 
-              className="absolute inset-0 z-10 w-full h-full"
-              style={{
-                ...ThemeEngine.getContainerAlignmentStyle(resolvedStyles),
-                paddingLeft: `${margins?.left || 0}px`,
-                paddingTop: `${margins?.top || 0}px`,
-                paddingRight: `${margins?.right || 0}px`,
-                paddingBottom: `${margins?.bottom || 0}px`,
-              }}
-            >
-              <div 
-                className={ThemeEngine.getCardStyle(resolvedStyles).className}
-                style={ThemeEngine.getCardStyle(resolvedStyles).style}
-              >
-                {/* Header: Song Section Label (if Header location) OR Scripture Reference (Before Each Slide) */}
-                {currentSlide.title && (
-                  (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
-                  (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')
-                ) && (
-                  <h2 
-                    className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
-                    style={{
-                      ...(activeItem?.type === 'bible' && referenceStyles
-                        ? ThemeEngine.getTextStyle(referenceStyles, 1)
-                        : (labelStyles ? ThemeEngine.getTextStyle(labelStyles, 1) : {})),
-                      fontSize: (activeItem?.type === 'bible' && referenceStyles?.fontSize)
-                        ? `${referenceStyles.fontSize}px`
-                        : (labelStyles?.fontSize ? `${labelStyles.fontSize}px` : '32px'),
-                      fontFamily: (activeItem?.type === 'bible' && referenceStyles?.fontFamily)
-                        ? referenceStyles.fontFamily
-                        : (labelStyles?.fontFamily || resolvedStyles.fontFamily),
-                      textAlign: resolvedStyles.textAlign || 'center',
-                    }}
-                  >
-                    {activeItem?.type === 'song' ? formatSongLabel(currentSlide.title) : currentSlide.title}
-                  </h2>
-                )}
-
-                {/* Main Slide Text */}
-                {(() => {
-                  const baseSize = ThemeEngine.normalizeFontSize(resolvedStyles.fontSize);
-
-                  const isUpper = activeItem?.type === 'song'
-                    ? (songOpts?.allCapsLyrics || songOpts?.songFont?.casing === 'uppercase')
-                    : (activeItem?.type === 'bible' && scriptureOpts?.scriptureFont?.casing === 'uppercase');
-
-                  const spacing = activeItem?.type === 'song'
-                    ? (songOpts?.lineSpacing || songOpts?.songFont?.lineSpacing || 1.35)
-                    : (activeItem?.type === 'bible' ? (scriptureOpts?.lineSpacing || scriptureOpts?.scriptureFont?.lineSpacing || 1.35) : 1.35);
-
-                  const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
-                    text: currentSlide.text,
-                    baseFontSize: baseSize,
-                    fontFamily: resolvedStyles.fontFamily,
-                    fontWeight: resolvedStyles.fontWeight,
-                    fontStyle: resolvedStyles.fontStyle,
-                    hasHeader: Boolean(currentSlide.title && (
-                      (activeItem?.type === 'song' && showVerseChorusLabel && songLabelLoc === 'Header') ||
-                      (activeItem?.type === 'bible' && showReference && refLocation === 'Before Each Slide')
-                    )),
-                    hasFooter: Boolean(
-                      (activeItem?.type === 'bible' && showReference && refLocation === 'After Each Slide' && currentSlide.title) ||
-                      showCopyright
-                    ),
-                    scale: 1,
-                    minFontSize: activeItem?.type === 'bible' ? (scriptureOpts?.minFontSize || 24) : (activeItem?.type === 'song' ? (songOpts?.minFontSize || 24) : 24),
-                    maxFontSize: 160,
-                    isUppercase: Boolean(isUpper),
-                    lineSpacing: spacing,
-                    widthPercent: resolvedStyles.widthPercent,
-                    margins: margins,
-                    containerWidth: targetWidth,
-                    containerHeight: targetHeight,
-                  });
-
-                  return (
-                    <div 
-                      className="whitespace-pre-line font-bold max-w-full leading-snug drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
-                      style={{
-                        ...ThemeEngine.getTextStyle(resolvedStyles, 1),
-                        fontSize: `${autoFitSize}px`,
-                        textTransform: isUpper ? 'uppercase' : undefined,
-                        lineHeight: spacing,
-                      }}
-                    >
-                      {activeItem?.type === 'bible' && currentSlide.verses && currentSlide.verses.length > 0 ? (
-                        currentSlide.verses.map((v, idx) => (
-                          <span key={v.verse} className="inline">
-                            {(scriptureOpts?.showVerseNumbers ?? true) && (
-                              <span 
-                                className="font-bold inline-block mr-3 select-none transition-colors"
-                                style={{ 
-                                  color: scriptureOpts?.verseFont?.color || scriptureOpts?.verseColor || '#F6E05E',
-                                  fontFamily: scriptureOpts?.verseFont?.family || scriptureOpts?.scriptureFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
-                                  fontSize: `${Math.max(14, autoFitSize * 0.85)}px`
-                                }}
-                              >
-                                {formatVerseNumber(v.verse, scriptureOpts?.verseNumberStyle)}
-                              </span>
-                            )}
-                            <span>{v.text}</span>
-                            {idx < currentSlide.verses!.length - 1 && '  '}
-                          </span>
-                        ))
-                      ) : (
-                        currentSlide.text
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Footer: Scripture Reference (After Each Slide) */}
-                {activeItem?.type === 'bible' && showReference && refLocation === 'After Each Slide' && currentSlide.title && (
-                  <div 
-                    className="mt-6 pt-2 font-bold max-w-full opacity-90"
-                    style={{
-                      ...(referenceStyles ? ThemeEngine.getTextStyle(referenceStyles, 1) : { color: '#E2E8F0', fontWeight: '700' }),
-                      fontSize: referenceStyles?.fontSize ? `${referenceStyles.fontSize}px` : '26px',
-                      fontFamily: referenceStyles?.fontFamily || resolvedStyles.fontFamily,
-                      textAlign: (referenceStyles?.textAlign as any) || resolvedStyles.textAlign || 'right',
-                    }}
-                  >
-                    {currentSlide.title}
-                  </div>
-                )}
-              </div>
-            </div>
+          {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && presentationState.renderFrame && (
+            <PresentationCanvas 
+              frame={presentationState.renderFrame}
+              scale={1}
+              systemOptions={systemOptions}
+            />
           )}
 
           {/* Bottom Corner Labels (Song Section Corner Badge or Scripture Reference) */}

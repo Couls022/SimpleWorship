@@ -522,6 +522,7 @@ function SongEditorModal({
 
         const rawThemeOverride: ThemeStyles = {
       fontFamily,
+      isExplicitFont: fontFamily ? true : undefined,
       fontSize,
       fontColor,
       textAlign,
@@ -1440,7 +1441,9 @@ function SongEditorModal({
                             lineSpacing: previewThemeStyles.lineHeight || lineHeight,
                             widthPercent: previewThemeStyles.widthPercent || widthPercent,
                             isUppercase: previewThemeStyles.textTransform === 'uppercase' || textTransform === 'uppercase',
-                            margins: useStore.getState().systemOptions.mainOutput.general.margins
+                            margins: store.systemOptions.mainOutput.general.margins,
+                            containerWidth: aspectRatio === '16:9' ? (store.systemOptions.mainOutput.general.position.width || 1920) : 1024,
+                            containerHeight: aspectRatio === '16:9' ? (store.systemOptions.mainOutput.general.position.height || 1080) : 768,
                           })}px`,
                         }}
                         title="Double-click to edit text directly on slide"

@@ -19,7 +19,8 @@ import {
   Music
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import MonitorPreviewCanvas, { resolveGroupResolution } from '../MonitorPreviewCanvas';
+import MonitorPreviewCanvas from '../MonitorPreviewCanvas';
+import { resolveGroupResolution } from '../../core/RenderFrameBuilder';
 import { DisplayManager } from '../../core/DisplayManager';
 import RouteConfigModal from '../RouteConfigModal';
 import { PresentationCore } from '../../core/PresentationCore';

@@ -28,6 +28,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { broadcastStateChange, sanitizeForSync } from '../utils/broadcastSync';
 import { DisplayManager } from '../core/DisplayManager';
+import { buildRenderFrame } from '../core/RenderFrameBuilder';
 
 const defaultShortcutSettings: ShortcutSettings = {
   arrowControlsLive: true,
@@ -824,9 +825,44 @@ export const useStore = create<AppState>((set, get) => ({
   setGroupState: (groupId, newState) => {
     set((state) => {
       const current = state.groupStates[groupId] || defaultState;
+      const combinedState = { ...current, ...newState, timestamp: Date.now() };
+
+      // Build RenderFrame for the group
+      const targetGroup = state.outputGroups.find(g => g.id === groupId);
+      const systemOptions = state.systemOptions;
+      
+      const themeList = state.themesList;
+      
+      // Look up current slide
+      let currentSlide = undefined;
+      const activeSchedule = state.activeSchedule;
+      const activeItem = activeSchedule?.items?.find((i: any) => i.id === combinedState.activeItemId);
+      if (activeItem) {
+        if (activeItem.type === 'bible' && activeItem.data?.scriptureData?.slides) {
+          currentSlide = activeItem.data.scriptureData.slides[combinedState.activeSlideIndex || 0];
+        } else if (activeItem.data?.slides) {
+          currentSlide = activeItem.data.slides[combinedState.activeSlideIndex || 0];
+        } else if ((activeItem as any).slides) {
+          currentSlide = (activeItem as any).slides[combinedState.activeSlideIndex || 0];
+        }
+      }
+
+      const frame = buildRenderFrame(
+        groupId,
+        combinedState,
+        state.activeSchedule,
+        targetGroup,
+        systemOptions,
+        state.songsList,
+        state.themesList,
+        DisplayManager.getCachedDisplays()
+      );
+
+      combinedState.renderFrame = frame;
+
       const updatedGroupStates = {
         ...state.groupStates,
-        [groupId]: { ...current, ...newState, timestamp: Date.now() }
+        [groupId]: combinedState
       };
 
       try {

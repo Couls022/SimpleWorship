@@ -78,6 +78,26 @@ export class ThemeEngine {
     const layers = [globalTheme, groupTheme, typeTheme, systemFontOverride, itemTheme, elementOverride];
     const resolved: ThemeStyles = {};
 
+    const legacyFonts = [
+      'montserrat, sans-serif',
+      'tahoma, sans-serif',
+      'arial, sans-serif',
+      'aptos, calibri, sans-serif',
+      'inter, sans-serif',
+      'montserrat',
+      'tahoma',
+      'arial',
+      'aptos',
+      'calibri',
+      'inter'
+    ];
+
+    const isLegacyFont = (font?: string) => {
+      if (!font) return false;
+      const lower = font.toLowerCase().trim();
+      return legacyFonts.some(f => lower === f || lower.startsWith(f));
+    };
+
     for (const layer of layers) {
       if (!layer) continue;
       for (const [key, value] of Object.entries(layer)) {
@@ -86,6 +106,19 @@ export class ThemeEngine {
         }
       }
     }
+
+    if (systemFontOverride && systemFontOverride.fontFamily) {
+      const itemFont = itemTheme?.fontFamily;
+      const elemFont = elementOverride?.fontFamily;
+
+      const itemHasExplicit = itemTheme?.isExplicitFont || (itemFont && !isLegacyFont(itemFont));
+      const elemHasExplicit = elementOverride?.isExplicitFont || (elemFont && !isLegacyFont(elemFont));
+
+      if (!elemHasExplicit && !itemHasExplicit) {
+        resolved.fontFamily = systemFontOverride.fontFamily;
+      }
+    }
+
     resolved.fontSize = normalizeFontSize(resolved.fontSize);
     return resolved;
   }
