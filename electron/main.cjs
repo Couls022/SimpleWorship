@@ -477,7 +477,7 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
     frame: false,
     fullscreen: false,
     alwaysOnTop: false,
-    skipTaskbar: false,
+    skipTaskbar: true,
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -585,7 +585,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
   const formattedDisplays = await getFormattedDisplays();
   const results = [];
 
-  // Filter for valid live targets
+  // Strictly filter for assignments where a real, non-empty groupId is assigned to that physical display
   const liveAssignments = assignments.filter(item => item && item.groupId && item.displayId);
 
   // Map of canonicalDisplayId -> winning assigned target details (strictly 1 is to 1 per physical display)
@@ -602,7 +602,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
     }
   }
 
-  // Close any projector windows on displays that are NO LONGER targeted
+  // Close any projector windows on displays that are NO LONGER targeted or NOT selected
   for (const [dispId, win] of displayWindows.entries()) {
     if (!canonicalTargets.has(dispId)) {
       if (win && !win.isDestroyed()) win.close();
@@ -632,7 +632,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
       }
     }
 
-    // Otherwise create exactly 1 window on this physical display
+    // Otherwise create exactly 1 window on this targeted physical display
     const win = new BrowserWindow({
       x: matchedDisplay.bounds.x,
       y: matchedDisplay.bounds.y,
@@ -641,7 +641,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
       frame: false,
       fullscreen: false,
       alwaysOnTop: false,
-      skipTaskbar: false,
+      skipTaskbar: true,
       backgroundColor: '#000000',
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
@@ -918,5 +918,66 @@ ipcMain.handle('system:get-hardware-info', async () => {
   } catch (err) {
     return { success: false, error: err.message };
   }
+});
+
+
+
+const { exec } = require("child_process");
+ipcMain.handle("convert-pptx", async (event, filePath) => {
+  return new Promise((resolve, reject) => {
+    if (process.platform !== "win32") {
+      return reject(new Error("Native PowerPoint conversion is only supported on Windows."));
+    }
+
+    const outputDir = path.join(os.tmpdir(), "simpleworship-pptx-" + Date.now());
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    // Sanitize path for PowerShell
+    const psPath = filePath.replace(/\/g, "\\").replace(/"/g, "\"\"");
+    const psOut = outputDir.replace(/\/g, "\\").replace(/"/g, "\"\"");
+
+    const psScript = `
+$ErrorActionPreference = "Stop"
+try {
+  $ppt = New-Object -ComObject PowerPoint.Application
+  $presentation = $ppt.Presentations.Open("${psPath}", -1, 0, 0)
+  $presentation.SaveCopyAs("${psOut}", 18)
+  $presentation.Close()
+  if ($ppt.Presentations.Count -eq 0) {
+    $ppt.Quit()
+  }
+  Write-Output "SUCCESS"
+} catch {
+  Write-Error $_.Exception.Message
+}
+    `;
+
+    const psFile = path.join(outputDir, "convert.ps1");
+    fs.writeFileSync(psFile, psScript);
+
+    exec(\`powershell.exe -ExecutionPolicy Bypass -File "\${psFile}"\`, (error, stdout, stderr) => {
+      if (error || !stdout.includes("SUCCESS")) {
+        reject(error || new Error(stderr || "PowerPoint conversion failed."));
+      } else {
+        try {
+          const files = fs.readdirSync(outputDir).filter(f => f.toLowerCase().endsWith(".png"));
+          files.sort((a, b) => {
+            const numA = parseInt(a.replace(/[^0-9]/g, "")) || 0;
+            const numB = parseInt(b.replace(/[^0-9]/g, "")) || 0;
+            return numA - numB;
+          });
+          
+          const images = files.map(file => {
+            const imgPath = path.join(outputDir, file);
+            const base64 = fs.readFileSync(imgPath, "base64");
+            return "data:image/png;base64," + base64;
+          });
+          resolve(images);
+        } catch (e) {
+          reject(e);
+        }
+      }
+    });
+  });
 });
 

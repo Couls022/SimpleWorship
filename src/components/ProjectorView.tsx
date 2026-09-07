@@ -14,6 +14,8 @@ import { useScreens } from '../hooks/useScreens';
 import CameraLiveRenderer from './CameraLiveRenderer';
 import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
+import { useSlideRenderCache, getSlideRenderKey } from '../utils/SlideRenderCache';
+import { toValidPptxUint8Array } from '../utils/pptxValidator';
 import { isValidPptxBinary } from '../utils/pptxValidator';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
@@ -66,9 +68,10 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         setTimeout(() => setIdentifyActive(false), 3000);
       }
       if (msg.type === 'GROUP_STATES_UPDATE' || msg.type === 'GO_LIVE') {
-        if (msg.data && msg.data.groupStates) {
+        const gs = msg.data?.groupStates || (msg.data && !msg.data.groupStates ? msg.data : null);
+        if (gs) {
           useStore.setState((prev) => ({
-            groupStates: { ...prev.groupStates, ...msg.data.groupStates }
+            groupStates: { ...prev.groupStates, ...gs }
           }));
         }
       }
@@ -347,7 +350,8 @@ function ProjectorLayer({
 
   const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
   const groupTheme = themesList.find(t => t.id === group?.themeId);
-  const typeTheme = themesList.find(t => t.type === activeItem?.type);
+  const itemContentType = (activeItem?.type as any) === 'ppt' ? 'presentation' : ((activeItem?.type as any) === 'scripture' ? 'bible' : activeItem?.type);
+  const typeTheme = themesList.find(t => t.type === itemContentType || t.type === activeItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement'));
 
   const baseSong = activeItem?.type === 'song' ? songsList.find(s => s.id === activeItem.contentId) : null;
   const itemTheme = themesList.find(t => t.id === (activeItem?.themeId || baseSong?.themeId));
@@ -452,7 +456,7 @@ function ProjectorLayer({
     const slideBgUrl = currentSlide?.backgroundUrl;
     const slideIsVideo = currentSlide?.isVideo;
 
-    if (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') {
+    if (contentType === 'pptx' && !slideBgUrl) {
       isVideo = false;
       videoSrc = '';
       backgroundUrl = '';
@@ -637,15 +641,18 @@ function ProjectorLayer({
     ? (logoStyles.backgroundGradient || resolvedStyles.backgroundGradient)
     : resolvedStyles.backgroundGradient;
 
+  const isLiveActive = Boolean(presentationState.isLiveEnabled || presentationState.showLogo);
+
   return (
     <div 
-      className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none transition-opacity duration-300"
+      className={`absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none transition-opacity duration-200 bg-black ${
+        isLiveActive ? 'opacity-100' : 'opacity-0'
+      }`}
       style={{
         transform: 'translateZ(0)',
         willChange: 'opacity, transform',
         backfaceVisibility: 'hidden',
-        fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
-        opacity: presentationState.isLiveEnabled ? 1 : 0
+        fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif'
       }}
     >
       {/* Background Media Layer (Only rendered if isBaseLayer is TRUE to allow transparent layering) */}
@@ -841,7 +848,7 @@ function ProjectorLayer({
       {/* Slide Content Layer */}
       <AnimatePresence>
         {/* Presentation Slide Layer */}
-        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && (
+        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && !activeItem?.data?.isNativeRasterized && (
           <motion.div 
             key={`pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}`}
             initial={motionConfig.initial}
@@ -854,15 +861,6 @@ function ProjectorLayer({
               fileBytes={activeItem?.data?.fileBytes}
               contentId={activeItem?.contentId}
               activeSlideIndex={presentationState.activeSlideIndex || 0}
-              fallbackContent={
-                <PresentationSlideView 
-                  slide={currentSlide}
-                  slideIndex={presentationState.activeSlideIndex || 0}
-                  totalSlides={slides.length}
-                  mode="full"
-                  themeStyles={resolvedStyles}
-                />
-              }
             />
           </motion.div>
         )}

@@ -41,6 +41,7 @@ import { readSwsFile } from '../services/swsService';
 import { handleRangeSelection } from '../utils/selectionUtils';
 import { dbApi } from '../db';
 import { isValidPptxBinary } from '../utils/pptxValidator';
+import { slideRenderCache } from '../utils/SlideRenderCache';
 import { processDroppedFileList, isMediaOrPresentationFile } from '../utils/fileDropHandler';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import BibleLibraryModule from './workspace/BibleLibraryModule';
@@ -178,6 +179,22 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
   const { panels, togglePanelDock } = useWorkspace();
   const isDocked = panels.schedule?.isDocked ?? true;
 
+  const panelContainerRef = useRef<HTMLElement | null>(null);
+  const [isCompactTabs, setIsCompactTabs] = useState(false);
+
+  useEffect(() => {
+    if (!panelContainerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect) {
+          setIsCompactTabs(entry.contentRect.width < 380);
+        }
+      }
+    });
+    observer.observe(panelContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const [activeSidebarTab, setActiveSidebarTab] = useState<'schedule' | 'scriptures' | 'songs' | 'presentations' | 'cameras'>('schedule');
 
   // Schedule View Mode State ('large' | 'medium' | 'small' | 'summary')
@@ -263,8 +280,19 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
         setIsViewMenuOpen(false);
       }
     };
+
+    const handleSwitchSidebarTab = (e: CustomEvent) => {
+      if (e.detail && ['schedule', 'scriptures', 'songs', 'presentations', 'cameras'].includes(e.detail)) {
+        setActiveSidebarTab(e.detail as any);
+      }
+    };
+
     window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
+    window.addEventListener('simpleworship:switch-sidebar-tab' as any, handleSwitchSidebarTab);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('simpleworship:switch-sidebar-tab' as any, handleSwitchSidebarTab);
+    };
   }, []);
 
   const { 
@@ -654,7 +682,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
   };
 
   return (
-    <aside className="w-full flex flex-col bg-[#0f1117] select-none h-full overflow-hidden text-gray-200 relative">
+    <aside ref={panelContainerRef as any} className="w-full flex flex-col bg-[#0f1117] select-none h-full overflow-hidden text-gray-200 relative">
       {/* Sidebar Header & Tab Switcher */}
       <div className="bg-[#151720] border-b border-[#222634] flex flex-col shrink-0 z-40">
         <div className="h-9 flex items-center justify-between px-2.5">
@@ -663,71 +691,83 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
             <button
               onClick={() => setActiveSidebarTab('schedule')}
               title={`Schedule & Order of Service (${activeSchedule ? activeSchedule.items.length : 0} items)`}
-              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'schedule'
                   ? 'bg-sky-950/80 text-sky-300 border border-sky-500/50 shadow-xs'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <Calendar size={12} className="shrink-0" />
-              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Sched</span>
-              {activeSchedule && (
-                <span className="text-[9px] bg-[#1a1e28] px-1 rounded-full text-gray-300 shrink-0 font-mono ml-0.5">
-                  {activeSchedule.items.length}
-                </span>
+              <Calendar size={isCompactTabs ? 13 : 12} className="shrink-0" />
+              {!isCompactTabs && (
+                <>
+                  <span className="text-[10px] tracking-tight whitespace-nowrap">Sched</span>
+                  {activeSchedule && (
+                    <span className="text-[9px] bg-[#1a1e28] px-1 rounded-full text-gray-300 shrink-0 font-mono ml-0.5">
+                      {activeSchedule.items.length}
+                    </span>
+                  )}
+                </>
               )}
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('scriptures')}
               title="Scriptures & Bibles"
-              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'scriptures'
                   ? 'bg-amber-950/80 text-amber-300 border border-amber-500/50 shadow-xs'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <BookOpen size={12} className="shrink-0" />
-              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Bible</span>
+              <BookOpen size={isCompactTabs ? 13 : 12} className="shrink-0" />
+              {!isCompactTabs && (
+                <span className="text-[10px] tracking-tight whitespace-nowrap">Bible</span>
+              )}
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('songs')}
               title="Songs & Hymns Library"
-              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'songs'
                   ? 'bg-sky-950/80 text-sky-300 border border-sky-500/50 shadow-xs'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <Music size={12} className="shrink-0" />
-              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Songs</span>
+              <Music size={isCompactTabs ? 13 : 12} className="shrink-0" />
+              {!isCompactTabs && (
+                <span className="text-[10px] tracking-tight whitespace-nowrap">Songs</span>
+              )}
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('presentations')}
               title="Presentations & Slides"
-              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'presentations'
                   ? 'bg-purple-950/80 text-purple-300 border border-purple-500/50 shadow-xs'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <FileText size={12} className="shrink-0" />
-              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Slides</span>
+              <FileText size={isCompactTabs ? 13 : 12} className="shrink-0" />
+              {!isCompactTabs && (
+                <span className="text-[10px] tracking-tight whitespace-nowrap">Slides</span>
+              )}
             </button>
 
             <button
               onClick={() => setActiveSidebarTab('cameras')}
               title="Live Video & Camera Inputs"
-              className={`flex items-center justify-center gap-1 px-1 py-0.5 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
+              className={`flex items-center justify-center gap-1 px-1 py-1 rounded text-[11px] font-semibold transition-all min-w-0 w-full select-none cursor-pointer ${
                 activeSidebarTab === 'cameras'
                   ? 'bg-pink-950/80 text-pink-300 border border-pink-500/50 shadow-xs'
                   : 'text-gray-400 hover:text-gray-200 hover:bg-[#1f2330]'
               }`}
             >
-              <Camera size={12} className="shrink-0" />
-              <span className="hidden min-[370px]:inline text-[10px] tracking-tight">Cams</span>
+              <Camera size={isCompactTabs ? 13 : 12} className="shrink-0" />
+              {!isCompactTabs && (
+                <span className="text-[10px] tracking-tight whitespace-nowrap">Cams</span>
+              )}
             </button>
           </div>
 
@@ -815,23 +855,6 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                 title="Collapse Sidebar (Ctrl+\)"
               >
                 <ChevronLeft size={12} />
-              </button>
-            )}
-
-            {/* Schedule Settings dropdown */}
-            {activeSidebarTab === 'schedule' && (
-              <button
-                onClick={() => {
-                  const name = prompt('Rename schedule:', activeSchedule?.name || 'Sunday Morning Worship');
-                  if (name && activeSchedule) {
-                    store.setActiveSchedule({ ...activeSchedule, name });
-                  }
-                }}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 hover:bg-[#383d47] rounded text-gray-300 hover:text-white transition-colors text-[10px]"
-                title="Schedule Options"
-              >
-                <Settings size={13} />
-                <ChevronDown size={10} />
               </button>
             )}
           </div>
@@ -1289,30 +1312,36 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                             }`}
                           >
                             {/* Slide Number / Thumbnail */}
-                            {isPptx ? (
-                              <div className="w-10 h-7 rounded-xs bg-black border border-[#30333d] relative overflow-hidden flex items-center justify-center shrink-0">
-                                {slide.backgroundUrl ? (
-                                  <img
-                                    src={slide.backgroundUrl}
-                                    alt={`Slide ${slideIdx + 1}`}
-                                    referrerPolicy="no-referrer"
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <div
-                                    className="w-full h-full flex items-center justify-center text-[8px] font-mono font-bold text-amber-300"
-                                    style={{ background: slide.backgroundColor || '#1e293b' }}
-                                  >
+                            {isPptx ? (() => {
+                              const bytesKey = item.contentId ? `pptx_${item.contentId}` : '';
+                              const cachedFrame = item.contentId ? (slideRenderCache.getFrameSync(item.contentId, slideIdx) || (bytesKey ? slideRenderCache.getFrameSync(bytesKey, slideIdx) : null)) : null;
+                              const thumbSrc = cachedFrame?.objectUrl || slide.backgroundUrl;
+
+                              return (
+                                <div className="w-10 h-7 rounded-xs bg-black border border-[#30333d] relative overflow-hidden flex items-center justify-center shrink-0">
+                                  {thumbSrc ? (
+                                    <img
+                                      src={thumbSrc}
+                                      alt={`Slide ${slideIdx + 1}`}
+                                      referrerPolicy="no-referrer"
+                                      className="w-full h-full object-contain"
+                                    />
+                                  ) : (
+                                    <div
+                                      className="w-full h-full flex items-center justify-center text-[8px] font-mono font-bold text-amber-300"
+                                      style={{ background: slide.backgroundColor || '#1e293b' }}
+                                    >
+                                      {slideIdx + 1}
+                                    </div>
+                                  )}
+                                  <span className={`absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[7px] font-mono font-bold ${
+                                    isSlideLive ? 'bg-blue-600 text-white' : 'bg-black/80 text-gray-300'
+                                  }`}>
                                     {slideIdx + 1}
-                                  </div>
-                                )}
-                                <span className={`absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[7px] font-mono font-bold ${
-                                  isSlideLive ? 'bg-blue-600 text-white' : 'bg-black/80 text-gray-300'
-                                }`}>
-                                  {slideIdx + 1}
-                                </span>
-                              </div>
-                            ) : (
+                                  </span>
+                                </div>
+                              );
+                            })() : (
                               <span className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold font-mono shrink-0 mt-0.5 ${
                                 isSlideLive ? 'bg-blue-500 text-white' : 'bg-[#2b2e37] text-gray-400'
                               }`}>

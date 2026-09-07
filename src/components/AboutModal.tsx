@@ -1,13 +1,16 @@
 import React from 'react';
-import { X, CheckCircle, ShieldCheck, Cpu, HardDrive, Sparkles, ExternalLink, RefreshCw } from 'lucide-react';
+import { X, CheckCircle, ShieldCheck, Cpu, HardDrive, Sparkles, ExternalLink, RefreshCw, Keyboard, Radio, Database } from 'lucide-react';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import { useStore } from '../store/useStore';
+import { syncTelemetry } from '../store/sync';
 
 interface AboutModalProps {
   onClose: () => void;
+  onOpenShortcuts?: () => void;
+  onOpenDiagnostics?: () => void;
 }
 
-export default function AboutModal({ onClose }: AboutModalProps) {
+export default function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalProps) {
   const store = useStore();
 
   return (
@@ -21,7 +24,7 @@ export default function AboutModal({ onClose }: AboutModalProps) {
           <SimpleWorshipLogo size={42} showText={true} subtitle="Pro Presentation Suite v7.4 (RC-2)" />
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -36,7 +39,7 @@ export default function AboutModal({ onClose }: AboutModalProps) {
             </p>
           </div>
 
-          {/* System Specs & Specs Grid */}
+          {/* System Specs & Architecture Grid */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[#12141a] border border-[#2b3040] rounded-lg p-3 space-y-1.5">
               <div className="flex items-center gap-1.5 text-cyan-400 font-bold">
@@ -65,17 +68,53 @@ export default function AboutModal({ onClose }: AboutModalProps) {
             </div>
           </div>
 
-          {/* Core Feature Matrix */}
+          {/* Core Feature & Session Matrix */}
           <div className="bg-[#14161d] border border-[#2d3345] rounded-lg p-3 space-y-2">
-            <span className="font-bold text-gray-300 text-[11px] uppercase tracking-wider block">
-              Active Session Details
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-gray-300 text-[11px] uppercase tracking-wider block">
+                Active Session Details
+              </span>
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Live Ready</span>
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400">
               <div>Active Schedule: <span className="text-white font-medium">{store.activeSchedule?.name || 'Untitled'}</span></div>
-              <div>Schedule Items: <span className="text-cyan-300 font-mono">{store.activeSchedule?.items.length || 0}</span></div>
-              <div>Songs in Library: <span className="text-emerald-300 font-mono">{store.songsList.length}</span></div>
-              <div>Output Monitors: <span className="text-purple-300 font-mono">{store.outputGroups.length} configured</span></div>
+              <div>Schedule Items: <span className="text-cyan-300 font-mono">{store.activeSchedule?.items.length || 0} items</span></div>
+              <div>Songs in Library: <span className="text-emerald-300 font-mono">{store.songsList.length} hymns</span></div>
+              <div>Output Displays: <span className="text-purple-300 font-mono">{store.outputGroups.length} configured</span></div>
             </div>
+          </div>
+
+          {/* Quick Hub Jump Actions */}
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            {onOpenShortcuts && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenShortcuts();
+                }}
+                className="flex items-center justify-center gap-1.5 py-2 px-3 bg-[#1e2330] hover:bg-[#282f42] text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Keyboard size={13} />
+                <span>Keyboard Shortcuts (F1)</span>
+              </button>
+            )}
+            {onOpenDiagnostics && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenDiagnostics();
+                }}
+                className="flex items-center justify-center gap-1.5 py-2 px-3 bg-[#1e2330] hover:bg-[#282f42] text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <ShieldCheck size={13} />
+                <span>System Diagnostics Hub</span>
+              </button>
+            )}
           </div>
 
           <div className="text-center text-[11px] text-gray-500 pt-2 border-t border-[#262b3a]">
@@ -88,7 +127,7 @@ export default function AboutModal({ onClose }: AboutModalProps) {
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-lg transition-colors shadow-md text-xs"
+            className="px-5 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-lg transition-colors shadow-md text-xs cursor-pointer"
           >
             Close
           </button>

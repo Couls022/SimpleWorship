@@ -10,11 +10,15 @@ export interface DisplayAssignment {
  * Checks if a route group is configured to target a given physical display.
  */
 export function routeTargetsDisplay(group: OutputGroup, displayId: string): boolean {
-  if (!group || !group.displayIds || group.displayIds.length === 0) return false;
-  if (!displayId) return false;
+  if (!group || !displayId) return false;
+  const list = (group.displayIds && group.displayIds.length > 0) 
+    ? group.displayIds 
+    : (group.targetDisplayId ? [group.targetDisplayId] : []);
+  if (list.length === 0) return false;
 
   const target = String(displayId).toLowerCase().trim();
-  return group.displayIds.some((id) => {
+  return list.some((id) => {
+    if (!id) return false;
     const raw = String(id).toLowerCase().trim();
     if (raw === target) return true;
     

@@ -2,6 +2,11 @@ export interface Profile {
   id: string;
   name: string;
   isDefault?: boolean;
+  description?: string;
+  createdAt?: number;
+  lastUsedAt?: number;
+  songCount?: number;
+  scheduleCount?: number;
 }
 
 export interface FontStyleOptions {

@@ -255,13 +255,35 @@ export class DisplayManager {
     // All displays can be targeted, including primary / operator console display
     const operatorBlockedDisplayIds = new Set<string>();
 
-    const targetDisplayIds = displays.map(d => d.id);
+    // Collect ONLY the target displays explicitly selected/configured in output groups
+    const configuredTargetDisplayIds = new Set<string>();
+    outputGroups.forEach(g => {
+      if (g.displayIds && g.displayIds.length > 0) {
+        g.displayIds.forEach(id => configuredTargetDisplayIds.add(id));
+      } else if (g.targetDisplayId) {
+        configuredTargetDisplayIds.add(g.targetDisplayId);
+      }
+    });
+
+    // If NO target displays are configured across all output panels, close any open projector windows
+    if (configuredTargetDisplayIds.size === 0) {
+      if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
+        try {
+          if (typeof window.electronAPI.syncProjectorDisplays === 'function') {
+            await (window.electronAPI.syncProjectorDisplays as any)([]);
+          }
+        } catch (err) {
+          console.error('[DisplayManager] syncPhysicalDisplays electron error:', err);
+        }
+      }
+      return { opened: [], updated: [], closed: [], conflicts };
+    }
 
     const assignments = resolveDisplayAssignments(
       outputGroups,
       groupStates,
       activeControlGroupId,
-      targetDisplayIds.length > 0 ? targetDisplayIds : undefined
+      Array.from(configuredTargetDisplayIds)
     );
 
     const opened: string[] = [];

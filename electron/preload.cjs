@@ -61,5 +61,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('file:opened-via-association', handler);
     return () => ipcRenderer.removeListener('file:opened-via-association', handler);
   },
-  getHardwareInfo: () => ipcRenderer.invoke('system:get-hardware-info')
+  getHardwareInfo: () => ipcRenderer.invoke('system:get-hardware-info'), convertPptx: (filePath) => ipcRenderer.invoke('convert-pptx', filePath)
 });

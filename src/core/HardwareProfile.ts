@@ -1,4 +1,5 @@
-import { pptxCacheManager } from '../utils/initPptxViewer';
+import { slideRenderCache } from '../utils/SlideRenderCache';
+import { gpuDiagnosticsEngine, GpuDiagnosticInfo } from './GpuDiagnostics';
 
 export type HardwareTier = 'high' | 'medium' | 'eco';
 
@@ -17,6 +18,7 @@ export interface HardwareInfo {
   isHardwareAccelerated: boolean;
   directXStatus: string;
   tier: HardwareTier;
+  gpuDiagnostics?: GpuDiagnosticInfo;
 }
 
 class HardwareProfileManager {
@@ -80,21 +82,24 @@ class HardwareProfileManager {
       }
     }
 
-    // 2. Browser WebGL GPU Query Fallback
-    if (typeof document !== 'undefined') {
-      try {
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-        if (gl) {
-          const debugInfo = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info');
-          if (debugInfo) {
-            gpuRenderer = (gl as WebGLRenderingContext).getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || gpuRenderer;
-            gpuVendor = (gl as WebGLRenderingContext).getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) || gpuVendor;
-          }
+    // 2. Browser GPU Diagnostics Engine
+    let gpuDiag: GpuDiagnosticInfo | undefined = undefined;
+    try {
+      gpuDiag = await gpuDiagnosticsEngine.runDiagnostics();
+      if (gpuDiag) {
+        if (gpuDiag.gpuDevice && gpuDiag.gpuDevice !== 'Unknown GPU Device') {
+          gpuRenderer = gpuDiag.gpuDevice;
         }
-      } catch (e) {
-        // Ignore canvas context issues
+        if (gpuDiag.gpuVendor && gpuDiag.gpuVendor !== 'Unknown Vendor') {
+          gpuVendor = gpuDiag.gpuVendor;
+        }
+        isHardwareAccelerated = !gpuDiag.isSoftwareRendering && gpuDiag.webglStatus !== 'Disabled / Unsupported';
+        directXStatus = gpuDiag.isSoftwareRendering
+          ? 'Software Rasterization Active'
+          : `${gpuDiag.webglStatus} | ${gpuDiag.hardwareCompositingStatus}`;
       }
+    } catch (e) {
+      console.warn('[HardwareProfile] GPU Diagnostics engine error:', e);
     }
 
     // 3. Device Memory API (Browser fallback)
@@ -122,7 +127,7 @@ class HardwareProfileManager {
 
     // 5. Automatically tune system components according to detected hardware
     const maxCacheFrames = tier === 'eco' ? 8 : tier === 'medium' ? 14 : 20;
-    pptxCacheManager.setMaxCacheSize(maxCacheFrames);
+    slideRenderCache.setMaxCacheSize(maxCacheFrames);
 
     const hardwareInfo: HardwareInfo = {
       platform,
@@ -138,7 +143,8 @@ class HardwareProfileManager {
       gpuVendor,
       isHardwareAccelerated,
       directXStatus,
-      tier
+      tier,
+      gpuDiagnostics: gpuDiag
     };
 
     this.info = hardwareInfo;

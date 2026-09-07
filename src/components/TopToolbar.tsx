@@ -47,8 +47,9 @@ import SimpleWorshipLogo from './SimpleWorshipLogo';
 import AboutModal from './AboutModal';
 import PrintScheduleModal from './PrintScheduleModal';
 import UnsavedChangesModal from './UnsavedChangesModal';
+import SaveScheduleAsModal from './SaveScheduleAsModal';
+import ThemeTemplateModal from './ThemeTemplateModal';
 import { downloadSwsFile, readSwsFile, encodeSwsPackage } from '../services/swsService';
-import BackendStatusBadge from './workspace/BackendStatusBadge';
 import { forceSyncNow } from '../store/sync';
 
 interface TopToolbarProps {
@@ -95,13 +96,14 @@ export default function TopToolbar({
 
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [showProfilesModal, setShowProfilesModal] = useState(false);
+  const [initialCreateInProfilesModal, setInitialCreateInProfilesModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [showSaveAsModal, setShowSaveAsModal] = useState(false);
+  const [showThemeTemplateModal, setShowThemeTemplateModal] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
-  const [isNewDropdownOpen, setIsNewDropdownOpen] = useState(false);
-  const [isOpenDropdownOpen, setIsOpenDropdownOpen] = useState(false);
   const [recentSchedules, setRecentSchedules] = useState<Schedule[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -377,7 +379,7 @@ export default function TopToolbar({
     <header className="bg-gradient-to-b from-[#383c44] via-[#2a2d34] to-[#22242a] border-b border-[#151619] select-none text-gray-200" ref={menuRef}>
       {/* 1. Window Title Bar (SimpleWorship - Clean Modern Branding) */}
       <div className="app-drag-region flex items-center justify-between px-3 py-1 text-xs border-b border-[#18191c] bg-[#1a1c22] text-gray-300 select-none min-w-0">
-        <div className="app-no-drag flex items-center gap-2 min-w-0">
+        <div className="app-no-drag flex items-center gap-2 min-w-0 mr-auto">
           {/* SimpleWorship Modern Vector Logo */}
           <SimpleWorshipLogo size={18} showText={false} />
           <span className="font-semibold text-xs tracking-tight text-white flex items-center gap-1.5 min-w-0">
@@ -386,11 +388,6 @@ export default function TopToolbar({
             <span className="text-gray-500 font-normal shrink-0">•</span>
             <span className="text-gray-400 font-normal truncate max-w-[140px] sm:max-w-[260px]" title={store.activeSchedule?.name || 'Default Service'}>{store.activeSchedule?.name || 'Default Service'}</span>
           </span>
-        </div>
-
-        {/* Center/Right: Live Backend Server Connectivity & Health Badge */}
-        <div className="app-no-drag flex items-center gap-2 shrink-0 ml-auto mr-3">
-          <BackendStatusBadge onOpenDiagnostics={onOpenDiagnostics} />
         </div>
 
         {/* Window controls */}
@@ -454,7 +451,7 @@ export default function TopToolbar({
                   className="relative group"
                   onMouseEnter={() => setActiveSubmenu('new')}
                 >
-                  <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left">
+                  <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer">
                     <span className="flex items-center gap-1.5">
                       <FilePlus size={12} className="text-cyan-400" />
                       <span>New</span>
@@ -462,49 +459,69 @@ export default function TopToolbar({
                     <ChevronRight size={12} className="text-gray-400" />
                   </button>
                   {activeSubmenu === 'new' && (
-                    <div className="absolute left-full top-0 ml-0.5 w-52 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl py-1 text-[11px]">
+                    <div className="absolute left-full top-0 ml-0.5 w-52 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl py-1 text-[11px] z-50">
                       <button 
+                        type="button"
                         onClick={() => {
                           if (onOpenNewSchedule) onOpenNewSchedule();
                           setActiveMenu(null);
+                          setActiveSubmenu(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5 text-cyan-300 font-medium"
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5 text-cyan-300 font-medium cursor-pointer"
                       >
                         <Calendar size={12} />
                         <span>Schedule...</span>
                       </button>
                       <button 
+                        type="button"
                         onClick={() => { 
-                          if (onOpenNewSong) onOpenNewSong();
-                          else store.setResourcesTab('songs'); 
+                          if (onOpenNewSong) {
+                            onOpenNewSong();
+                          } else {
+                            window.dispatchEvent(new CustomEvent('simpleworship:switch-sidebar-tab', { detail: 'songs' }));
+                            workspace.updatePanelCollapsed('schedule', false);
+                          }
                           setActiveMenu(null);
+                          setActiveSubmenu(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5"
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5 cursor-pointer"
                       >
                         <FilePlus size={12} className="text-emerald-400" />
                         <span>Song...</span>
                       </button>
                       <button 
-                        onClick={() => { store.setResourcesTab('scriptures'); setActiveMenu(null); }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5"
+                        type="button"
+                        onClick={() => { 
+                          window.dispatchEvent(new CustomEvent('simpleworship:switch-sidebar-tab', { detail: 'scriptures' }));
+                          workspace.updatePanelCollapsed('schedule', false);
+                          setActiveMenu(null); 
+                          setActiveSubmenu(null);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5 cursor-pointer"
                       >
                         <BookOpen size={12} className="text-amber-400" />
                         <span>Scripture...</span>
                       </button>
                       <button 
+                        type="button"
                         onClick={() => { 
-                          store.setResourcesTab('presentations'); 
                           window.dispatchEvent(new CustomEvent('simpleworship:open-presentation-editor'));
                           setActiveMenu(null); 
+                          setActiveSubmenu(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5"
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5 cursor-pointer"
                       >
                         <Layout size={12} className="text-purple-400" />
                         <span>Presentation...</span>
                       </button>
                       <button 
-                        onClick={() => { store.setResourcesTab('themes'); setActiveMenu(null); }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5"
+                        type="button"
+                        onClick={() => { 
+                          setShowThemeTemplateModal(true); 
+                          setActiveMenu(null); 
+                          setActiveSubmenu(null);
+                        }}
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center gap-1.5 cursor-pointer"
                       >
                         <Sliders size={12} className="text-indigo-400" />
                         <span>Theme Template...</span>
@@ -514,11 +531,12 @@ export default function TopToolbar({
                 </div>
 
                 <button 
+                  type="button"
                   onClick={() => {
                     if (onOpenOpenSchedule) onOpenOpenSchedule();
                     setActiveMenu(null);
                   }}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left"
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
                     <FolderOpen size={12} className="text-cyan-400" />
@@ -532,7 +550,7 @@ export default function TopToolbar({
                   className="relative group"
                   onMouseEnter={() => { setActiveSubmenu('recent'); loadRecentSchedules(); }}
                 >
-                  <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left">
+                  <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer">
                     <span className="flex items-center gap-1.5">
                       <Clock size={12} className="text-gray-400" />
                       <span>Open Recent</span>
@@ -540,19 +558,21 @@ export default function TopToolbar({
                     <ChevronRight size={12} className="text-gray-400" />
                   </button>
                   {activeSubmenu === 'recent' && (
-                    <div className="absolute left-full top-0 ml-0.5 w-60 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl py-1 text-[11px] max-h-64 overflow-y-auto">
+                    <div className="absolute left-full top-0 ml-0.5 w-60 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl py-1 text-[11px] max-h-64 overflow-y-auto z-50">
                       {recentSchedules.length === 0 ? (
                         <div className="px-3 py-1.5 text-gray-500 italic">No recent schedules</div>
                       ) : (
                         recentSchedules.map((s) => (
                           <button
                             key={s.id}
+                            type="button"
                             onClick={() => {
                               store.setActiveSchedule(s);
                               handleNotify(`Loaded "${s.name}"`);
                               setActiveMenu(null);
+                              setActiveSubmenu(null);
                             }}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-gray-300"
+                            className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-gray-300 cursor-pointer"
                           >
                             <span className="truncate max-w-[150px]">{s.name}</span>
                             <span className="text-[10px] text-gray-500 font-mono">{s.items.length} items</span>
@@ -566,8 +586,12 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
 
                 <button 
-                  onClick={handleSaveSchedule}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left"
+                  type="button"
+                  onClick={() => {
+                    handleSaveSchedule();
+                    setActiveMenu(null);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
                     <Save size={12} className="text-blue-400" />
@@ -577,15 +601,23 @@ export default function TopToolbar({
                 </button>
 
                 <button 
-                  onClick={handleSaveScheduleAs}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white"
+                  type="button"
+                  onClick={() => {
+                    setShowSaveAsModal(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
                 >
                   Save Schedule As (.sws)...
                 </button>
 
                 <button 
-                  onClick={handleExportStandalone}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left"
+                  type="button"
+                  onClick={() => {
+                    handleExportStandalone();
+                    setActiveMenu(null);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5 text-cyan-300 font-medium">
                     <Package size={12} />
@@ -595,11 +627,13 @@ export default function TopToolbar({
                 </button>
 
                 <button 
+                  type="button"
                   onClick={() => {
                     store.setActiveSchedule({ id: `sched-${Date.now()}`, name: 'Blank Schedule', createdAt: Date.now(), items: [] });
                     handleNotify('Schedule closed');
+                    setActiveMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white text-gray-400 hover:text-white"
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white text-gray-400 hover:text-white cursor-pointer"
                 >
                   Close Schedule
                 </button>
@@ -607,11 +641,12 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
 
                 <button 
+                  type="button"
                   onClick={() => {
                     setShowPrintModal(true);
                     setActiveMenu(null);
                   }}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left"
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
                     <Printer size={12} className="text-amber-400" />
@@ -623,12 +658,12 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
 
                 <button 
+                  type="button"
                   onClick={() => {
-                    if (confirm('Close active SimpleWorship session?')) {
-                      handleNotify('Session reset');
-                    }
+                    setShowExitModal(true);
+                    setActiveMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-rose-950 hover:text-rose-300 text-rose-400"
+                  className="w-full text-left px-3 py-1.5 hover:bg-rose-950 hover:text-rose-300 text-rose-400 cursor-pointer"
                 >
                   Exit
                 </button>
@@ -693,30 +728,83 @@ export default function TopToolbar({
             </button>
 
             {activeMenu === 'Live' && (
-              <div className="absolute left-0 top-full mt-0.5 w-60 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl z-50 text-[11px] py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100">
-                <button onClick={() => { goLive(); setActiveMenu(null); }} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-semibold text-emerald-400">
+              <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl z-50 text-[11px] py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100">
+                <button 
+                  onClick={() => { 
+                    goLive(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-semibold text-emerald-400 cursor-pointer"
+                >
                   <span>Go Live</span>
                   <span className="text-[10px] font-mono text-emerald-500">F5</span>
                 </button>
-                <button onClick={() => { goLivePrev(); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white">
+                <button 
+                  onClick={() => { 
+                    goLivePrev(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
                   Go Back to Previous Slide
                 </button>
                 <div className="border-t border-[#313540] my-1"></div>
-                <button onClick={() => { toggleLogo(); setActiveMenu(null); }} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white">
-                  <span>Show Logo on Live Output</span>
-                  <span className="text-[10px] font-mono text-cyan-400">F8 / L</span>
+                <button 
+                  onClick={() => { 
+                    toggleLogo(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className={activeControlState?.showLogo ? 'text-cyan-300 font-semibold' : ''}>
+                    Show Logo on Live Output
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {activeControlState?.showLogo && <Check size={12} className="text-cyan-400" />}
+                    <span className="text-[10px] font-mono text-cyan-400">F8 / L</span>
+                  </div>
                 </button>
-                <button onClick={() => { toggleBlack(); setActiveMenu(null); }} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white">
-                  <span>Black on Live Output</span>
-                  <span className="text-[10px] font-mono text-rose-400">F6 / B</span>
+                <button 
+                  onClick={() => { 
+                    toggleBlack(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className={activeControlState?.isBlack ? 'text-rose-400 font-semibold' : ''}>
+                    Black on Live Output
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {activeControlState?.isBlack && <Check size={12} className="text-rose-400" />}
+                    <span className="text-[10px] font-mono text-rose-400">F6 / B</span>
+                  </div>
                 </button>
-                <button onClick={() => { toggleClear(); setActiveMenu(null); }} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white">
-                  <span>Clear Text on Live Output</span>
-                  <span className="text-[10px] font-mono text-amber-400">F7 / C</span>
+                <button 
+                  onClick={() => { 
+                    toggleClear(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className={activeControlState?.isClear ? 'text-amber-300 font-semibold' : ''}>
+                    Clear Text on Live Output
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {activeControlState?.isClear && <Check size={12} className="text-amber-400" />}
+                    <span className="text-[10px] font-mono text-amber-400">F7 / C</span>
+                  </div>
                 </button>
                 <div className="border-t border-[#313540] my-1"></div>
-                <button onClick={() => { toggleMasterLive(); setActiveMenu(null); }} className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-bold">
-                  <span>Show Target Live Output</span>
+                <button 
+                  onClick={() => { 
+                    toggleMasterLive(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-bold cursor-pointer"
+                >
+                  <span className={activeControlState?.isLiveEnabled ? 'text-emerald-400' : ''}>
+                    Show Target Live Output
+                  </span>
                   {activeControlState?.isLiveEnabled && <Check size={13} className="text-cyan-400" />}
                 </button>
               </div>
@@ -736,19 +824,52 @@ export default function TopToolbar({
             </button>
 
             {activeMenu === 'Profiles' && (
-              <div className="absolute left-0 top-full mt-0.5 w-52 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl z-50 text-[11px] py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100">
-                {store.profiles?.map(p => (
-                  <button 
-                    key={p.id}
-                    onClick={() => { store.setActiveProfile(p.id); setActiveMenu(null); }} 
-                    className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white"
-                  >
-                    <span>{p.name}</span>
-                    {store.activeProfileId === p.id && <Check size={12} className="text-cyan-400" />}
-                  </button>
-                ))}
+              <div className="absolute left-0 top-full mt-0.5 w-56 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl z-50 text-[11px] py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  Profiles
+                </div>
+
+                {store.profiles?.map(p => {
+                  const isSelected = store.activeProfileId === p.id;
+                  return (
+                    <button 
+                      key={p.id}
+                      onClick={() => { 
+                        store.setActiveProfile(p.id); 
+                        setActiveMenu(null); 
+                      }} 
+                      className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer ${
+                        isSelected ? 'text-cyan-300 font-semibold bg-[#2a2f3b]' : ''
+                      }`}
+                    >
+                      <span className="truncate">{p.name}</span>
+                      {isSelected && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={() => {
+                    setInitialCreateInProfilesModal(true);
+                    setShowProfilesModal(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] text-gray-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus size={12} className="text-cyan-400" />
+                  <span>New Profile</span>
+                </button>
+
                 <div className="border-t border-[#313540] my-1"></div>
-                <button onClick={() => { setShowProfilesModal(true); setActiveMenu(null); }} className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white text-cyan-300 font-medium">
+
+                <button 
+                  onClick={() => { 
+                    setInitialCreateInProfilesModal(false);
+                    setShowProfilesModal(true); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-cyan-200 text-cyan-400 font-medium cursor-pointer"
+                >
                   Profiles Manager...
                 </button>
               </div>
@@ -785,9 +906,15 @@ export default function TopToolbar({
                       <button
                         onClick={() => {
                           store.setActiveRouterId(router.routerId);
+                          workspace.setPanelVisibility('live', true);
+                          window.dispatchEvent(
+                            new CustomEvent('simpleworship:notify', { 
+                              detail: `Focused Output Panel: R-${index + 1} (${targetGroup?.name || 'Main Display'})` 
+                            })
+                          );
                           setActiveMenu(null);
                         }}
-                        className="flex-1 flex items-center gap-1.5 truncate text-gray-200 hover:text-white"
+                        className="flex-1 flex items-center gap-1.5 truncate text-gray-200 hover:text-white cursor-pointer"
                       >
                         <span className="text-[10px] text-gray-500 font-mono">R-{index + 1}</span>
                         <span className="truncate">{targetGroup?.name || `Target: Display ${index + 1}`}</span>
@@ -799,8 +926,11 @@ export default function TopToolbar({
                           onClick={(e) => {
                             e.stopPropagation();
                             store.removeRouterPanel(router.routerId);
+                            window.dispatchEvent(
+                              new CustomEvent('simpleworship:notify', { detail: `Removed Router Panel R-${index + 1}` })
+                            );
                           }}
-                          className="p-1 text-gray-500 hover:text-rose-400 opacity-0 group-hover/panel:opacity-100 transition-opacity ml-1"
+                          className="p-1 text-gray-500 hover:text-rose-400 opacity-0 group-hover/panel:opacity-100 transition-opacity ml-1 cursor-pointer"
                           title={`Remove Router Panel R-${index + 1}`}
                         >
                           <Trash2 size={11} />
@@ -822,12 +952,15 @@ export default function TopToolbar({
                         visible: true,
                         focused: true
                       });
+                      window.dispatchEvent(
+                        new CustomEvent('simpleworship:notify', { detail: `Added Live Output Panel R-${nextIndex}` })
+                      );
                       setActiveMenu(null);
                     }}
-                    className="flex-1 text-left py-0.5 text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 text-[11px]"
+                    className="flex-1 text-left py-0.5 text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 text-[11px] cursor-pointer"
                   >
                     <Plus size={12} />
-                    <span>+ Add Panel</span>
+                    <span>Add Panel</span>
                   </button>
 
                   {store.routerPanels.length > 1 && (
@@ -836,14 +969,17 @@ export default function TopToolbar({
                         const lastRouter = store.routerPanels[store.routerPanels.length - 1];
                         if (lastRouter) {
                           store.removeRouterPanel(lastRouter.routerId);
+                          window.dispatchEvent(
+                            new CustomEvent('simpleworship:notify', { detail: 'Removed last Router Panel' })
+                          );
                         }
                         setActiveMenu(null);
                       }}
-                      className="py-0.5 px-2 text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 text-[11px]"
+                      className="py-0.5 px-2 text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 text-[11px] cursor-pointer"
                       title="Remove last Router Panel"
                     >
                       <Minus size={12} />
-                      <span>- Remove Panel</span>
+                      <span>Remove Panel</span>
                     </button>
                   )}
                 </div>
@@ -865,7 +1001,7 @@ export default function TopToolbar({
                           workspace.applyPreset(preset.id);
                           setActiveMenu(null);
                         }}
-                        className="flex-1 text-left truncate text-gray-200 hover:text-white"
+                        className="flex-1 text-left truncate text-gray-200 hover:text-white cursor-pointer"
                       >
                         {preset.name}
                       </button>
@@ -879,7 +1015,7 @@ export default function TopToolbar({
                                 workspace.deleteCustomPreset(preset.id);
                               }
                             }}
-                            className="text-gray-500 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover/preset:opacity-100 transition-opacity"
+                            className="text-gray-500 hover:text-rose-400 p-0.5 rounded opacity-0 group-hover/preset:opacity-100 transition-opacity cursor-pointer"
                             title="Delete Custom Preset"
                           >
                             <Trash2 size={11} />
@@ -893,12 +1029,12 @@ export default function TopToolbar({
                 <button
                   onClick={() => {
                     const name = prompt('Save current layout as new preset:');
-                    if (name) {
-                      workspace.saveCustomPreset(name);
+                    if (name && name.trim()) {
+                      workspace.saveCustomPreset(name.trim());
                     }
                     setActiveMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1 text-cyan-400 hover:bg-[#323744] hover:text-cyan-300 font-medium"
+                  className="w-full text-left px-3 py-1 text-cyan-400 hover:bg-[#323744] hover:text-cyan-300 font-medium cursor-pointer"
                 >
                   + Save Layout as Preset...
                 </button>
@@ -913,7 +1049,10 @@ export default function TopToolbar({
                   [
                     { id: 'schedule', label: 'Schedule Panel' },
                     { id: 'live', label: 'Live Output Panel' },
-                    { id: 'multiGroup', label: 'Multi-Group Displays' }
+                    { id: 'multiGroup', label: 'Multi-Group Displays' },
+                    { id: 'stageMonitor', label: 'Stage Monitor / Confidence' },
+                    { id: 'quickNotes', label: 'Quick Notes & Script' },
+                    { id: 'mediaLibrary', label: 'Media Library Panel' },
                   ] as const
                 ).map(({ id, label }) => {
                   const p = workspace.panels[id];
@@ -924,7 +1063,7 @@ export default function TopToolbar({
                     <div key={id} className="flex items-center justify-between px-3 py-0.5 hover:bg-[#323744]">
                       <button
                         onClick={() => workspace.togglePanelVisibility(id)}
-                        className="flex items-center gap-1.5 flex-1 text-left py-0.5 text-gray-200 hover:text-white"
+                        className="flex items-center gap-1.5 flex-1 text-left py-0.5 text-gray-200 hover:text-white cursor-pointer"
                       >
                         <span className="w-3.5 h-3.5 flex items-center justify-center">
                           {isVisible ? <Check size={11} className="text-cyan-400" /> : null}
@@ -934,12 +1073,12 @@ export default function TopToolbar({
 
                       <button
                         onClick={() => workspace.togglePanelDock(id)}
-                        className={`text-[9px] px-1.5 py-0.2 rounded border font-mono transition-colors ${
+                        className={`text-[9px] px-1.5 py-0.2 rounded border font-mono transition-colors cursor-pointer ${
                           isDocked
                             ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
-                            : 'bg-cyan-950 border-cyan-700 text-cyan-300'
+                            : 'bg-cyan-950 border-cyan-700 text-cyan-300 hover:bg-cyan-900'
                         }`}
-                        title={isDocked ? 'Docked (Click to Float)' : 'Floating (Click to Dock)'}
+                        title={isDocked ? 'Docked (Click to Float Window)' : 'Floating Window (Click to Dock)'}
                       >
                         {isDocked ? 'Docked' : 'Float'}
                       </button>
@@ -954,7 +1093,7 @@ export default function TopToolbar({
                     workspace.resetLayout();
                     setActiveMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1 hover:bg-rose-950 hover:text-rose-300 text-rose-400 font-medium"
+                  className="w-full text-left px-3 py-1 hover:bg-rose-950 hover:text-rose-300 text-rose-400 font-medium cursor-pointer"
                 >
                   Reset Workspace Layout to Default
                 </button>
@@ -992,8 +1131,10 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={async () => {
-                    await forceSyncNow();
-                    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Frontend and Backend State Synchronized' }));
+                    const res = await forceSyncNow();
+                    window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
+                      detail: `✓ System Synchronized with Backend & Displays (${res.latency}ms latency)` 
+                    }));
                     setActiveMenu(null);
                   }} 
                   className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-emerald-300"
@@ -1048,160 +1189,32 @@ export default function TopToolbar({
       <div className="flex items-center justify-between px-3 py-1.5 gap-2 bg-gradient-to-b from-[#33373f] to-[#25282f] overflow-x-auto custom-scrollbar min-w-0 flex-nowrap">
         {/* Left Side: Schedule & File Tools */}
         <div className="flex items-center space-x-1 shrink-0 flex-nowrap">
-          {/* NEW BUTTON WITH DROPDOWN */}
-          <div className="relative flex items-center rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] transition-all group">
-            <button
-              onClick={onOpenNewSchedule}
-              className="flex items-center gap-1.5 justify-center p-1.5 text-gray-300 hover:text-white cursor-pointer active:scale-95 transition-transform"
-              title="New Schedule / Song / Slide (Ctrl+N)"
-            >
-              <div className="w-6 h-6 rounded bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-xs relative shrink-0">
-                <Play size={10} className="fill-cyan-400 text-cyan-400 ml-0.5" />
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-[8px] border border-[#222]">
-                  +
-                </div>
+          {/* NEW BUTTON */}
+          <button
+            onClick={onOpenNewSchedule}
+            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            title="New Schedule (Ctrl+N)"
+          >
+            <div className="w-6 h-6 rounded bg-white/10 border border-white/20 flex items-center justify-center text-white shadow-xs relative shrink-0">
+              <Play size={10} className="fill-cyan-400 text-cyan-400 ml-0.5" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-[8px] border border-[#222]">
+                +
               </div>
-              <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">New</span>
-            </button>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsNewDropdownOpen(!isNewDropdownOpen);
-                setIsOpenDropdownOpen(false);
-              }}
-              className="h-full px-1 py-2 text-gray-400 hover:text-white cursor-pointer hover:bg-white/10 rounded-r-md transition-colors"
-              title="New Item Menu Options"
-            >
-              <ChevronDown size={11} />
-            </button>
+            </div>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">New</span>
+          </button>
 
-            {/* NEW ITEM DROPDOWN POPOVER */}
-            {isNewDropdownOpen && (
-              <div 
-                className="absolute left-0 top-full mt-1 w-52 bg-[#21242c] border border-[#3c4252] rounded-md shadow-2xl z-[90] text-xs py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100"
-                onClick={() => setIsNewDropdownOpen(false)}
-              >
-                <button
-                  onClick={onOpenNewSchedule}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left font-semibold text-cyan-300"
-                >
-                  <Calendar size={13} className="text-cyan-400" />
-                  <span>New Schedule...</span>
-                </button>
-                <div className="border-t border-[#313540] my-1"></div>
-                <button
-                  onClick={() => {
-                    if (onOpenNewSong) onOpenNewSong();
-                    else store.setResourcesTab('songs');
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left"
-                >
-                  <FilePlus size={13} className="text-emerald-400" />
-                  <span>New Song...</span>
-                </button>
-                <button
-                  onClick={() => store.setResourcesTab('scriptures')}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left"
-                >
-                  <BookOpen size={13} className="text-amber-400" />
-                  <span>New Scripture Passage...</span>
-                </button>
-                <button
-                  onClick={() => {
-                    store.setResourcesTab('presentations');
-                    window.dispatchEvent(new CustomEvent('simpleworship:open-presentation-editor'));
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left"
-                >
-                  <Layout size={13} className="text-purple-400" />
-                  <span>New Presentation Deck...</span>
-                </button>
-                <button
-                  onClick={() => store.setResourcesTab('themes')}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left"
-                >
-                  <Sliders size={13} className="text-indigo-400" />
-                  <span>New Theme Template...</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* OPEN BUTTON WITH DROPDOWN */}
-          <div className="relative flex items-center rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] transition-all group">
-            <button
-              onClick={onOpenOpenSchedule}
-              className="flex items-center gap-1.5 justify-center p-1.5 text-gray-300 hover:text-white cursor-pointer active:scale-95 transition-transform"
-              title="Open Saved Schedule .sws (Ctrl+O)"
-            >
-              <div className="w-6 h-6 rounded bg-cyan-600/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-xs shrink-0">
-                <FolderOpen size={14} />
-              </div>
-              <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Open</span>
-            </button>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isOpenDropdownOpen) loadRecentSchedules();
-                setIsOpenDropdownOpen(!isOpenDropdownOpen);
-                setIsNewDropdownOpen(false);
-              }}
-              className="h-full px-1 py-2 text-gray-400 hover:text-white cursor-pointer hover:bg-white/10 rounded-r-md transition-colors"
-              title="Open Schedule Options & Recents"
-            >
-              <ChevronDown size={11} />
-            </button>
-
-            {/* OPEN SCHEDULE DROPDOWN POPOVER */}
-            {isOpenDropdownOpen && (
-              <div 
-                className="absolute left-0 top-full mt-1 w-64 bg-[#21242c] border border-[#3c4252] rounded-md shadow-2xl z-[90] text-xs py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100"
-                onClick={() => setIsOpenDropdownOpen(false)}
-              >
-                <button
-                  onClick={onOpenOpenSchedule}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left font-semibold text-cyan-300"
-                >
-                  <span className="flex items-center gap-2">
-                    <FolderOpen size={13} className="text-cyan-400" />
-                    <span>Open Schedule Library...</span>
-                  </span>
-                  <span className="text-[10px] text-gray-400 font-mono">Ctrl+O</span>
-                </button>
-
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#323746] hover:text-white text-left"
-                >
-                  <FilePlus size={13} className="text-emerald-400" />
-                  <span>Import Schedule File (.sws)...</span>
-                </button>
-
-                {recentSchedules.length > 0 && (
-                  <>
-                    <div className="border-t border-[#313540] my-1"></div>
-                    <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                      <Clock size={10} />
-                      Recent Schedules
-                    </div>
-                    {recentSchedules.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          store.setActiveSchedule(s);
-                          handleNotify(`Loaded schedule "${s.name}"!`);
-                        }}
-                        className="w-full flex items-center justify-between px-3 py-1 hover:bg-[#323746] hover:text-white text-left text-gray-300"
-                      >
-                        <span className="truncate max-w-[150px]">{s.name}</span>
-                        <span className="text-[10px] text-gray-500 font-mono">{s.items?.length || 0} items</span>
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          {/* OPEN BUTTON */}
+          <button
+            onClick={onOpenOpenSchedule}
+            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
+            title="Open Saved Schedule (Ctrl+O)"
+          >
+            <div className="w-6 h-6 rounded bg-cyan-600/30 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-xs shrink-0">
+              <FolderOpen size={14} />
+            </div>
+            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Open</span>
+          </button>
 
           {/* SAVE BUTTON */}
           <button
@@ -1229,18 +1242,6 @@ export default function TopToolbar({
               <Film size={14} />
             </div>
             <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Media</span>
-          </button>
-
-          {/* QUICK SEARCH BUTTON */}
-          <button
-            onClick={onOpenQuickSearch}
-            className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
-            title="Quick Search Songs (Ctrl+K)"
-          >
-            <div className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300 shadow-xs shrink-0">
-              <Search size={14} />
-            </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Search</span>
           </button>
 
           {/* REMOTE BUTTON */}
@@ -1387,9 +1388,25 @@ export default function TopToolbar({
           </button>
         </div>
       </div>
-      {showProfilesModal && <ProfilesManagerModal onClose={() => setShowProfilesModal(false)} />}
-      {showAboutModal && <AboutModal onClose={() => setShowAboutModal(false)} />}
+      {showProfilesModal && (
+        <ProfilesManagerModal 
+          initialCreateOpen={initialCreateInProfilesModal}
+          onClose={() => {
+            setShowProfilesModal(false);
+            setInitialCreateInProfilesModal(false);
+          }} 
+        />
+      )}
+      {showAboutModal && (
+        <AboutModal 
+          onClose={() => setShowAboutModal(false)} 
+          onOpenShortcuts={onOpenShortcuts}
+          onOpenDiagnostics={onOpenDiagnostics}
+        />
+      )}
       {showPrintModal && <PrintScheduleModal onClose={() => setShowPrintModal(false)} />}
+      {showSaveAsModal && <SaveScheduleAsModal onClose={() => setShowSaveAsModal(false)} />}
+      {showThemeTemplateModal && <ThemeTemplateModal onClose={() => setShowThemeTemplateModal(false)} />}
       {showExitModal && (
         <UnsavedChangesModal
           isOpen={showExitModal}

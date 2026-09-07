@@ -423,8 +423,19 @@ export const defaultOutputGroups: OutputGroup[] = [
     name: 'Main Presentation Display',
     themeId: 'theme-global',
     role: 'broadcast',
-    displayIds: ['Monitor 2'],
-    targetDisplayId: 'Monitor 2',
+    displayIds: [],
+    targetDisplayId: '',
+    isBlack: false,
+    isClear: false,
+    showLogo: true
+  },
+  {
+    id: 'group-stage',
+    name: 'Confidence / Stage Display',
+    themeId: 'theme-global',
+    role: 'confidence',
+    displayIds: [],
+    targetDisplayId: '',
     isBlack: false,
     isClear: false,
     showLogo: true

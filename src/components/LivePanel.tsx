@@ -104,7 +104,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const isActiveControlGroup = store.activeControlGroupId === groupId;
   const groupTargetDisplays = (activeGroup?.displayIds && activeGroup.displayIds.length > 0)
     ? activeGroup.displayIds
-    : (activeGroup?.targetDisplayId ? [activeGroup.targetDisplayId] : ['Monitor 2']);
+    : (activeGroup?.targetDisplayId ? [activeGroup.targetDisplayId] : []);
 
   const handleMakeActiveOverlay = () => {
     store.setActiveControlGroupId(groupId);
@@ -135,7 +135,8 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   // Resolve theme for this live output group
   const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
   const groupTheme = themesList.find(t => t.id === activeGroup?.themeId);
-  const typeTheme = themesList.find(t => t.type === liveItem?.type);
+  const itemContentType = (liveItem?.type as any) === 'ppt' ? 'presentation' : ((liveItem?.type as any) === 'scripture' ? 'bible' : liveItem?.type);
+  const typeTheme = themesList.find(t => t.type === itemContentType || t.type === liveItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement'));
   
   const baseSong = liveItem?.type === 'song' ? songsList.find(s => s.id === liveItem.contentId) : null;
   const itemTheme = themesList.find(t => t.id === (liveItem?.themeId || baseSong?.themeId));
@@ -160,7 +161,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const liveContentType = PresentationContentResolver.detectContentType(liveItem);
   const mediaFormat = PresentationContentResolver.getMediaFormat(liveItem);
-  const isAudioItem = liveContentType === 'audio';
+  const isAudioItem = Boolean(liveItem && liveContentType === 'audio');
 
   const isExplicitImage = Boolean(
     liveContentType === 'image' ||
@@ -180,9 +181,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const isPresentation = liveContentType === 'pptx' || liveItem?.type === 'presentation' || liveItem?.type === 'ppt';
 
-  const isVideoItem = !isPresentation && !isExplicitImage && !isAudioItem && Boolean(
-    (isLogoMode && logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) ||
-    (!isLogoMode && (
+  const isVideoItem = !isPresentation && !isExplicitImage && !isAudioItem && (
+    (isLogoMode && logoStyles.backgroundType === 'video' && Boolean(logoStyles.backgroundVideoUrl)) ||
+    (Boolean(liveItem) && !isLogoMode && (
       liveContentType === 'video' ||
       liveItem?.type === 'video' ||
       (liveItem?.type === 'media' && (liveItem.data?.type === 'video' || liveItem.data?.type === 'motion' || liveItem.data?.isVideo === true)) ||
@@ -450,7 +451,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             <GripVertical size={13} />
           </div>
 
-          <div className="flex items-center gap-1 min-w-0 shrink overflow-hidden">
+          <div className="flex items-center gap-1.5 min-w-0 shrink overflow-hidden">
             <span className="text-[11px] font-bold text-sky-400 tracking-wider uppercase truncate max-w-[100px] min-[420px]:max-w-[140px] sm:max-w-[180px]" title={activeGroup?.name || 'Output'}>
               {activeGroup?.name || 'Output'}
             </span>
@@ -462,38 +463,18 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 </span>
               </>
             )}
+            {activeControlState?.isLiveEnabled ? (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shrink-0 flex items-center gap-1 hidden min-[480px]:flex">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 flex items-center gap-1 hidden min-[480px]:flex" title="Live button is OFF. Content is staged for preview.">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                Live Off
+              </span>
+            )}
           </div>
-
-          {/* Assigned Target Monitor Tag */}
-          <span 
-            className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#202534] text-cyan-300 border border-cyan-800/40 shrink-0 truncate max-w-[80px]"
-            title={`Assigned Target Monitor(s): ${groupTargetDisplays.join(', ')}`}
-          >
-            {groupTargetDisplays.join(', ')}
-          </span>
-
-          {/* Active Overlay Status Badge */}
-          {isActiveControlGroup ? (
-            <span 
-              className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0 flex items-center gap-1 shadow-xs whitespace-nowrap"
-              title="This panel is currently ACTIVE and overlays on top for its target monitor(s)"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <span className="hidden min-[480px]:inline">ACTIVE </span>OVERLAY
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMakeActiveOverlay();
-              }}
-              className="text-[9px] font-medium tracking-wider px-1.5 py-0.5 rounded bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white border border-gray-700 transition-colors shrink-0 cursor-pointer whitespace-nowrap"
-              title="Click to activate this route as top overlay on its target monitor(s)"
-            >
-              SET ACTIVE
-            </button>
-          )}
         </div>
 
         <div 
@@ -722,9 +703,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
               {slides.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
                   <Tv size={28} className="text-gray-600 mb-2 opacity-60" />
-                  <span className="text-xs font-semibold text-gray-400">No Content Live in this Route</span>
+                  <span className="text-xs font-semibold text-gray-400">No Content in this Route</span>
                   <p className="text-[11px] text-gray-500 mt-1 max-w-xs">
-                    Double click any item from Schedule or click 'Go Live' to project to this display
+                    Select or double click any item from Schedule, Scriptures, or Songs to stage or present
                   </p>
                 </div>
               ) : (
@@ -758,9 +739,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 {slides.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
                     <Tv size={28} className="text-gray-600 mb-2 opacity-60" />
-                    <span className="text-xs font-semibold text-gray-400">No Content Live in this Route</span>
+                    <span className="text-xs font-semibold text-gray-400">No Content in this Route</span>
                     <p className="text-[11px] text-gray-500 mt-1 max-w-xs">
-                      Double click any item from Schedule or click 'Go Live' to project to this display
+                      Select or double click any item from Schedule, Scriptures, or Songs to stage or present
                     </p>
                   </div>
                 ) : (
@@ -798,13 +779,19 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                     <span className={`w-2 h-2 rounded-full ${
                       activeControlState?.isBlack || activeControlState?.isClear 
                         ? 'bg-amber-500 animate-pulse' 
-                        : (currentSlide ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-gray-500')
+                        : (activeControlState?.isLiveEnabled && currentSlide 
+                            ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]' 
+                            : (currentSlide ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]' : 'bg-gray-500'))
                     }`} />
                     <span className="text-gray-200 font-semibold flex items-center gap-1.5">
                       {activeGroup?.name || 'Live Output Monitor'}
                       {currentSlide && (
-                        <span className="text-emerald-400 text-[10px] font-mono font-normal lowercase bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded">
-                          live • slide {currentSlideIndex + 1}/{slides.length}
+                        <span className={`text-[10px] font-mono font-normal lowercase border px-1.5 py-0.5 rounded ${
+                          activeControlState?.isLiveEnabled
+                            ? 'text-emerald-400 bg-emerald-950/80 border-emerald-800/60 font-semibold'
+                            : 'text-amber-300 bg-amber-950/80 border-amber-800/60'
+                        }`}>
+                          {activeControlState?.isLiveEnabled ? 'live' : 'preview'} • slide {currentSlideIndex + 1}/{slides.length}
                         </span>
                       )}
                     </span>
@@ -819,6 +806,24 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 <div className="flex-1 w-full min-h-0 bg-[#08090b] rounded-lg border border-[#222530] overflow-hidden relative flex items-center justify-center shadow-inner">
                   <MonitorPreviewCanvas groupId={groupId} showResolutionTag={false} />
                 </div>
+                
+                {/* Speaker Notes & Metadata Section */}
+                {currentSlide && (currentSlide.notes || currentSlide.transition) && (
+                  <div className="mt-2 shrink-0 max-h-32 overflow-y-auto custom-scrollbar bg-[#181920] rounded border border-[#252834] p-2 text-xs">
+                    {currentSlide.transition && (
+                      <div className="text-[10px] text-sky-400 font-mono mb-1.5 flex items-center gap-1">
+                        <span className="font-bold uppercase">Transition:</span> 
+                        {currentSlide.transition.type} {currentSlide.transition.durationMs ? `(${currentSlide.transition.durationMs}ms)` : ''}
+                      </div>
+                    )}
+                    {currentSlide.notes && (
+                      <div>
+                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Speaker Notes</div>
+                        <div className="text-gray-300 whitespace-pre-wrap leading-relaxed">{currentSlide.notes}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </Panel>
           </PanelGroup>

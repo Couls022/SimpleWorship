@@ -244,7 +244,7 @@ export const useStore = create<AppState>((set, get) => ({
   profiles: getStoredProfiles(),
   activeProfileId: getStoredActiveProfile(),
   addProfile: (profile) => set((state) => {
-    const next = [...state.profiles, profile];
+    const next = [...state.profiles, { ...profile, createdAt: profile.createdAt || Date.now(), lastUsedAt: Date.now() }];
     localStorage.setItem('simpleworship_profiles_v1', JSON.stringify(next));
     return { profiles: next };
   }),
@@ -255,15 +255,27 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   removeProfile: (id) => set((state) => {
     const next = state.profiles.filter(p => p.id !== id);
-    const nextActive = state.activeProfileId === id ? 'default' : state.activeProfileId;
+    const nextActive = state.activeProfileId === id ? (next[0]?.id || 'default') : state.activeProfileId;
     localStorage.setItem('simpleworship_profiles_v1', JSON.stringify(next));
     localStorage.setItem('simpleworship_active_profile_v1', nextActive);
     return { profiles: next, activeProfileId: nextActive };
   }),
-  setActiveProfile: (id) => set((state) => {
+  setActiveProfile: (id) => {
+    const state = get();
+    const target = state.profiles.find(p => p.id === id);
+    const updatedProfiles = state.profiles.map(p => p.id === id ? { ...p, lastUsedAt: Date.now() } : p);
+    
     localStorage.setItem('simpleworship_active_profile_v1', id);
-    return { activeProfileId: id };
-  }),
+    localStorage.setItem('simpleworship_profiles_v1', JSON.stringify(updatedProfiles));
+    
+    set({ activeProfileId: id, profiles: updatedProfiles });
+    
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Active Profile Switched: "${target?.name || id}" (All databases connected)` 
+      })
+    );
+  },
 
   shortcutSettings: getStoredShortcuts(),
   updateShortcutSettings: (updates) => {
@@ -380,6 +392,13 @@ export const useStore = create<AppState>((set, get) => ({
       active: true,
       visible: true,
       focused: true
+    },
+    {
+      routerId: 'router-2',
+      targetOutputGroupId: 'group-stage',
+      active: false,
+      visible: true,
+      focused: false
     }
   ],
   activeRouterId: 'router-1',
@@ -407,14 +426,14 @@ export const useStore = create<AppState>((set, get) => ({
           displayIds: [],
           isBlack: false,
           isClear: false,
-          showLogo: true
+          showLogo: false
         };
         newGroups.push(newGroup);
         newGroupStates[createdGroupId] = {
           ...defaultState,
-          activeItemId: count === 2 ? 'item-gen-1' : null,
+          activeItemId: null,
           activeSlideIndex: 0,
-          isLiveEnabled: true,
+          isLiveEnabled: false,
           timestamp: Date.now()
         };
         dbApi.saveOutputGroup(newGroup);
@@ -549,11 +568,19 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
   addOutputGroup: (group) => {
-    set((state) => ({ 
-      outputGroups: [...state.outputGroups, group],
-      groupStates: { ...state.groupStates, [group.id]: { ...defaultState, timestamp: Date.now() } }
-    }));
-    dbApi.saveOutputGroup(group);
+    set((state) => {
+      const newGroups = [...state.outputGroups, group];
+      const newStates = { ...state.groupStates, [group.id]: { ...defaultState, timestamp: Date.now() } };
+      dbApi.saveOutputGroup(group);
+      
+      // Request display manager to sync up newly created panel windows
+      DisplayManager.syncPhysicalDisplays(newGroups, newStates, state.activeControlGroupId).catch(() => {});
+      
+      return { 
+        outputGroups: newGroups,
+        groupStates: newStates
+      };
+    });
   },
   updateOutputGroup: (id, updates) => {
     set((state) => {
@@ -642,6 +669,9 @@ export const useStore = create<AppState>((set, get) => ({
       newActive = current.length > 0 ? current[0].id : null;
     }
     
+    // Explicitly sync physical displays with the display manager to account for new or removed dynamic panels
+    DisplayManager.syncPhysicalDisplays(current, newGroupStates, newActive).catch(() => {});
+    
     set({ 
       outputGroups: current, 
       groupStates: newGroupStates, 
@@ -662,11 +692,17 @@ export const useStore = create<AppState>((set, get) => ({
     if (newActive === id) {
       newActive = newGroups.length > 0 ? newGroups[0].id : null;
     }
+    
+    // Explicitly ask display manager to close window
+    DisplayManager.closeProjector(id).catch(() => {});
+    DisplayManager.syncPhysicalDisplays(newGroups, newStates, newActive).catch(() => {});
+
     return { outputGroups: newGroups, groupStates: newStates, activeControlGroupId: newActive };
   }),
   
   groupStates: {
     'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-stage': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setGroupState: (groupId, newState) => {
     set((state) => {
@@ -871,7 +907,14 @@ export const useStore = create<AppState>((set, get) => ({
       slideIdxToUse = groupStates[activeControlGroupId].activeSlideIndex || 0;
     }
 
-    if (!itemIdToUse) return;
+    if (!itemIdToUse) {
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:notify', { 
+          detail: 'Please select a song or slide in Schedule or Library to Go Live' 
+        })
+      );
+      return;
+    }
 
     const itemToRoute = activeSchedule?.items?.find(i => i.id === itemIdToUse);
     if (itemToRoute) {
@@ -997,6 +1040,11 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
     get().setGroupState(activeControlGroupId, { activeSlideIndex: prevIndex });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Previous Slide: #${prevIndex + 1}` 
+      })
+    );
   },
 
   goNextScheduleItem: () => {
@@ -1055,6 +1103,11 @@ export const useStore = create<AppState>((set, get) => ({
     targetGroups.forEach(gId => {
       get().setGroupState(gId, { isBlack: nextBlack, showLogo: false });
     });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: nextBlack ? 'Blackout Enabled on Live Output (F6 / B)' : 'Blackout Disabled' 
+      })
+    );
   },
   
   toggleClear: () => {
@@ -1067,6 +1120,11 @@ export const useStore = create<AppState>((set, get) => ({
     targetGroups.forEach(gId => {
       get().setGroupState(gId, { isClear: nextClear });
     });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: nextClear ? 'Clear Text Enabled on Live Output (F7 / C)' : 'Text Restored on Live Output' 
+      })
+    );
   },
 
   toggleLogo: () => {
@@ -1079,6 +1137,11 @@ export const useStore = create<AppState>((set, get) => ({
     targetGroups.forEach(gId => {
       get().setGroupState(gId, { showLogo: nextLogo, isBlack: false });
     });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: nextLogo ? 'Logo Display Enabled on Live Output (F8 / L)' : 'Logo Display Disabled' 
+      })
+    );
   },
 
   toggleMasterLive: () => {
@@ -1329,6 +1392,7 @@ export const useStore = create<AppState>((set, get) => ({
     // Always reset/initialize group states so that Live is OFF (isLiveEnabled: false)
     const initialStates = {
       'group-congregation': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
+      'group-stage': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
     };
     set({ 
       groupStates: initialStates, 
@@ -1382,7 +1446,16 @@ export const useStore = create<AppState>((set, get) => ({
 
       let themeFound = false;
       const updatedThemes: Theme[] = state.themesList.map(t => {
-        if (t.type === targetType || (scope === 'logo' && (t.type === 'logo' || t.id === 'theme-logo'))) {
+        const isMatch = (
+          t.type === targetType ||
+          (scope === 'logo' && (t.type === 'logo' || t.id === 'theme-logo')) ||
+          (scope === 'scriptures' && (t.type === 'bible' || t.id === 'theme-scripture')) ||
+          (scope === 'songs' && (t.type === 'song' || t.id === 'theme-song')) ||
+          (scope === 'presentations' && (t.type === 'presentation' || (t.type as any) === 'ppt' || t.id === 'theme-presentation')) ||
+          (scope === 'announcements' && (t.type === 'announcement' || t.id === 'theme-announcement'))
+        );
+
+        if (isMatch) {
           themeFound = true;
           return {
             ...t,
@@ -1391,6 +1464,7 @@ export const useStore = create<AppState>((set, get) => ({
               backgroundType: isVideo ? 'video' : 'image',
               backgroundImageUrl: !isVideo ? assetUrl : undefined,
               backgroundVideoUrl: isVideo ? assetUrl : undefined,
+              logoUrl: (scope === 'logo' && !isVideo) ? assetUrl : t.styles?.logoUrl,
             }
           };
         }
@@ -1399,14 +1473,15 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (!themeFound) {
         const newTheme: Theme = {
-          id: `theme-${targetType}`,
+          id: scope === 'logo' ? 'theme-logo' : (scope === 'scriptures' ? 'theme-scripture' : (scope === 'songs' ? 'theme-song' : (scope === 'presentations' ? 'theme-presentation' : `theme-${targetType}`))),
           name: `Default ${scope.charAt(0).toUpperCase() + scope.slice(1)} Theme`,
           type: targetType as any,
           styles: {
             backgroundType: isVideo ? 'video' : 'image',
             backgroundImageUrl: !isVideo ? assetUrl : undefined,
             backgroundVideoUrl: isVideo ? assetUrl : undefined,
-            showLogo: false,
+            logoUrl: scope === 'logo' && !isVideo ? assetUrl : undefined,
+            showLogo: scope === 'logo',
           }
         };
         updatedThemes.push(newTheme);
@@ -1453,9 +1528,22 @@ export const useStore = create<AppState>((set, get) => ({
         }
       });
 
+      // Broadcast to external projector displays and stage views
       broadcastStateChange({
         type: 'GROUP_STATES_UPDATE',
-        data: updatedGroupStates,
+        data: { groupStates: updatedGroupStates },
+      });
+
+      if (updatedSchedule) {
+        broadcastStateChange({
+          type: 'SCHEDULE_UPDATE',
+          data: { activeSchedule: updatedSchedule },
+        });
+      }
+
+      broadcastStateChange({
+        type: 'SYSTEM_UPDATE',
+        data: { themesList: updatedThemes },
       });
 
       return {

@@ -3,38 +3,30 @@ import React, { useEffect, useRef, useState, useMemo, Component, ErrorInfo, Reac
 import { SlideCanvas, useViewerBuildingBlocks, PowerPointViewerHandle } from 'pptx-react-viewer';
 import 'pptx-react-viewer/styles';
 import { toValidPptxUint8Array, isValidPptxBinary } from '../utils/pptxValidator';
-import { useOffscreenPptxCache } from '../utils/initPptxViewer';
 
 interface PptxRenderOverlayProps {
   fileBytes?: Uint8Array | ArrayBuffer | any;
   contentId?: string;
   activeSlideIndex: number;
-  fallbackContent?: ReactNode;
 }
 
 interface ErrorBoundaryProps {
   children: ReactNode;
-  fallback?: ReactNode;
 }
-
 interface ErrorBoundaryState {
   hasError: boolean;
 }
-
 class PptxErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   override state: ErrorBoundaryState = { hasError: false };
-
   static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
   }
-
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.warn('[PptxRenderOverlay] Caught rendering error gracefully:', error, errorInfo);
   }
-
   override render() {
     if (this.state.hasError) {
-      return this.props.fallback || null;
+      return null;
     }
     return this.props.children;
   }
@@ -43,23 +35,13 @@ class PptxErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
 interface PptxViewerInnerProps {
   bytes: Uint8Array;
   activeSlideIndex: number;
-  fallbackContent?: ReactNode;
+  contentId?: string;
 }
 
-const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideIndex, fallbackContent }) => {
+const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex }) => {
   const handleRef = useRef<PowerPointViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
-
-  // Unique key for off-screen canvas caching
-  const bytesKey = useMemo(() => {
-    if (!bytes) return '';
-    const len = bytes.length;
-    const sample = bytes.slice(0, 32).join('_');
-    return `pptx_bytes_${len}_${sample}`;
-  }, [bytes]);
-
-  const { cachedFrame, registerRenderedFrame } = useOffscreenPptxCache(bytesKey, activeSlideIndex);
 
   const blocks = useViewerBuildingBlocks({
     content: bytes,
@@ -70,11 +52,11 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let animationFrameId: number | null = null;
 
     const getUnscaledDimensions = () => {
       let width = el.clientWidth || el.offsetWidth;
       let height = el.clientHeight || el.offsetHeight;
-
       if (!width || !height) {
         let parent = el.parentElement;
         while (parent && (!width || !height)) {
@@ -83,31 +65,31 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
           parent = parent.parentElement;
         }
       }
-
-      return {
-        width: width > 0 ? width : 1920,
-        height: height > 0 ? height : 1080
-      };
+      return { width: width > 0 ? width : 1920, height: height > 0 ? height : 1080 };
     };
 
     const updateSize = () => {
-      const dims = getUnscaledDimensions();
-      if (dims.width > 0 && dims.height > 0) {
-        setContainerSize(dims);
-      }
+      if (animationFrameId !== null) return;
+      animationFrameId = requestAnimationFrame(() => {
+        animationFrameId = null;
+        if (!el) return;
+        const dims = getUnscaledDimensions();
+        if (dims.width > 0 && dims.height > 0) {
+          setContainerSize(prev => (prev.width === dims.width && prev.height === dims.height ? prev : dims));
+        }
+      });
     };
 
-    const ro = new ResizeObserver(() => {
-      const dims = getUnscaledDimensions();
-      if (dims.width > 0 && dims.height > 0) {
-        setContainerSize(dims);
-      }
-    });
-
+    const ro = new ResizeObserver(updateSize);
     ro.observe(el);
     updateSize();
 
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -120,108 +102,111 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = ({ bytes, activeSlideInd
     }
   }, [activeSlideIndex, blocks.loading]);
 
-  // Capture rendered canvas into off-screen buffer
-  useEffect(() => {
-    if (!blocks.loading && containerRef.current) {
-      const timer = setTimeout(() => {
-        if (containerRef.current) {
-          registerRenderedFrame(containerRef.current);
-        }
-      }, 80);
-      return () => clearTimeout(timer);
-    }
-  }, [blocks.loading, activeSlideIndex, registerRenderedFrame]);
-
   const canvasWidth = blocks.canvasProps?.canvasSize?.width || 960;
   const canvasHeight = blocks.canvasProps?.canvasSize?.height || 540;
 
-  const fitScale = useMemo(() => {
-    const targetW = containerSize.width || 1920;
-    const targetH = containerSize.height || 1080;
-    const scaleX = targetW / canvasWidth;
-    const scaleY = targetH / canvasHeight;
-    const scale = Math.min(scaleX, scaleY);
-    return scale > 0 ? scale : 1;
+  const targetScale = useMemo(() => {
+    const targetW = containerSize.width;
+    const targetH = containerSize.height;
+    if (!targetW || !targetH || !canvasWidth || !canvasHeight) return 1;
+    const scale = Math.min(targetW / canvasWidth, targetH / canvasHeight);
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
   }, [containerSize.width, containerSize.height, canvasWidth, canvasHeight]);
 
   const customZoom = useMemo(() => {
     if (!blocks.canvasProps?.zoom) return undefined;
-    return {
-      ...blocks.canvasProps.zoom,
-      editorScale: fitScale,
-    };
-  }, [blocks.canvasProps?.zoom, fitScale]);
+    return { ...blocks.canvasProps.zoom, editorScale: 1 };
+  }, [blocks.canvasProps?.zoom]);
 
-  // If loading or switching slides, check off-screen canvas buffer first
-  if (blocks.loading) {
-    if (cachedFrame?.objectUrl) {
-      return (
-        <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden select-none">
-          <img src={cachedFrame.objectUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
-        </div>
-      );
-    }
-
-    if (fallbackContent) {
-      return (
-        <div className="w-full h-full relative overflow-hidden">
-          {fallbackContent}
-        </div>
-      );
-    }
-
+  if (blocks.loading || blocks.error || !blocks.canvasProps) {
     return (
-      <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs">
+      <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs select-none">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-          <span>Synchronizing Presentation Slide...</span>
+          <span>Rendering Presentation Slide...</span>
         </div>
       </div>
     );
   }
 
-  if (blocks.error || !blocks.canvasProps) {
-    if (cachedFrame?.objectUrl) {
-      return (
-        <div className="w-full h-full bg-black flex items-center justify-center relative overflow-hidden select-none">
-          <img src={cachedFrame.objectUrl} alt="" className="w-full h-full object-contain pointer-events-none" />
-        </div>
-      );
-    }
-    return fallbackContent ? <>{fallbackContent}</> : null;
-  }
+  const currentSlide = (blocks as any).slides?.[activeSlideIndex] || blocks.canvasProps?.activeSlide;
 
   return (
     <div 
-      ref={containerRef}
-      data-pptx-fullscreen-stage="true"
+      ref={containerRef} 
       className="w-full h-full bg-black overflow-hidden relative flex items-center justify-center select-none"
+      style={{
+        contain: 'strict',
+        transform: 'translateZ(0)',
+      }}
     >
-      <SlideCanvas
-        {...blocks.canvasProps}
-        zoom={customZoom || blocks.canvasProps.zoom}
-        showRulers={false}
-        showGrid={false}
-        canEdit={false}
-      />
+      <div 
+        className="flex items-center justify-center pointer-events-none select-none origin-center shrink-0 overflow-hidden"
+        style={{
+          width: `${canvasWidth}px`,
+          height: `${canvasHeight}px`,
+          transform: `scale(${targetScale}) translateZ(0)`,
+          transformOrigin: 'center center',
+          willChange: 'transform',
+          contain: 'layout size style paint',
+        }}
+      >
+        <SlideCanvas 
+          {...blocks.canvasProps} 
+          {...(currentSlide ? { activeSlide: currentSlide } : {})}
+          activeSlideIndex={activeSlideIndex}
+          zoom={customZoom || blocks.canvasProps.zoom} 
+          showRulers={false} 
+          showGrid={false} 
+          canEdit={false} 
+        />
+      </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  return prevProps.activeSlideIndex === nextProps.activeSlideIndex && prevProps.bytes === nextProps.bytes;
+});
 
 const pptxBytesCache = new Map<string, Uint8Array>();
+const rawBytesCache = new WeakMap<object, Uint8Array>();
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = ({ fileBytes, contentId, activeSlideIndex, fallbackContent }) => {
-  const [localBytes, setLocalBytes] = useState<Uint8Array | null>(null);
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex }) => {
+  const [localBytes, setLocalBytes] = useState<Uint8Array | null>(() => {
+    if (contentId && pptxBytesCache.has(contentId)) {
+      return pptxBytesCache.get(contentId)!;
+    }
+    if (fileBytes && typeof fileBytes === 'object' && rawBytesCache.has(fileBytes)) {
+      return rawBytesCache.get(fileBytes)!;
+    }
+    if (fileBytes && isValidPptxBinary(fileBytes)) {
+      const valid = toValidPptxUint8Array(fileBytes);
+      rawBytesCache.set(fileBytes, valid);
+      if (contentId) pptxBytesCache.set(contentId, valid);
+      return valid;
+    }
+    return null;
+  });
 
   useEffect(() => {
     let isMounted = true;
-    if (fileBytes && isValidPptxBinary(fileBytes)) {
-      setLocalBytes(toValidPptxUint8Array(fileBytes));
-    } else if (contentId) {
-      if (pptxBytesCache.has(contentId)) {
-        setLocalBytes(pptxBytesCache.get(contentId)!);
+    if (contentId && pptxBytesCache.has(contentId)) {
+      setLocalBytes(pptxBytesCache.get(contentId)!);
+      return;
+    }
+    if (fileBytes) {
+      if (typeof fileBytes === 'object' && rawBytesCache.has(fileBytes)) {
+        setLocalBytes(rawBytesCache.get(fileBytes)!);
         return;
       }
+      if (isValidPptxBinary(fileBytes)) {
+        const valid = toValidPptxUint8Array(fileBytes);
+        if (typeof fileBytes === 'object') rawBytesCache.set(fileBytes, valid);
+        if (contentId) pptxBytesCache.set(contentId, valid);
+        setLocalBytes(valid);
+        return;
+      }
+    }
+    if (contentId) {
       import('../db').then(({ getDB }) => {
         getDB().then(db => db.get('assets', contentId)).then(asset => {
           if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
@@ -235,13 +220,17 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = ({ fileBytes,
     return () => { isMounted = false; };
   }, [fileBytes, contentId]);
 
-  if (!localBytes) {
-    return fallbackContent ? <>{fallbackContent}</> : null;
-  }
+  if (!localBytes) return null;
 
   return (
-    <PptxErrorBoundary fallback={fallbackContent}>
-      <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} fallbackContent={fallbackContent} />
+    <PptxErrorBoundary>
+      <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} contentId={contentId} />
     </PptxErrorBoundary>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.activeSlideIndex === nextProps.activeSlideIndex &&
+    prevProps.contentId === nextProps.contentId &&
+    prevProps.fileBytes === nextProps.fileBytes
+  );
+});

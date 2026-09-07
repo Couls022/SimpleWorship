@@ -277,6 +277,11 @@ export class PresentationCore {
           headerBarColor: s.headerBarColor,
           isTitleSlide: s.isTitleSlide,
           elements: s.elements,
+          objects: s.objects,
+          aspectRatio: s.aspectRatio,
+          aspectRatioLabel: s.aspectRatioLabel,
+          widthEmu: s.widthEmu,
+          heightEmu: s.heightEmu,
           transition: s.transition,
         }));
       } else {

@@ -515,11 +515,15 @@ html.light.high-contrast .text-gray-400 {
   overflow: hidden !important;
 }
 
-[data-pptx-fullscreen-stage] > div {
-  margin: auto !important;
+[data-pptx-thumbnail-stage] {
+  width: 100% !important;
+  height: 100% !important;
+  background: black !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
 }
 
 .pptx-presenter-override .flex.h-12.w-full.shrink-0,

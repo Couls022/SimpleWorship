@@ -205,7 +205,8 @@ export default function MonitorPreviewCanvas({
 
   const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
   const groupTheme = themesList.find(t => t.id === group?.themeId);
-  const typeTheme = themesList.find(t => t.type === activeItem?.type);
+  const itemContentType = (activeItem?.type as any) === 'ppt' ? 'presentation' : ((activeItem?.type as any) === 'scripture' ? 'bible' : activeItem?.type);
+  const typeTheme = themesList.find(t => t.type === itemContentType || t.type === activeItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement'));
 
   const baseSong = activeItem?.type === 'song' ? songsList.find(s => s.id === activeItem.contentId) : null;
   const itemTheme = themesList.find(t => t.id === (activeItem?.themeId || baseSong?.themeId));
@@ -321,7 +322,11 @@ export default function MonitorPreviewCanvas({
       (activeItem?.type === 'media' && (activeItem.data?.type === 'video' || activeItem.data?.type === 'motion'))
     );
 
-    if (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') {
+    if (!activeItem) {
+      isVideo = false;
+      videoSrc = '';
+      backgroundUrl = '';
+    } else if (contentType === 'pptx' && !slideBgUrl) {
       isVideo = false;
       videoSrc = '';
       backgroundUrl = '';
@@ -448,7 +453,7 @@ export default function MonitorPreviewCanvas({
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const now = Date.now();
-    if (now - lastVideoTimeUpdateRef.current >= 1000) {
+    if (now - lastVideoTimeUpdateRef.current >= 200) {
       lastVideoTimeUpdateRef.current = now;
       if (store.setGroupState) {
         store.setGroupState(groupId, {
@@ -459,12 +464,23 @@ export default function MonitorPreviewCanvas({
     }
   };
 
+  const handleLoadedMetadata = () => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    if (store.setGroupState) {
+      store.setGroupState(groupId, {
+        videoCurrentTime: videoEl.currentTime,
+        videoDuration: videoEl.duration || 0,
+      });
+    }
+  };
+
   const lastAudioTimeUpdateRef = useRef<number>(0);
   const handleAudioTimeUpdate = () => {
     const audioEl = audioRef.current;
     if (!audioEl) return;
     const now = Date.now();
-    if (now - lastAudioTimeUpdateRef.current >= 1000) {
+    if (now - lastAudioTimeUpdateRef.current >= 200) {
       lastAudioTimeUpdateRef.current = now;
       if (store.setGroupState) {
         store.setGroupState(groupId, {
@@ -472,6 +488,17 @@ export default function MonitorPreviewCanvas({
           videoDuration: audioEl.duration || 0,
         });
       }
+    }
+  };
+
+  const handleAudioLoadedMetadata = () => {
+    const audioEl = audioRef.current;
+    if (!audioEl) return;
+    if (store.setGroupState) {
+      store.setGroupState(groupId, {
+        videoCurrentTime: audioEl.currentTime,
+        videoDuration: audioEl.duration || 0,
+      });
     }
   };
 
@@ -547,7 +574,12 @@ export default function MonitorPreviewCanvas({
                 playsInline
                 preload="auto"
                 onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onEnded={() => {
+                  if (!(presentationState.isVideoLooping ?? true)) {
+                    store.setGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
+                  }
+                }}
                 className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
                 style={{ 
                   transform: 'translateZ(0)',
@@ -658,7 +690,12 @@ export default function MonitorPreviewCanvas({
                 loop={presentationState.isVideoLooping ?? true}
                 muted={presentationState.isVideoMuted ?? false}
                 onTimeUpdate={handleAudioTimeUpdate}
-                onLoadedMetadata={handleAudioTimeUpdate}
+                onLoadedMetadata={handleAudioLoadedMetadata}
+                onEnded={() => {
+                  if (!(presentationState.isVideoLooping ?? true)) {
+                    store.setGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
+                  }
+                }}
               />
               <div className="p-8 rounded-2xl bg-[#0e111a]/95 backdrop-blur-md border border-cyan-500/20 flex flex-col items-center w-full max-w-xl shadow-2xl relative overflow-hidden">
                 {/* Decorative pulsing animated radar rings */}
@@ -738,7 +775,7 @@ export default function MonitorPreviewCanvas({
 
           {/* Presentation (PowerPoint / Deck) Slide Layer */}
           <AnimatePresence>
-            {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && (
+            {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && !activeItem?.data?.isNativeRasterized && (
               <motion.div 
                 key={`preview-pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}`}
                 initial={motionConfig.initial}
@@ -751,15 +788,6 @@ export default function MonitorPreviewCanvas({
                     fileBytes={activeItem?.data?.fileBytes}
                     contentId={activeItem?.contentId}
                     activeSlideIndex={presentationState.activeSlideIndex || 0}
-                    fallbackContent={
-                      <PresentationSlideView 
-                        slide={currentSlide}
-                        slideIndex={presentationState.activeSlideIndex || 0}
-                        totalSlides={slides.length}
-                        mode="full"
-                        themeStyles={resolvedStyles}
-                      />
-                    }
                   />
               </motion.div>
             )}
@@ -1056,19 +1084,6 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Clear State - Text is already hidden above, keep clean display */}
-
-          {/* Live Off Content Hider (z-15) */}
-          <AnimatePresence>
-            {isLiveOff && !presentationState.isBlack && !presentationState.showLogo && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="absolute inset-0 z-15 bg-black" 
-              />
-            )}
-          </AnimatePresence>
 
           {/* Master Blackout Overlay (z-50) */}
           <AnimatePresence>

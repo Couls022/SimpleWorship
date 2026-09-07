@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import RouteConfigModal from '../RouteConfigModal';
-import BackendStatusBadge from './BackendStatusBadge';
 
 interface BottomModuleBarProps {
   onConfigureRoute?: (groupId: string) => void;
@@ -225,16 +224,6 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
           <Settings size={12} />
           <span>Routes</span>
         </button>
-
-        <div className="w-px h-3.5 bg-[#222634]" />
-
-        {/* Live Backend Connection Indicator */}
-        <BackendStatusBadge 
-          compact={true} 
-          onOpenDiagnostics={() => {
-            window.dispatchEvent(new CustomEvent('simpleworship:open-diagnostics'));
-          }} 
-        />
 
         <div className="w-px h-3.5 bg-[#222634]" />
 

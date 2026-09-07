@@ -53,7 +53,9 @@ import {
   Timer,
   PlayCircle,
   Check,
-  ChevronDown
+  ChevronDown,
+  List,
+  ListOrdered
 } from 'lucide-react';
 import { Asset, Slide, SlideObject, ShapeType, SlideTransitionType, AnimationType, AnimationCategory, ObjectAnimation } from '../types';
 import { savePresentation } from '../db/presentations';
@@ -63,6 +65,7 @@ import { SlideThumbnailsDeck } from './presentation-editor/SlideThumbnailsDeck';
 import { NotesAndTimelineDrawer } from './presentation-editor/NotesAndTimelineDrawer';
 import { TemplateGalleryModal, TEMPLATE_DEFINITIONS } from './presentation-editor/TemplateGalleryModal';
 import { ImagePickerModal } from './presentation-editor/ImagePickerModal';
+import { SystemFontPicker } from './common/SystemFontPicker';
 
 const QUICK_SWATCHES = ['#FFFFFF', '#38BDF8', '#10B981', '#F59E0B', '#EF4444', '#A855F7', '#64748B', '#000000'];
 
@@ -515,6 +518,76 @@ export function PresentationEditorModal({
     const targetSet = new Set(targetIds);
     handleUpdateActiveSlideObjects(activeSlide.objects.filter((o) => !targetSet.has(o.id)));
     setSelectedObjectIds([]);
+  };
+
+  const duplicateSelected = () => {
+    if (!activeSlide || !activeSlide.objects || activeSlide.objects.length === 0) return;
+    const targetIds = selectedObjectIds.length > 0 ? selectedObjectIds : [activeSlide.objects[0].id];
+    const targetSet = new Set(targetIds);
+    const toDuplicate = activeSlide.objects.filter((o) => targetSet.has(o.id));
+    if (toDuplicate.length === 0) return;
+    const newObjects = toDuplicate.map((obj) => ({
+      ...obj,
+      id: `obj-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      x: obj.x + 30,
+      y: obj.y + 30,
+    }));
+    handleUpdateActiveSlideObjects([...activeSlide.objects, ...newObjects]);
+    setSelectedObjectIds(newObjects.map((o) => o.id));
+  };
+
+  const toggleBulletList = () => {
+    if (!activeSlide || !activeSlide.objects || activeSlide.objects.length === 0) return;
+    const targetIds = selectedObjectIds.length > 0 ? selectedObjectIds : [activeSlide.objects[0].id];
+    const updated = activeSlide.objects.map((obj) => {
+      if (targetIds.includes(obj.id) && obj.type === 'text') {
+        const currentText = obj.text || '';
+        const lines = currentText.split('\n');
+        const hasBullets = lines.every((l) => l.trim().startsWith('•') || l.trim() === '');
+        const newLines = lines.map((l) => {
+          if (!l.trim()) return l;
+          if (hasBullets) {
+            return l.replace(/^(\s*)•\s*/, '$1');
+          } else {
+            return `• ${l.replace(/^(\s*)•\s*/, '$1').replace(/^(\s*)\d+\.\s*/, '$1')}`;
+          }
+        });
+        return { ...obj, text: newLines.join('\n') };
+      }
+      return obj;
+    });
+    handleUpdateActiveSlideObjects(updated);
+  };
+
+  const toggleNumberedList = () => {
+    if (!activeSlide || !activeSlide.objects || activeSlide.objects.length === 0) return;
+    const targetIds = selectedObjectIds.length > 0 ? selectedObjectIds : [activeSlide.objects[0].id];
+    const updated = activeSlide.objects.map((obj) => {
+      if (targetIds.includes(obj.id) && obj.type === 'text') {
+        const currentText = obj.text || '';
+        const lines = currentText.split('\n');
+        const hasNumbers = lines.some((l) => /^\s*\d+\.\s*/.test(l));
+        let numCounter = 1;
+        const newLines = lines.map((l) => {
+          if (!l.trim()) return l;
+          if (hasNumbers) {
+            return l.replace(/^(\s*)\d+\.\s*/, '$1').replace(/^(\s*)•\s*/, '$1');
+          } else {
+            const clean = l.replace(/^(\s*)•\s*/, '$1').replace(/^(\s*)\d+\.\s*/, '$1');
+            return `${numCounter++}. ${clean}`;
+          }
+        });
+        return { ...obj, text: newLines.join('\n') };
+      }
+      return obj;
+    });
+    handleUpdateActiveSlideObjects(updated);
+  };
+
+  const changeFontSizeStep = (delta: number) => {
+    const currentSize = primaryObject?.style?.fontSize || 40;
+    const newSize = Math.max(12, Math.min(200, currentSize + delta));
+    updateSelectedStyle({ fontSize: newSize });
   };
 
   const rotateSelected = () => {
@@ -1274,6 +1347,9 @@ export function PresentationEditorModal({
               <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 shrink-0">
                 <button className="px-1.5 py-1 hover:bg-slate-800 rounded text-[10px] text-slate-300 flex items-center gap-1" onClick={bringToFront} title="Bring to Front"><ArrowUp size={12}/> Front</button>
                 <button className="px-1.5 py-1 hover:bg-slate-800 rounded text-[10px] text-slate-300 flex items-center gap-1" onClick={sendToBack} title="Send to Back"><ArrowDown size={12}/> Back</button>
+                <button className="p-1 hover:bg-slate-800 rounded text-slate-300" onClick={duplicateSelected} title="Duplicate Object (Ctrl+D)">
+                  <Copy size={12} className="text-sky-400" />
+                </button>
                 <button className="p-1 hover:bg-slate-800 rounded text-slate-300" onClick={toggleLock} title="Lock / Unlock Object">
                   {selectedObjects.some((o) => o.locked) ? <Lock size={12} className="text-amber-400" /> : <Unlock size={12} />}
                 </button>
@@ -1284,30 +1360,46 @@ export function PresentationEditorModal({
 
               <div className="h-5 w-px bg-slate-800 shrink-0" />
 
-              {/* ALWAYS VISIBLE: Typography Controls */}
+              {/* ALWAYS VISIBLE: Typography Controls with Auto-Detected System Fonts */}
               <div className="flex items-center gap-1.5 bg-slate-900/60 p-1 rounded-lg border border-slate-800 shrink-0">
-                <select
-                  className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-100 text-[10px] outline-none focus:border-sky-500 w-28 truncate"
-                  value={primaryObject?.style?.fontFamily || 'Aptos, Calibri, sans-serif'}
-                  onChange={(e) => updateSelectedStyle({ fontFamily: e.target.value })}
-                  title="Font Family"
-                >
-                  <option value='Aptos, Calibri, "Segoe UI", sans-serif'>Aptos</option>
-                  <option value='Playfair Display, Georgia, serif'>Playfair Display</option>
-                  <option value='Plus Jakarta Sans, sans-serif'>Plus Jakarta</option>
-                  <option value='Inter, sans-serif'>Inter</option>
-                  <option value='Roboto, sans-serif'>Roboto</option>
-                  <option value='Georgia, serif'>Georgia</option>
-                  <option value='Montserrat, sans-serif'>Montserrat</option>
-                </select>
-                
-                <input
-                  type="number"
-                  className="w-12 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-100 font-mono text-[10px] outline-none"
-                  value={primaryObject?.style?.fontSize || 40}
-                  onChange={(e) => updateSelectedStyle({ fontSize: parseInt(e.target.value) || 24 })}
-                  title="Font Size"
+                <SystemFontPicker
+                  value={primaryObject?.style?.fontFamily || activeSlide?.titleFontFamily || activeSlide?.fontFamily || 'Aptos, Calibri, sans-serif'}
+                  onChange={(fontFamily) => {
+                    updateSelectedStyle({ fontFamily });
+                    handleUpdateActiveSlide({ fontFamily, titleFontFamily: fontFamily });
+                  }}
+                  buttonClassName="bg-slate-950 border-slate-800 text-[10px] py-1 px-1.5 w-32"
+                  title="Choose or Auto-Detect Installed System Fonts"
                 />
+                
+                {/* Font Size with quick step buttons */}
+                <div className="flex items-center bg-slate-950 border border-slate-800 rounded">
+                  <input
+                    type="number"
+                    className="w-10 bg-transparent px-1 py-1 text-slate-100 font-mono text-[10px] outline-none text-center"
+                    value={primaryObject?.style?.fontSize || 40}
+                    onChange={(e) => updateSelectedStyle({ fontSize: parseInt(e.target.value) || 24 })}
+                    title="Font Size"
+                  />
+                  <div className="flex flex-col border-l border-slate-800 pr-0.5">
+                    <button
+                      type="button"
+                      className="px-1 text-[8px] leading-3 text-slate-400 hover:text-white hover:bg-slate-800"
+                      onClick={() => changeFontSizeStep(4)}
+                      title="Increase Font Size"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      className="px-1 text-[8px] leading-3 text-slate-400 hover:text-white hover:bg-slate-800"
+                      onClick={() => changeFontSizeStep(-4)}
+                      title="Decrease Font Size"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
                 
                 <div className="flex items-center gap-0.5 bg-slate-950 border border-slate-800 rounded px-1">
                   <button className={`p-1 rounded ${primaryObject?.style?.fontWeight === 'bold' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800 text-slate-400'}`} onClick={() => updateSelectedStyle({ fontWeight: primaryObject?.style?.fontWeight === 'bold' ? 'normal' : 'bold' })} title="Bold"><Bold size={12} /></button>
@@ -1321,6 +1413,17 @@ export function PresentationEditorModal({
                   <button className={`p-1 rounded ${primaryObject?.style?.textAlign === 'left' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800 text-slate-400'}`} onClick={() => updateSelectedStyle({ textAlign: 'left' })} title="Align Text Left"><AlignLeft size={12} /></button>
                   <button className={`p-1 rounded ${primaryObject?.style?.textAlign === 'center' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800 text-slate-400'}`} onClick={() => updateSelectedStyle({ textAlign: 'center' })} title="Align Text Center"><AlignCenter size={12} /></button>
                   <button className={`p-1 rounded ${primaryObject?.style?.textAlign === 'right' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800 text-slate-400'}`} onClick={() => updateSelectedStyle({ textAlign: 'right' })} title="Align Text Right"><AlignRight size={12} /></button>
+                  <button className={`p-1 rounded ${primaryObject?.style?.textAlign === 'justify' ? 'bg-slate-700 text-white' : 'hover:bg-slate-800 text-slate-400'}`} onClick={() => updateSelectedStyle({ textAlign: 'justify' })} title="Justify Text"><AlignJustify size={12} /></button>
+                </div>
+
+                {/* Bulleted & Numbered Lists */}
+                <div className="flex items-center gap-0.5 bg-slate-950 border border-slate-800 rounded px-1">
+                  <button className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white" onClick={toggleBulletList} title="Toggle Bullet List (•)">
+                    <List size={12} />
+                  </button>
+                  <button className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white" onClick={toggleNumberedList} title="Toggle Numbered List (1, 2, 3)">
+                    <ListOrdered size={12} />
+                  </button>
                 </div>
                 
                 <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded p-0.5" title="Text Color">

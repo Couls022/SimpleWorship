@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Bold, 
@@ -11,9 +11,12 @@ import {
   AlignVerticalJustifyCenter, 
   AlignVerticalJustifyEnd,
   RotateCcw,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import { FontStyleOptions } from '../../types';
+import { SystemFontPicker } from '../common/SystemFontPicker';
+import { getAvailableSystemFonts, queryNativeSystemFonts } from '../../utils/systemFonts';
 
 interface FontInspectorPopupProps {
   title?: string;
@@ -127,17 +130,15 @@ export default function FontInspectorPopup({
               {/* Font Family Dropdown */}
               <div>
                 <label className="text-gray-400 block mb-1 font-semibold">Font Family</label>
-                <select
-                  value={localFont.family}
-                  onChange={(e) => handleUpdate({ family: e.target.value })}
-                  className="w-full bg-[#16171c] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                >
-                  {fontFamilies.map((f) => (
-                    <option key={f} value={f} style={{ fontFamily: f }}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
+                <SystemFontPicker
+                  value={localFont.family || 'Segoe UI, sans-serif'}
+                  onChange={(family) => {
+                    const clean = family.split(',')[0].replace(/['"]/g, '').trim();
+                    handleUpdate({ family: clean });
+                  }}
+                  className="w-full"
+                  buttonClassName="w-full justify-between py-1.5 px-3 bg-[#16171c] border-[#3b404d] text-xs"
+                />
               </div>
 
               {/* Color Swatch */}

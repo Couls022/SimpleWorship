@@ -26,7 +26,10 @@ import {
   Moon,
   SunMoon,
   Laptop,
-  Palette
+  Palette,
+  FolderArchive,
+  Download,
+  Upload
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { dbApi } from '../../db';
@@ -34,6 +37,7 @@ import { SystemOptions, FontStyleOptions, SlideLabelConfig } from '../../types';
 import { applyAppearanceSettings } from '../../utils/themeManager';
 import { useScreens } from '../../hooks/useScreens';
 import { broadcastStateChange } from '../../utils/broadcastSync';
+import { exportPortableProfile, downloadPortableProfilePackage } from '../../utils/profileManager';
 import FontInspectorPopup from './FontInspectorPopup';
 import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
@@ -2269,6 +2273,41 @@ export default function OptionsDialog({ onClose }: OptionsDialogProps) {
                     </div>
                     <p className="text-[11px] text-gray-400">
                       Restores all resizable panel splitters, drawer sizes, and preview/live dividers to default proportion.
+                    </p>
+                  </div>
+
+                  {/* Profiles & Portable Plug-and-Play Data */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-2">
+                    <div className="font-bold text-gray-200 border-b border-[#292c36] pb-1 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-cyan-300">
+                        <FolderArchive size={14} />
+                        <span>Profiles & Portable Backup Package</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const activeProfile = store.profiles.find(p => p.id === store.activeProfileId) || store.profiles[0];
+                            const pkg = await exportPortableProfile(activeProfile, {
+                              activeSchedule: store.activeSchedule,
+                              shortcutSettings: store.shortcutSettings
+                            });
+                            downloadPortableProfilePackage(pkg);
+                            window.dispatchEvent(
+                              new CustomEvent('simpleworship:notify', { 
+                                detail: `Exported portable profile package: "${pkg.profile.name}"` 
+                              })
+                            );
+                          }}
+                          className="px-2.5 py-1 bg-cyan-700 hover:bg-cyan-600 text-white rounded font-semibold flex items-center gap-1 text-[11px] transition-colors"
+                        >
+                          <Download size={12} />
+                          <span>Export Portable (.swprofile)</span>
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Current Active Profile: <span className="text-cyan-300 font-semibold">{store.profiles.find(p => p.id === store.activeProfileId)?.name || 'Default'}</span>. Export complete songs, themes, schedules, and custom settings as a portable bundle to transfer to USB or other computers.
                     </p>
                   </div>
 

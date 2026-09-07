@@ -28,7 +28,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
   const [selectedDisplayIds, setSelectedDisplayIds] = useState<string[]>(() => {
     if (group?.displayIds && group.displayIds.length > 0) return group.displayIds;
     if (group?.targetDisplayId) return [group.targetDisplayId];
-    return ['Monitor 2'];
+    return [];
   });
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       setAspectRatio(group.aspectRatio || '16:9');
       const initialDisplays = (group.displayIds && group.displayIds.length > 0)
         ? group.displayIds
-        : (group.targetDisplayId ? [group.targetDisplayId] : ['Monitor 2']);
+        : (group.targetDisplayId ? [group.targetDisplayId] : []);
       setSelectedDisplayIds(initialDisplays);
     }
   }, [groupId]);
@@ -51,14 +51,11 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
   const handleToggleDisplay = (dispObj: any) => {
     const label = dispObj.label || dispObj.name;
     setSelectedDisplayIds(prev => {
-      let updated: string[];
       if (prev.includes(label)) {
-        updated = prev.filter(id => id !== label);
-        if (updated.length === 0) updated = [label]; // keep at least 1 target
+        return prev.filter(id => id !== label);
       } else {
-        updated = [...prev, label];
+        return [...prev, label];
       }
-      return updated;
     });
 
     // Auto detect native screen resolution from physical monitor
@@ -101,7 +98,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       targetH = 1200;
     }
 
-    const primaryTarget = selectedDisplayIds[0] || 'Monitor 2';
+    const primaryTarget = selectedDisplayIds[0] || '';
 
     // 1. Update Output Group in store with multi-target 1:1 mapping
     updateOutputGroup(groupId, {
@@ -120,7 +117,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
         ...prev.mainOutput,
         general: {
           ...prev.mainOutput.general,
-          outputMonitor: primaryTarget || prev.mainOutput.general.outputMonitor,
+          outputMonitor: primaryTarget || '',
           position: {
             ...prev.mainOutput.general.position,
             width: targetW,
@@ -329,7 +326,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
                   name: `${name} (Copy)`,
                   role: group.role,
                   themeId,
-                  targetDisplayId: selectedDisplayIds[0] || 'Monitor 2',
+                  targetDisplayId: selectedDisplayIds[0] || '',
                   displayIds: selectedDisplayIds
                 };
                 store.addOutputGroup(duplicated);

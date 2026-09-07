@@ -72,26 +72,69 @@ export async function processSingleDroppedFile(file: File): Promise<Presentation
       await new Promise(resolve => setTimeout(resolve, 20));
 
       let slides;
-      try {
-        slides = await parsePptxOffline(file);
-      } catch (parseErr: any) {
-        if (isPpt) {
+      let usingNativeCom = false;
+      let parsedMetadata: any[] = [];
+      
+      // Attempt to extract metadata (notes, transitions) offline if it's a PPTX
+      if (isPptx) {
+        try {
+          parsedMetadata = await parsePptxOffline(file);
+        } catch (e) {
+          console.warn('[fileDropHandler] Metadata extraction failed:', e);
+        }
+      }
+
+      // 1. Try Native PowerPoint COM Export (High-fidelity pixel-perfect render) if running in Electron on Windows
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.convertPptx && (file as any).path) {
+        try {
           window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-            detail: `Legacy .ppt file detected. Converting ${file.name} to presentation...`
+            detail: `Converting presentation using native PowerPoint...`
           }));
-          // Create fallback slides for legacy PPT format
-          slides = [
-            {
-              title: file.name.replace(/\.ppt$/i, ''),
-              text: 'Legacy PowerPoint (.ppt) presentation. For full animation & shape extraction, save as modern .pptx in PowerPoint.',
-              backgroundColor: '#1e293b',
-              fontColor: '#ffffff',
-              fontSize: 36,
-              textAlign: 'center' as const
-            }
-          ];
+          const images = await (window as any).electronAPI.convertPptx((file as any).path);
+          if (images && images.length > 0) {
+            slides = images.map((base64Url: string, idx: number) => {
+              const meta = parsedMetadata[idx] || {};
+              return {
+                id: `slide-${Date.now()}-${idx}`,
+                title: meta.title || `Slide ${idx + 1}`,
+                text: meta.text || '',
+                notes: meta.notes || '',
+                transition: meta.transition || undefined,
+                backgroundUrl: base64Url,
+                backgroundType: 'image'
+              };
+            });
+            usingNativeCom = true;
+          }
+        } catch (e) {
+          console.warn('[fileDropHandler] Native PPTX export failed, falling back to offline parser:', e);
+        }
+      }
+
+      // 2. Fallback to JS-based offline parser
+      if (!slides) {
+        if (parsedMetadata.length > 0) {
+          slides = parsedMetadata;
         } else {
-          throw parseErr;
+          if (isPpt) {
+            window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+              detail: `Legacy .ppt file detected. Converting ${file.name} to presentation...`
+            }));
+            // Create fallback slides for legacy PPT format
+            slides = [
+              {
+                id: `slide-${Date.now()}`,
+                title: file.name.replace(/\.ppt$/i, ''),
+                text: 'Legacy PowerPoint (.ppt) presentation. For full animation & shape extraction, save as modern .pptx in PowerPoint.',
+                backgroundColor: '#1e293b',
+                fontColor: '#ffffff',
+                fontSize: 36,
+                textAlign: 'center' as const
+              }
+            ];
+          } else {
+            throw new Error('Failed to parse presentation.');
+          }
         }
       }
 
@@ -104,11 +147,12 @@ export async function processSingleDroppedFile(file: File): Promise<Presentation
         type: 'presentation',
         name: presName,
         contentId: savedAsset.id,
-        notes: `${slides.length} slides • ${isPptx ? 'PowerPoint' : 'Legacy PPT'}`,
+        notes: `${slides.length} slides • ${isPptx ? 'PowerPoint' : 'Legacy PPT'}${usingNativeCom ? ' (Native)' : ''}`,
         data: {
           slides: slides,
           sourceFileName: file.name,
-          format: isPptx ? 'PPTX' : 'PPT'
+          format: isPptx ? 'PPTX' : 'PPT',
+          isNativeRasterized: usingNativeCom
         },
         isExpanded: true
       };

@@ -34,7 +34,7 @@ export default function MultiGroupPreviewBar() {
     const group = outputGroups.find(g => g.id === groupId);
     const targets = (group?.displayIds && group.displayIds.length > 0)
       ? group.displayIds
-      : (group?.targetDisplayId ? [group.targetDisplayId] : ['Monitor 2']);
+      : (group?.targetDisplayId ? [group.targetDisplayId] : []);
     for (const target of targets) {
       await DisplayManager.sendPresentationToTarget(groupId, target);
     }
@@ -189,9 +189,9 @@ export default function MultiGroupPreviewBar() {
                   {/* Assigned Target Displays */}
                   <span 
                     className="text-[9px] font-mono px-1 rounded bg-[#16171c] text-cyan-400 border border-cyan-800/40 shrink-0"
-                    title={`Assigned Target Monitor(s): ${(group.displayIds && group.displayIds.length > 0) ? group.displayIds.join(', ') : (group.targetDisplayId || 'Monitor 2')}`}
+                    title={`Assigned Target Monitor(s): ${(group.displayIds && group.displayIds.length > 0) ? group.displayIds.join(', ') : (group.targetDisplayId || 'None')}`}
                   >
-                    {(group.displayIds && group.displayIds.length > 0) ? group.displayIds.join(', ') : (group.targetDisplayId || 'Monitor 2')}
+                    {(group.displayIds && group.displayIds.length > 0) ? group.displayIds.join(', ') : (group.targetDisplayId || 'None')}
                   </span>
                   {isTargeted && (
                     <span className="text-[8px] font-bold px-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">

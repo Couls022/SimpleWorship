@@ -34,6 +34,7 @@ import {
 import { Song, SongSection, ThemeStyles, PresentationItem } from '../types';
 import { useStore } from '../store/useStore';
 import { ThemeEngine } from '../core/ThemeEngine';
+import { SystemFontPicker } from './common/SystemFontPicker';
 
 interface SongEditorModalProps {
   mode?: 'library' | 'schedule-item';
@@ -775,21 +776,11 @@ export default function SongEditorModal({
             {/* Font Family */}
             <div className="flex items-center gap-1.5">
               <span className="text-gray-400 text-[11px]">Font:</span>
-              <select
+              <SystemFontPicker
                 value={fontFamily}
-                onChange={(e) => setFontFamily(e.target.value)}
-                className="bg-[#242732] border border-[#3b3f4f] rounded px-2 py-0.5 text-xs text-white"
-              >
-                <option value="Montserrat, sans-serif">Montserrat</option>
-                <option value="Arial, sans-serif">Arial</option>
-                <option value="Inter, sans-serif">Inter</option>
-                <option value="Playfair Display, serif">Playfair Display (Serif)</option>
-                <option value="Georgia, serif">Georgia (Serif)</option>
-                <option value="Times New Roman, serif">Times New Roman</option>
-                <option value="Trebuchet MS, sans-serif">Trebuchet MS</option>
-                <option value="Impact, sans-serif">Impact</option>
-                <option value="Cinzel, serif">Cinzel (Classic)</option>
-              </select>
+                onChange={(family) => setFontFamily(family)}
+                buttonClassName="bg-[#242732] border-[#3b3f4f] text-xs py-0.5 px-2"
+              />
             </div>
 
             {/* Font Size */}

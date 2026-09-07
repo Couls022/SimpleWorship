@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import { 
   Tv, 
-  MonitorUp, 
-  Maximize2, 
-  Settings, 
   ChevronDown, 
   Eye, 
   Check, 
@@ -121,7 +118,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
   const liveContentType = PresentationContentResolver.detectContentType(liveItem);
   const mediaFormat = PresentationContentResolver.getMediaFormat(liveItem);
-  const isAudioItem = liveContentType === 'audio';
+  const isAudioItem = Boolean(liveItem && liveContentType === 'audio');
 
   const isExplicitImage = Boolean(
     liveContentType === 'image' ||
@@ -141,10 +138,10 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
   const isPresentationItem = liveContentType === 'pptx' || liveItem?.type === 'presentation' || liveItem?.type === 'ppt';
 
-  const isVideoItem = !isPresentationItem && !isExplicitImage && !isAudioItem && Boolean(
-    liveContentType === 'video' ||
-    (isLogoMode && logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) ||
-    (!isLogoMode && (
+  const isVideoItem = !isPresentationItem && !isExplicitImage && !isAudioItem && (
+    (isLogoMode && logoStyles.backgroundType === 'video' && Boolean(logoStyles.backgroundVideoUrl)) ||
+    (Boolean(liveItem) && !isLogoMode && (
+      liveContentType === 'video' ||
       liveItem?.type === 'video' ||
       (liveItem?.type === 'media' && (liveItem.data?.type === 'video' || liveItem.data?.type === 'motion' || liveItem.data?.isVideo === true)) ||
       currentSlide?.isVideo === true ||
@@ -166,7 +163,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const isLive = Boolean(activeControlState?.activeItemId && !activeControlState?.isBlack && !activeControlState?.isClear);
+  const isLive = Boolean(activeControlState?.isLiveEnabled && activeControlState?.activeItemId && !activeControlState?.isBlack && !activeControlState?.isClear);
   const isBlack = Boolean(activeControlState?.isBlack);
   const isClear = Boolean(activeControlState?.isClear);
   const isLogo = Boolean(activeControlState?.showLogo);
@@ -201,15 +198,17 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               isClear ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]' :
               isLogo ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]' :
               isLive ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]' :
-              'bg-gray-600'
+              (activeControlState?.activeItemId ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'bg-gray-600')
             }`} />
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-400 shrink-0 hidden min-[450px]:inline">
-              {isBlack ? 'BLACKOUT' : isClear ? 'CLEARED' : isLogo ? 'LOGO' : isLive ? 'LIVE DISPLAY' : 'STANDBY'}
+            <span className={`text-[11px] font-extrabold uppercase tracking-wider shrink-0 hidden min-[450px]:inline ${
+              isLive ? 'text-emerald-400' : (activeControlState?.activeItemId ? 'text-amber-400' : 'text-gray-400')
+            }`}>
+              {isBlack ? 'BLACKOUT' : isClear ? 'CLEARED' : isLogo ? 'LOGO' : isLive ? 'LIVE DISPLAY' : (activeControlState?.activeItemId ? 'PREVIEW (LIVE OFF)' : 'STANDBY')}
             </span>
           </div>
         </div>
 
-        {/* Right: Aspect Tag + Popout Projector + Fullscreen + Settings */}
+        {/* Right: Aspect Tag + 1:1 Target Monitor Quick Tag */}
         <div className="flex items-center gap-1 shrink-0 overflow-hidden">
           {/* Aspect ratio tag */}
           <span 
@@ -220,53 +219,26 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
           </span>
 
           {/* 1:1 Target Monitor Quick Tag */}
-          <button
-            onClick={() => setIsConfigOpen(true)}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#151722] hover:bg-[#1f2230] border border-[#2a2e40] text-[10px] text-gray-300 transition-colors cursor-pointer shrink-0"
-            title="Current 1:1 Target Monitor (Click to change)"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <span className="text-gray-400 hidden min-[560px]:inline">1:1 Target:</span>
-            <span className="font-mono text-cyan-300 font-semibold truncate max-w-[55px] min-[560px]:max-w-[85px]">
-              {activeGroup?.targetDisplayId || activeGroup?.displayIds?.[0] || 'Monitor 2'}
-            </span>
-          </button>
+          {(() => {
+            const hasTarget = Boolean((activeGroup?.displayIds && activeGroup.displayIds.length > 0) || activeGroup?.targetDisplayId);
+            const targetText = activeGroup?.displayIds && activeGroup.displayIds.length > 0
+              ? (activeGroup.displayIds.length > 1 ? `${activeGroup.displayIds.length} Monitors` : activeGroup.displayIds[0])
+              : (activeGroup?.targetDisplayId || 'None');
 
-          {/* Strict 1:1 Target Presentation Trigger */}
-          <button
-            onClick={async () => {
-              const targetDisp = activeGroup?.targetDisplayId || activeGroup?.displayIds?.[0] || 'Monitor 2';
-              await DisplayManager.sendPresentationToTarget(effectiveGroupId, targetDisp);
-              window.dispatchEvent(
-                new CustomEvent('simpleworship:notify', { 
-                  detail: `1:1 Presentation display sent to ${targetDisp}` 
-                })
-              );
-            }}
-            className="flex items-center gap-1 px-1.5 py-1 rounded bg-sky-950/90 hover:bg-sky-900 border border-sky-600/60 text-sky-200 hover:text-white transition-all text-[11px] font-semibold cursor-pointer active:scale-95 shadow-xs shrink-0"
-            title={`Send presentation strictly 1-to-1 to ${activeGroup?.targetDisplayId || activeGroup?.displayIds?.[0] || 'Monitor 2'}`}
-          >
-            <MonitorUp size={12} className="text-sky-400 shrink-0" />
-            <span className="hidden min-[580px]:inline">1:1 Target</span>
-          </button>
-
-          {/* Fullscreen Toggle */}
-          <button
-            onClick={handleToggleFullscreen}
-            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
-            title="Toggle Fullscreen Live Output Display (Esc to exit)"
-          >
-            <Maximize2 size={13} />
-          </button>
-
-          {/* Route Config */}
-          <button
-            onClick={() => setIsConfigOpen(true)}
-            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
-            title="Route Display Settings"
-          >
-            <Settings size={13} />
-          </button>
+            return (
+              <button
+                onClick={() => setIsConfigOpen(true)}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#151722] hover:bg-[#1f2230] border border-[#2a2e40] text-[10px] text-gray-300 transition-colors cursor-pointer shrink-0"
+                title={hasTarget ? `Current 1:1 Target Monitor: ${targetText} (Click to change)` : "No target monitor selected (Click to configure)"}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasTarget ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`} />
+                <span className="text-gray-400 hidden min-[560px]:inline">1:1 Target:</span>
+                <span className={`font-mono font-semibold truncate max-w-[55px] min-[560px]:max-w-[85px] ${hasTarget ? 'text-cyan-300' : 'text-gray-400'}`}>
+                  {targetText}
+                </span>
+              </button>
+            );
+          })()}
         </div>
       </div>
 
@@ -366,6 +338,22 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
           )}
 
           {/* Mute Overlays for clear operator feedback */}
+          {(!activeControlState?.activeItemId && !isLogo) && (
+            <div className="absolute inset-0 bg-[#0a0b0e] flex flex-col items-center justify-center pointer-events-none z-30">
+              <Tv size={36} className="mb-2 text-gray-700" />
+              <span className="text-sm font-black tracking-widest uppercase text-gray-500">STANDBY DISPLAY</span>
+              <span className="text-[10px] text-gray-600 mt-1">Ready for Live Content</span>
+            </div>
+          )}
+
+          {/* Staged / Preview Mode Badge when Live is OFF */}
+          {!isLive && Boolean(activeControlState?.activeItemId) && !isBlack && !isClear && !isLogo && (
+            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-[#13151c]/90 border border-amber-500/50 text-amber-300 text-[10px] font-bold tracking-wider uppercase pointer-events-none z-25 flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              <span>PREVIEW MODE • LIVE OFF (STAGED)</span>
+            </div>
+          )}
+
           {isBlack && (
             <div className="absolute inset-0 bg-black/90 backdrop-blur-xs flex flex-col items-center justify-center text-rose-400 pointer-events-none z-30">
               <ShieldAlert size={36} className="mb-1 animate-pulse" />
@@ -412,43 +400,50 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                 )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                  activeControlState?.isVideoPlaying ?? true
-                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/80'
-                    : 'bg-amber-950 text-amber-300 border border-amber-800/80'
-                }`}>
-                  {activeControlState?.isVideoPlaying ?? true ? '► Playing' : '❚❚ Paused'}
-                </span>
                 <button
-                  onClick={() => setGroupState(effectiveGroupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-colors cursor-pointer ${
-                    activeControlState?.isVideoLooping ?? true
-                      ? 'bg-cyan-950 text-cyan-300 border-cyan-700/80 hover:bg-cyan-900'
-                      : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200'
+                  type="button"
+                  onClick={() => setGroupState(effectiveGroupId, { isVideoPlaying: !(activeControlState?.isVideoPlaying ?? true) })}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer select-none active:scale-95 ${
+                    activeControlState?.isVideoPlaying ?? true
+                      ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/80 hover:bg-emerald-900 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                      : 'bg-amber-950/90 text-amber-300 border border-amber-700/80 hover:bg-amber-900 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
                   }`}
-                  title="Toggle Continuous Video Looping"
+                  title={activeControlState?.isVideoPlaying ?? true ? 'Click to Pause' : 'Click to Resume Playback'}
                 >
-                  {activeControlState?.isVideoLooping ?? true ? '🔁 Loop ON' : '➡️ Loop OFF'}
+                  {activeControlState?.isVideoPlaying ?? true ? '► PLAYING' : '❚❚ PAUSED'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGroupState(effectiveGroupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-all cursor-pointer select-none active:scale-95 ${
+                    activeControlState?.isVideoLooping ?? true
+                      ? 'bg-cyan-950/90 text-cyan-300 border-cyan-600/80 hover:bg-cyan-900 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
+                      : 'bg-gray-800/80 text-gray-400 border-gray-700 hover:text-gray-200'
+                  }`}
+                  title="Toggle Continuous Media Looping"
+                >
+                  {activeControlState?.isVideoLooping ?? true ? '🔁 LOOP ON' : '➡️ LOOP OFF'}
                 </button>
               </div>
             </div>
 
             {/* Seek Progress Bar */}
             <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
-              <span className="w-9 text-right shrink-0">{formatVideoTime(activeControlState?.videoCurrentTime || 0)}</span>
+              <span className="w-9 text-right shrink-0 font-bold text-gray-300">{formatVideoTime(activeControlState?.videoCurrentTime || 0)}</span>
               <input
                 type="range"
                 min={0}
-                max={activeControlState?.videoDuration || 100}
+                max={activeControlState?.videoDuration && activeControlState.videoDuration > 0 ? activeControlState.videoDuration : 100}
                 step={0.1}
                 value={activeControlState?.videoCurrentTime || 0}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
                   setGroupState(effectiveGroupId, { videoSeekTime: val, videoCurrentTime: val });
                 }}
-                className="flex-1 h-1.5 bg-[#262936] accent-cyan-400 rounded-lg cursor-pointer animate-none"
+                className="flex-1 h-1.5 bg-[#262936] accent-cyan-400 rounded-lg cursor-pointer animate-none transition-all hover:h-2"
+                title={`Seek position: ${formatVideoTime(activeControlState?.videoCurrentTime || 0)}`}
               />
-              <span className="w-9 shrink-0">{formatVideoTime(activeControlState?.videoDuration || 0)}</span>
+              <span className="w-9 shrink-0 font-bold text-gray-300">{formatVideoTime(activeControlState?.videoDuration || 0)}</span>
             </div>
 
             {/* Button Controls Row */}
@@ -456,13 +451,14 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               <div className="flex items-center gap-1.5">
                 {/* Play / Pause Toggle */}
                 <button
+                  type="button"
                   onClick={() => setGroupState(effectiveGroupId, { isVideoPlaying: !(activeControlState?.isVideoPlaying ?? true) })}
-                  className={`px-3 py-1 rounded text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer ${
+                  className={`px-3 py-1 rounded text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none active:scale-95 ${
                     activeControlState?.isVideoPlaying ?? true
-                      ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                      : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-[0_0_8px_rgba(217,119,6,0.4)]'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]'
                   }`}
-                  title={activeControlState?.isVideoPlaying ?? true ? 'Pause Video' : 'Play Video'}
+                  title={activeControlState?.isVideoPlaying ?? true ? 'Pause Media Playback (Space)' : 'Play Media (Space)'}
                 >
                   {activeControlState?.isVideoPlaying ?? true ? (
                     <>
@@ -479,9 +475,10 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
                 {/* Restart Button */}
                 <button
+                  type="button"
                   onClick={() => setGroupState(effectiveGroupId, { videoSeekTime: 0, videoCurrentTime: 0, isVideoPlaying: true })}
-                  className="px-2.5 py-1 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[11px] font-semibold flex items-center gap-1 border border-[#373b4d] transition-colors cursor-pointer"
-                  title="Restart Video from 0:00"
+                  className="px-2.5 py-1 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[11px] font-semibold flex items-center gap-1 border border-[#373b4d] transition-all cursor-pointer select-none active:scale-95"
+                  title="Restart Media from 0:00"
                 >
                   <RotateCcw size={11} />
                   <span>Restart</span>
@@ -489,13 +486,14 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
                 {/* Loop Toggle Button */}
                 <button
+                  type="button"
                   onClick={() => setGroupState(effectiveGroupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 border transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
                     activeControlState?.isVideoLooping ?? true
-                      ? 'bg-cyan-950 border-cyan-500/60 text-cyan-300 hover:bg-cyan-900'
+                      ? 'bg-cyan-950/90 border-cyan-500/80 text-cyan-300 hover:bg-cyan-900 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
                       : 'bg-[#252834] border-[#373b4d] text-gray-400 hover:text-gray-200'
                   }`}
-                  title="Toggle Continuous Video Looping"
+                  title="Toggle Continuous Loop Mode"
                 >
                   <Repeat size={11} />
                   <span>{activeControlState?.isVideoLooping ?? true ? 'Loop On' : 'Loop Off'}</span>
@@ -505,10 +503,11 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               {/* Volume & Mute Controls */}
               <div className="flex items-center gap-1.5">
                 <button
+                  type="button"
                   onClick={() => setGroupState(effectiveGroupId, { isVideoMuted: !(activeControlState?.isVideoMuted ?? false) })}
-                  className={`p-1.5 rounded transition-colors cursor-pointer ${
+                  className={`p-1.5 rounded transition-all cursor-pointer select-none active:scale-95 ${
                     activeControlState?.isVideoMuted
-                      ? 'bg-rose-950 border border-rose-700/60 text-rose-300'
+                      ? 'bg-rose-950 border border-rose-700/80 text-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
                       : 'bg-[#252834] border border-[#373b4d] text-gray-300 hover:text-white'
                   }`}
                   title={activeControlState?.isVideoMuted ? 'Unmute Audio' : 'Mute Audio'}
@@ -525,9 +524,12 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                     const vol = parseFloat(e.target.value);
                     setGroupState(effectiveGroupId, { videoVolume: vol, isVideoMuted: vol === 0 });
                   }}
-                  className="w-16 h-1 bg-[#262936] accent-cyan-400 rounded cursor-pointer"
-                  title="Video Volume"
+                  className="w-16 h-1.5 bg-[#262936] accent-cyan-400 rounded cursor-pointer"
+                  title={`Volume: ${Math.round((activeControlState?.isVideoMuted ? 0 : (activeControlState?.videoVolume ?? 1)) * 100)}%`}
                 />
+                <span className="text-[9px] font-mono text-gray-400 min-w-[24px]">
+                  {activeControlState?.isVideoMuted ? '0%' : `${Math.round((activeControlState?.videoVolume ?? 1) * 100)}%`}
+                </span>
               </div>
             </div>
           </div>

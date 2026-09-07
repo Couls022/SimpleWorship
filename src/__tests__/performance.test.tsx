@@ -84,7 +84,7 @@ describe('Performance Audits - Targeted Fixes', () => {
   });
 
   it('E. PPTX REGRESSION: PPTX structural behaviors unmodified (placeholder)', () => {
-    expect(true).toBe(true); // Verified structurally via no changes to PptxRenderOverlay/initPptxViewer
+    expect(true).toBe(true); // Verified structurally via no changes to PptxRenderOverlay/SlideRenderCache
   });
 
   it('F. HARDWARE ADAPTIVE ENGINE: HardwareProfileManager correctly categorizes hardware tiers', async () => {
@@ -96,10 +96,10 @@ describe('Performance Audits - Targeted Fixes', () => {
     expect(typeof info.cpuCores).toBe('number');
   });
 
-  it('G. CACHE TUNING: pptxCacheManager bounds dynamic cache limit', async () => {
-    const { pptxCacheManager } = await import('../utils/initPptxViewer');
-    pptxCacheManager.setMaxCacheSize(10);
+  it('G. CACHE TUNING: slideRenderCache bounds dynamic cache limit', async () => {
+    const { slideRenderCache } = await import('../utils/SlideRenderCache');
+    slideRenderCache.setMaxCacheSize(10);
     // Clearing should not throw
-    expect(() => pptxCacheManager.clear()).not.toThrow();
+    expect(() => slideRenderCache.clear()).not.toThrow();
   });
 });

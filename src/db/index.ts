@@ -228,6 +228,10 @@ export const dbApi = {
     const db = await getDB();
     await db.put('schedules', schedule);
   },
+  async saveSchedule(schedule: Schedule) {
+    const db = await getDB();
+    await db.put('schedules', schedule);
+  },
   async getSchedule(id: string) {
     const db = await getDB();
     return db.get('schedules', id);

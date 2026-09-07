@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { 
   Panel, 
   PanelGroup, 
@@ -24,7 +24,6 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
   const { 
     panels, 
     layoutKey, 
-    updatePanelSize,
     updatePanelCollapsed
   } = useWorkspaceLayout();
   const store = useStore();
@@ -34,12 +33,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
 
   // Check visibility and docking state for left schedule sidebar
   const isScheduleDocked = Boolean(panels.schedule?.visible && panels.schedule?.isDocked);
-  const [isScheduleCollapsed, setIsScheduleCollapsed] = useState<boolean>(Boolean(panels.schedule?.isCollapsed));
-
-  // Keep collapse state synced with workspace layout
-  useEffect(() => {
-    setIsScheduleCollapsed(Boolean(panels.schedule?.isCollapsed));
-  }, [panels.schedule?.isCollapsed]);
+  const isScheduleCollapsed = Boolean(panels.schedule?.isCollapsed);
 
   // Determine active target route for the Fixed Live Output Panel (Without Display)
   const effectiveTargetGroupId = (() => {
@@ -61,19 +55,11 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
         e.preventDefault();
-        setIsScheduleCollapsed(prev => {
-          const next = !prev;
-          updatePanelCollapsed('schedule', next);
-          return next;
-        });
+        updatePanelCollapsed('schedule', !isScheduleCollapsed);
       }
     };
     const handleToggle = () => {
-      setIsScheduleCollapsed(prev => {
-        const next = !prev;
-        updatePanelCollapsed('schedule', next);
-        return next;
-      });
+      updatePanelCollapsed('schedule', !isScheduleCollapsed);
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -82,7 +68,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('simpleworship:toggle-sidebar', handleToggle);
     };
-  }, [updatePanelCollapsed]);
+  }, [updatePanelCollapsed, isScheduleCollapsed]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 relative w-full h-full bg-[#0d0f14]" key={layoutKey}>
@@ -93,7 +79,6 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
           <div className="w-8 h-full bg-[#111319] border-r border-[#242838] flex flex-col items-center py-2.5 shrink-0 select-none z-20">
             <button
               onClick={() => {
-                setIsScheduleCollapsed(false);
                 updatePanelCollapsed('schedule', false);
               }}
               className="p-1.5 rounded hover:bg-[#1f2330] text-gray-400 hover:text-sky-300 transition-colors cursor-pointer"
@@ -103,7 +88,6 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
             </button>
             <div 
               onClick={() => {
-                setIsScheduleCollapsed(false);
                 updatePanelCollapsed('schedule', false);
               }}
               className="mt-6 flex-1 flex items-center justify-center cursor-pointer text-gray-500 hover:text-sky-400 transition-colors"
@@ -134,15 +118,6 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
                 minSize={12} 
                 maxSize={55}
                 collapsible={true}
-                onResize={(size) => updatePanelSize('schedule', size)}
-                onCollapse={() => {
-                  setIsScheduleCollapsed(true);
-                  updatePanelCollapsed('schedule', true);
-                }}
-                onExpand={() => {
-                  setIsScheduleCollapsed(false);
-                  updatePanelCollapsed('schedule', false);
-                }}
               >
                 <div className="h-full w-full overflow-hidden flex bg-[#111319]">
                   <SchedulePanel 

@@ -16,6 +16,7 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -49,9 +50,9 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
     onClose();
   };
 
-  const handleDeleteSchedule = async (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+  const confirmDeleteSchedule = async () => {
+    if (!scheduleToDelete) return;
+    const { id, name } = scheduleToDelete;
 
     try {
       const db = await (await import('../db')).getDB();
@@ -70,7 +71,14 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
       );
     } catch (e) {
       console.error('Error deleting schedule', e);
+    } finally {
+      setScheduleToDelete(null);
     }
+  };
+
+  const handleDeleteSchedule = (id: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setScheduleToDelete({ id, name });
   };
 
   const processFile = async (file: File) => {
@@ -342,12 +350,48 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 bg-[#2b2e3a] hover:bg-[#373b4a] text-gray-300 text-xs font-semibold rounded-lg transition-colors"
+              className="px-4 py-1.5 bg-[#2b2e3a] hover:bg-[#373b4a] text-gray-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
             >
               Cancel
             </button>
           </div>
         </div>
+
+        {/* Delete Confirmation In-App Modal */}
+        {scheduleToDelete && (
+          <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-[#1c1f26] border border-[#2d313a] rounded-xl shadow-2xl max-w-sm w-full p-5 space-y-4 animate-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-rose-950/80 border border-rose-700/60 text-rose-400">
+                  <Trash2 size={18} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-white">Delete Schedule</h4>
+                  <p className="text-xs text-gray-400">This cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-300">
+                Are you sure you want to permanently delete schedule <strong className="text-white">"{scheduleToDelete.name}"</strong>?
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#2d313a]">
+                <button
+                  type="button"
+                  onClick={() => setScheduleToDelete(null)}
+                  className="px-3 py-1.5 rounded-lg bg-[#2a2e38] text-gray-300 hover:text-white text-xs font-medium cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteSchedule}
+                  className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md cursor-pointer"
+                >
+                  Delete Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

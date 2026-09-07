@@ -70,7 +70,7 @@ export default function TargetSelectionModal() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 bg-black/75 z-[1000000] flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div className="bg-[#181a21] border border-[#2e3342] rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
@@ -168,16 +168,24 @@ export default function TargetSelectionModal() {
                       </span>
                     </div>
                   </div>
-                  <div className="text-[10px] text-gray-400 mt-0.5 flex items-center justify-between">
-                    <span>{group.role || 'Live Display Screen'}</span>
+                  <div className="text-[10px] text-gray-400 mt-0.5 flex items-center justify-between gap-2">
+                    <span className="truncate">
+                      {group.role || 'Live Display Screen'}
+                      <span className="mx-1 text-gray-600">•</span>
+                      {(group.displayIds && group.displayIds.length > 0) ? (
+                        <span className="text-cyan-400 font-mono font-medium">Target: {group.displayIds.join(', ')}</span>
+                      ) : (
+                        <span className="text-gray-500 italic">Target: None</span>
+                      )}
+                    </span>
                     {groupState?.isBlack ? (
-                      <span className="text-red-400 font-semibold">BLACK</span>
+                      <span className="text-red-400 font-semibold shrink-0">BLACK</span>
                     ) : groupState?.isClear ? (
-                      <span className="text-amber-400 font-semibold">CLEAR</span>
+                      <span className="text-amber-400 font-semibold shrink-0">CLEAR</span>
                     ) : groupState?.activeItemId ? (
-                      <span className="text-emerald-400 font-medium truncate max-w-[120px]">Live Active</span>
+                      <span className="text-emerald-400 font-medium truncate max-w-[120px] shrink-0">Live Active</span>
                     ) : (
-                      <span className="text-gray-500">Idle / No Content</span>
+                      <span className="text-gray-500 shrink-0">Idle / No Content</span>
                     )}
                   </div>
                 </div>

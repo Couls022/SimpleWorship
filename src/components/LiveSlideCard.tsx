@@ -13,6 +13,7 @@ import { Slide, PresentationItem, ThemeStyles } from '../types';
 import { ResolvedContentType } from '../core/PresentationContentResolver';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationSlideView } from './PresentationSlideView';
+import { PptxSlideThumbnail } from './PptxSlideThumbnail';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 
 export interface LiveSlideCardProps {
@@ -30,7 +31,7 @@ export interface LiveSlideCardProps {
   onSelect: (idx: number) => void;
 }
 
-export const LiveSlideCard: React.FC<LiveSlideCardProps> = ({
+export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
   slide,
   idx,
   totalSlides,
@@ -184,7 +185,13 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = ({
                     src={mediaSourceUrl}
                     muted
                     playsInline
+                    preload="metadata"
                     className="w-full h-full object-contain pointer-events-none"
+                    style={{
+                      transform: 'translateZ(0)',
+                      willChange: 'transform',
+                      contain: 'strict',
+                    }}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center p-3 text-center text-gray-500">
@@ -244,16 +251,13 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = ({
                 className="w-full min-h-[110px] max-h-56 bg-black relative flex items-center justify-center overflow-hidden border border-white/5"
                 style={{ aspectRatio: slide.aspectRatio ? `${slide.aspectRatio}` : '16/9' }}
               >
-                <PresentationSlideView 
+                <PptxSlideThumbnail 
                   slide={slide} 
                   slideIndex={idx} 
                   totalSlides={totalSlides} 
-                  mode="thumbnail" 
-                  themeStyles={resolvedStyles} 
+                  liveItem={liveItem}
+                  themeStyles={undefined} 
                 />
-                <div className="absolute bottom-1 right-2 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono text-amber-300 border border-amber-500/30 pointer-events-none">
-                  Slide {idx + 1}
-                </div>
               </div>
             ) : isCamera ? (
               <div className="w-full aspect-video min-h-[100px] max-h-56 bg-[#0c1310] relative flex flex-col items-center justify-center p-3 text-center border-t border-emerald-900/30">
@@ -338,4 +342,16 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = ({
       </div>
     </div>
   );
-};
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.idx === nextProps.idx &&
+    prevProps.totalSlides === nextProps.totalSlides &&
+    prevProps.isSelected === nextProps.isSelected &&
+    prevProps.viewMode === nextProps.viewMode &&
+    prevProps.liveContentType === nextProps.liveContentType &&
+    prevProps.mediaFormat === nextProps.mediaFormat &&
+    prevProps.liveItem?.id === nextProps.liveItem?.id &&
+    prevProps.liveItem?.contentId === nextProps.liveItem?.contentId &&
+    prevProps.slide === nextProps.slide
+  );
+});

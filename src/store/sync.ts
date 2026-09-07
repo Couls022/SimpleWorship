@@ -1,5 +1,6 @@
 import { useStore } from './useStore';
 import { broadcastStateChange, subscribeToBroadcast } from '../utils/broadcastSync';
+import { dbApi } from '../db';
 
 export interface SyncTelemetry {
   channelActive: boolean;
@@ -35,8 +36,43 @@ function isHttpServerAvailable(): boolean {
   return typeof window !== 'undefined' && window.location.protocol.startsWith('http');
 }
 
-export async function forceSyncNow() {
+export async function forceSyncNow(): Promise<{ success: boolean; latency: number; timestamp: number }> {
+  const store = useStore.getState();
+  
+  // 1. Broadcast to all open projector & stage display windows
+  broadcastStateChange({
+    type: 'SYNC_STATE',
+    data: {
+      groupStates: store.groupStates,
+      activeControlGroupId: store.activeControlGroupId,
+      outputGroups: store.outputGroups,
+      alert: store.alert,
+      annotationState: store.annotationState,
+      activeSchedule: store.activeSchedule,
+      themesList: store.themesList,
+      systemOptions: store.systemOptions,
+    }
+  });
+  syncTelemetry.lastBroadcastTime = Date.now();
+  syncTelemetry.messageCount++;
+
+  // 2. Persist active schedule to local IndexedDB for durable recovery
+  try {
+    if (store.activeSchedule) {
+      await dbApi.saveSchedule(store.activeSchedule);
+    }
+  } catch (e) {
+    console.warn('[Sync] Local DB persist warning:', e);
+  }
+
+  // 3. Synchronize with Express backend server
   await syncStateToBackend();
+
+  return {
+    success: syncTelemetry.backendStatus === 'connected',
+    latency: syncTelemetry.latency || 10,
+    timestamp: Date.now()
+  };
 }
 
 function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {

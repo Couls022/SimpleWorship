@@ -26,12 +26,38 @@ interface MediaLibraryModalProps {
 
 export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
   const store = useStore();
-  const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem } = store;
+  const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem, themesList } = store;
 
   const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'image' | 'audio' | 'video'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+
+  // Check if an asset URL is the currently active default background for a given category
+  const isDefaultBgFor = (url: string, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo') => {
+    if (!url) return false;
+    if (category === 'songs') {
+      const t = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (category === 'scriptures') {
+      const t = themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (category === 'presentations') {
+      const t = themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (category === 'announcements') {
+      const t = themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (category === 'logo') {
+      const t = themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
+    }
+    return false;
+  };
   
   // Context menu state for right-click on assets
   const [contextMenu, setContextMenu] = useState<{
@@ -143,15 +169,18 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
 
   const handleAddToSchedule = (asset: Asset, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const isVid = asset.type === 'video' || asset.type === 'motion';
+    const isAud = asset.type === 'audio';
+    const itemType = isVid ? ('video' as const) : (isAud ? ('audio' as const) : ('image' as const));
     addScheduleItem({
-      type: 'media',
+      type: itemType,
       contentId: asset.id,
       name: asset.name,
       customBackgroundUrl: asset.url,
       data: { 
         url: asset.url, 
-        isVideo: asset.type === 'video' || asset.type === 'motion',
-        isAudio: asset.type === 'audio',
+        isVideo: isVid,
+        isAudio: isAud,
         type: asset.type
       }
     });
@@ -165,20 +194,24 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
   const handleSendToLive = (asset: Asset, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const itemId = `media-${Date.now()}`;
+    const isVid = asset.type === 'video' || asset.type === 'motion';
+    const isAud = asset.type === 'audio';
+    const itemType = isVid ? ('video' as const) : (isAud ? ('audio' as const) : ('image' as const));
     const item = {
       id: itemId,
-      type: 'media' as const,
+      type: itemType,
       contentId: asset.id,
       name: asset.name,
       customBackgroundUrl: asset.url,
       data: { 
         url: asset.url, 
-        isVideo: asset.type === 'video' || asset.type === 'motion',
-        isAudio: asset.type === 'audio',
+        isVideo: isVid,
+        isAudio: isAud,
         type: asset.type
       }
     };
     store.setRoutingRequest({ item, isNew: true, slideIndex: 0 });
+    onClose();
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: `Sent "${asset.name}" to Live Output!` 
@@ -483,7 +516,7 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
                         title="Add to current worship schedule"
                       >
                         <Plus size={10} />
-                        <span>+ Sched</span>
+                        <span>Sched</span>
                       </button>
 
                       <button
@@ -606,6 +639,11 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
               <Sparkles size={11} className="text-cyan-400" />
               <span>For Songs</span>
             </span>
+            {isDefaultBgFor(contextMenu.asset.url, 'songs') && (
+              <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-semibold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -616,6 +654,11 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
               <Sparkles size={11} className="text-amber-400" />
               <span>For Scriptures</span>
             </span>
+            {isDefaultBgFor(contextMenu.asset.url, 'scriptures') && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -626,6 +669,11 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
               <Sparkles size={11} className="text-purple-400" />
               <span>For Presentations</span>
             </span>
+            {isDefaultBgFor(contextMenu.asset.url, 'presentations') && (
+              <span className="flex items-center gap-1 text-[10px] text-purple-400 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -636,6 +684,11 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
               <Sparkles size={11} className="text-rose-400" />
               <span>For Announcements</span>
             </span>
+            {isDefaultBgFor(contextMenu.asset.url, 'announcements') && (
+              <span className="flex items-center gap-1 text-[10px] text-rose-400 font-semibold bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -646,6 +699,11 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
               <Sparkles size={11} className="text-emerald-400" />
               <span>For Logo</span>
             </span>
+            {isDefaultBgFor(contextMenu.asset.url, 'logo') && (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <div className="border-t border-[#272b3a] my-1"></div>

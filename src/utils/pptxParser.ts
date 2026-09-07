@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { SlideElement, SlideTransition, SlideTransitionType } from '../types';
+import { SlideElement, SlideTransition, SlideTransitionType, SlideObject, ShapeType } from '../types';
 
 export interface ParsedSlide {
   title: string;
@@ -19,11 +19,13 @@ export interface ParsedSlide {
   accentColor?: string;
   headerBarColor?: string;
   elements?: SlideElement[];
+  objects?: SlideObject[];
   transition?: SlideTransition;
   aspectRatio?: number;
   aspectRatioLabel?: string;
   widthEmu?: number;
   heightEmu?: number;
+  notes?: string;
 }
 
 /**
@@ -280,13 +282,22 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
   ): Promise<{ backgroundUrl?: string, backgroundColor?: string }> => {
     if (!bgElem) return {};
     
-    const blip = bgElem.getElementsByTagName('a:blip')[0];
-    if (blip && relsDoc) {
-      const rId = blip.getAttribute('r:embed') || blip.getAttribute('embed') || '';
-      if (rId) {
-        const relTarget = relsDoc.querySelector(`Relationship[Id="${rId}"]`)?.getAttribute('Target');
-        if (relTarget && mediaMap.has(relTarget)) {
-          return { backgroundUrl: mediaMap.get(relTarget) };
+    const blips = Array.from(bgElem.getElementsByTagName('a:blip'));
+    for (const blip of blips) {
+      if (blip && relsDoc) {
+        const rId = blip.getAttribute('r:embed') || blip.getAttribute('embed') || '';
+        if (rId) {
+          const relTarget = relsDoc.querySelector(`Relationship[Id="${rId}"]`)?.getAttribute('Target');
+          if (relTarget) {
+            const cleanTarget = relTarget.replace(/^(\.\.\/)+/, '').replace(/^ppt\//, '');
+            const baseName = cleanTarget.split('/').pop() || '';
+
+            if (mediaMap.has(relTarget)) return { backgroundUrl: mediaMap.get(relTarget) };
+            if (mediaMap.has(cleanTarget)) return { backgroundUrl: mediaMap.get(cleanTarget) };
+            if (mediaMap.has(`media/${baseName}`)) return { backgroundUrl: mediaMap.get(`media/${baseName}`) };
+            if (mediaMap.has(`../media/${baseName}`)) return { backgroundUrl: mediaMap.get(`../media/${baseName}`) };
+            if (mediaMap.has(baseName)) return { backgroundUrl: mediaMap.get(baseName) };
+          }
         }
       }
     }
@@ -343,6 +354,7 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
     const relsFileName = fileName.replace('ppt/slides/', 'ppt/slides/_rels/').concat('.rels');
     let relsDoc: Document | null = null;
     let layoutFileName = '';
+    let notesFileName = '';
     
     if (loadedZip.files[relsFileName]) {
       try {
@@ -354,8 +366,27 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
           const target = layoutRel.getAttribute('Target') || '';
           layoutFileName = target.startsWith('/') ? target.substring(1) : `ppt/${target.replace('../', '')}`;
         }
+
+        const notesRel = relsDoc.querySelector('Relationship[Type*="notesSlide"]');
+        if (notesRel) {
+          const target = notesRel.getAttribute('Target') || '';
+          notesFileName = target.startsWith('/') ? target.substring(1) : `ppt/${target.replace('../', '')}`;
+        }
       } catch (e) {
         console.warn('[pptxParser] rels parse error:', e);
+      }
+    }
+
+    // Extract speaker notes
+    let slideNotes = '';
+    if (notesFileName && loadedZip.files[notesFileName]) {
+      try {
+        const notesXml = await loadedZip.files[notesFileName].async('text');
+        const notesDoc = parser.parseFromString(notesXml, 'text/xml');
+        const textElements = Array.from(notesDoc.getElementsByTagName('a:t'));
+        slideNotes = textElements.map(el => el.textContent || '').join(' ').trim();
+      } catch (e) {
+        console.warn('[pptxParser] notes parse error:', e);
       }
     }
 
@@ -465,17 +496,21 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
     const bodyParagraphs: string[] = [];
     const bulletItems: string[] = [];
     const slideElements: SlideElement[] = [];
+    const slideObjects: SlideObject[] = [];
 
     // Parse Pictures <p:pic>
     const pictures = Array.from(xmlDoc.getElementsByTagName('p:pic'));
-    for (const pic of pictures) {
+    for (let pIdx = 0; pIdx < pictures.length; pIdx++) {
+      const pic = pictures[pIdx];
       const blip = pic.getElementsByTagName('a:blip')[0];
       const rId = blip?.getAttribute('r:embed') || blip?.getAttribute('embed') || '';
       let imgUrl: string | undefined;
       if (rId && relsDoc) {
         const relTarget = relsDoc.querySelector(`Relationship[Id="${rId}"]`)?.getAttribute('Target');
-        if (relTarget && mediaMap.has(relTarget)) {
-          imgUrl = mediaMap.get(relTarget);
+        if (relTarget) {
+          const cleanTarget = relTarget.replace(/^(\.\.\/)+/, '').replace(/^ppt\//, '');
+          const baseName = cleanTarget.split('/').pop() || '';
+          imgUrl = mediaMap.get(relTarget) || mediaMap.get(cleanTarget) || mediaMap.get(`media/${baseName}`) || mediaMap.get(`../media/${baseName}`) || mediaMap.get(baseName);
         }
       }
 
@@ -486,21 +521,39 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
         const extCx = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cx') || '0', 10);
         const extCy = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cy') || '0', 10);
 
+        const leftPct = Math.max(0, (offX / sldWidthEmu) * 100);
+        const topPct = Math.max(0, (offY / sldHeightEmu) * 100);
+        const widthPct = Math.min(100, (extCx / sldWidthEmu) * 100);
+        const heightPct = Math.min(100, (extCy / sldHeightEmu) * 100);
+
+        if (!slideBackgroundUrl && (widthPct >= 70 && heightPct >= 70)) {
+          slideBackgroundUrl = imgUrl;
+        }
+
         slideElements.push({
           type: 'image',
           imageUrl: imgUrl,
-          leftPercent: Math.max(0, (offX / sldWidthEmu) * 100),
-          topPercent: Math.max(0, (offY / sldHeightEmu) * 100),
-          widthPercent: Math.min(100, (extCx / sldWidthEmu) * 100),
-          heightPercent: Math.min(100, (extCy / sldHeightEmu) * 100),
+          leftPercent: leftPct,
+          topPercent: topPct,
+          widthPercent: widthPct,
+          heightPercent: heightPct,
+        });
+
+        slideObjects.push({
+          id: `pic-${sIdx}-${pIdx}`,
+          type: 'image',
+          imageUrl: imgUrl,
+          x: Math.round((offX / sldWidthEmu) * 1920),
+          y: Math.round((offY / sldHeightEmu) * 1080),
+          width: Math.round((extCx / sldWidthEmu) * 1920),
+          height: Math.round((extCy / sldHeightEmu) * 1080),
+          zIndex: 1,
         });
       }
     }
 
-    // Parse Shapes <p:sp>
-    const shapes = Array.from(xmlDoc.getElementsByTagName('p:sp'));
-
-    for (const shape of shapes) {
+    // Helper to process a shape element into SlideObject and extracted text
+    const processShapeElement = (shape: Element, shapeIdx: number, groupOffsetX = 0, groupOffsetY = 0) => {
       const phElem = shape.getElementsByTagName('p:ph')[0] || shape.getElementsByTagName('ph')[0];
       const phType = phElem ? (phElem.getAttribute('type') || '').toLowerCase() : '';
 
@@ -510,12 +563,20 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
       let topPercent: number | undefined;
       let widthPercent: number | undefined;
       let heightPercent: number | undefined;
+      let offX = 0;
+      let offY = 0;
+      let extCx = 0;
+      let extCy = 0;
+      let rotDeg = 0;
 
       if (xfrm) {
-        const offX = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('x') || '0', 10);
-        const offY = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('y') || '0', 10);
-        const extCx = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cx') || '0', 10);
-        const extCy = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cy') || '0', 10);
+        offX = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('x') || '0', 10) + groupOffsetX;
+        offY = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('y') || '0', 10) + groupOffsetY;
+        extCx = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cx') || '0', 10);
+        extCy = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cy') || '0', 10);
+        const rotAttr = xfrm.getAttribute('rot');
+        if (rotAttr) rotDeg = Math.round(parseInt(rotAttr, 10) / 60000);
+
         if (extCx > 0 && extCy > 0) {
           leftPercent = (offX / sldWidthEmu) * 100;
           topPercent = (offY / sldHeightEmu) * 100;
@@ -524,19 +585,57 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
         }
       }
 
-      // Check Shape Fill (Button / Badge / Banner Box)
+      // Check Shape Geometry Preset
       const spPr = shape.getElementsByTagName('p:spPr')[0];
+      const prstGeom = spPr?.getElementsByTagName('a:prstGeom')[0]?.getAttribute('prst') || 'rect';
+      let shapeType: ShapeType = 'rectangle';
+      let borderRadius: number | undefined;
+      if (prstGeom === 'roundRect' || prstGeom === 'round1Rect' || prstGeom === 'round2SameRect') {
+        shapeType = 'rounded-rectangle';
+        borderRadius = 12;
+      } else if (prstGeom === 'ellipse' || prstGeom === 'circle') {
+        shapeType = 'ellipse';
+        borderRadius = 999;
+      } else if (prstGeom === 'triangle') {
+        shapeType = 'triangle';
+      } else if (prstGeom === 'line') {
+        shapeType = 'line';
+      }
+
+      // Check Shape Fill (Button / Badge / Card Fill)
       const shapeSolidFill = spPr?.getElementsByTagName('a:solidFill')[0];
       const shapeFillColor = shapeSolidFill ? resolveColor(shapeSolidFill) : undefined;
 
-      // Extract paragraphs
+      // Check Shape Outline / Border
+      const ln = spPr?.getElementsByTagName('a:ln')[0];
+      let borderColor: string | undefined;
+      let borderWidth: number | undefined;
+      if (ln) {
+        const lnSolidFill = ln.getElementsByTagName('a:solidFill')[0];
+        if (lnSolidFill) borderColor = resolveColor(lnSolidFill);
+        const wAttr = ln.getAttribute('w');
+        if (wAttr) borderWidth = Math.max(1, Math.round(parseInt(wAttr, 10) / 12700));
+      }
+
+      // Vertical text alignment
+      const bodyPr = shape.getElementsByTagName('a:bodyPr')[0];
+      const anchorAttr = bodyPr?.getAttribute('anchor') || 't';
+      const alignVertical = anchorAttr === 'ctr' || anchorAttr === 'mid' ? 'middle' : anchorAttr === 'b' ? 'bottom' : 'top';
+
+      // Extract paragraphs & runs
       const paragraphs = Array.from(shape.getElementsByTagName('a:p'));
       const shapeParagraphTexts: string[] = [];
+      let shapeFontColor: string | undefined;
+      let shapeFontFamily: string | undefined;
+      let shapeFontSize: number | undefined;
+      let shapeFontWeight: 'normal' | 'bold' | '500' | '600' | '700' | '800' = 'normal';
+      let shapeTextAlign: 'left' | 'center' | 'right' | 'justify' = 'left';
 
       for (const p of paragraphs) {
         const pPr = p.getElementsByTagName('a:pPr')[0];
         const algn = pPr?.getAttribute('algn');
         const currentAlign = algn === 'ctr' ? 'center' : algn === 'r' ? 'right' : algn === 'just' ? 'justify' : 'left';
+        shapeTextAlign = currentAlign;
 
         const runs = Array.from(p.getElementsByTagName('a:r'));
         let paragraphText = '';
@@ -552,6 +651,12 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
             const color = resolveColor(rPr);
             const sz = rPr.getAttribute('sz');
             const typeface = rPr.getElementsByTagName('a:latin')[0]?.getAttribute('typeface');
+            const isB = rPr.getAttribute('b') === '1' || rPr.getAttribute('b') === 'true';
+
+            if (isB) shapeFontWeight = 'bold';
+            if (color && !shapeFontColor) shapeFontColor = color;
+            if (typeface && !shapeFontFamily) shapeFontFamily = `${typeface}, sans-serif`;
+            if (sz && !shapeFontSize) shapeFontSize = Math.round(parseInt(sz, 10) / 100);
 
             if (phType === 'title' || phType === 'ctrtitle') {
               if (color) titleColor = color;
@@ -590,7 +695,50 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
         }
       }
 
-      // Check if this is a pill button / badge (e.g. "For new M365 users", "Business Basic")
+      // Check if this is a top accent line or header bar
+      if (shapeFillColor && topPercent !== undefined && topPercent < 10 && widthPercent && widthPercent > 80 && heightPercent && heightPercent < 6) {
+        headerBarColor = shapeFillColor;
+      }
+
+      // Create a rich SlideObject if it has physical dimensions
+      if (extCx > 0 && extCy > 0) {
+        const objX = Math.round((offX / sldWidthEmu) * 1920);
+        const objY = Math.round((offY / sldHeightEmu) * 1080);
+        const objW = Math.round((extCx / sldWidthEmu) * 1920);
+        const objH = Math.round((extCy / sldHeightEmu) * 1080);
+        const fullText = shapeParagraphTexts.join('\n');
+
+        if (shapeFillColor || fullText.length > 0 || borderColor) {
+          const isShapeWithFill = Boolean(shapeFillColor);
+          slideObjects.push({
+            id: `sp-${sIdx}-${shapeIdx}`,
+            type: isShapeWithFill ? 'shape' : 'text',
+            shapeType: isShapeWithFill ? shapeType : undefined,
+            x: objX,
+            y: objY,
+            width: objW,
+            height: objH,
+            rotation: rotDeg,
+            zIndex: shapeFillColor ? 1 : 2,
+            text: fullText || undefined,
+            style: {
+              backgroundColor: shapeFillColor || 'transparent',
+              borderColor: borderColor || undefined,
+              borderWidth: borderWidth || (borderColor ? 1 : 0),
+              borderRadius: borderRadius,
+              fontColor: shapeFontColor || (shapeFillColor && isDarkBg ? '#FFFFFF' : isDarkBg ? '#FFFFFF' : '#0F172A'),
+              fontFamily: shapeFontFamily || (phType === 'title' || phType === 'ctrtitle' ? themeMajorFont : themeMinorFont),
+              fontSize: shapeFontSize ? Math.round(shapeFontSize * 1.33) : undefined,
+              fontWeight: shapeFontWeight,
+              textAlign: shapeTextAlign,
+              alignVertical: alignVertical,
+              padding: shapeFillColor ? 12 : 4,
+            },
+          });
+        }
+      }
+
+      // Badge check for layout compatibility
       if (shapeFillColor && shapeParagraphTexts.length > 0 && widthPercent && widthPercent < 35 && heightPercent && heightPercent < 15) {
         slideElements.push({
           type: 'badge',
@@ -605,16 +753,9 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
           fontWeight: 'bold',
           textAlign: 'center',
         });
-        continue;
       }
 
-      // Check if this is a top accent line or header bar
-      if (shapeFillColor && topPercent !== undefined && topPercent < 10 && widthPercent && widthPercent > 80 && heightPercent && heightPercent < 6) {
-        headerBarColor = shapeFillColor;
-        continue;
-      }
-
-      if (shapeParagraphTexts.length === 0) continue;
+      if (shapeParagraphTexts.length === 0) return;
 
       if (phType === 'title' || phType === 'ctrtitle') {
         titleText = shapeParagraphTexts.join(' ');
@@ -628,6 +769,26 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
         } else {
           bodyParagraphs.push(...shapeParagraphTexts);
         }
+      }
+    };
+
+    // Parse Shapes <p:sp>
+    const shapes = Array.from(xmlDoc.getElementsByTagName('p:sp'));
+    for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
+      processShapeElement(shapes[shapeIdx], shapeIdx);
+    }
+
+    // Parse Group Shapes <p:grpSp>
+    const groupShapes = Array.from(xmlDoc.getElementsByTagName('p:grpSp'));
+    for (let gIdx = 0; gIdx < groupShapes.length; gIdx++) {
+      const grp = groupShapes[gIdx];
+      const grpXfrm = grp.getElementsByTagName('p:grpSpPr')[0]?.getElementsByTagName('a:xfrm')[0];
+      const grpOffX = parseInt(grpXfrm?.getElementsByTagName('a:off')[0]?.getAttribute('x') || '0', 10);
+      const grpOffY = parseInt(grpXfrm?.getElementsByTagName('a:off')[0]?.getAttribute('y') || '0', 10);
+
+      const subShapes = Array.from(grp.getElementsByTagName('p:sp'));
+      for (let sSubIdx = 0; sSubIdx < subShapes.length; sSubIdx++) {
+        processShapeElement(subShapes[sSubIdx], shapes.length + gIdx * 100 + sSubIdx, grpOffX, grpOffY);
       }
     }
 
@@ -675,11 +836,13 @@ export async function parsePptxOffline(file: File | Blob): Promise<ParsedSlide[]
       accentColor: themeColors.accent1 || '#0078D4',
       headerBarColor: headerBarColor || themeColors.accent1 || '#0078D4',
       elements: slideElements.length > 0 ? slideElements : undefined,
+      objects: slideObjects.length > 0 ? slideObjects : undefined,
       transition: slideTransition,
       aspectRatio: deckAspectRatio,
       aspectRatioLabel: deckAspectLabel,
       widthEmu: sldWidthEmu,
       heightEmu: sldHeightEmu,
+      notes: slideNotes
     });
   }
 

@@ -14,6 +14,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
   slideIndex,
   totalSlides,
   mode = 'full',
+  themeStyles,
 }) => {
   const isThumbnail = mode === 'thumbnail';
   
@@ -31,14 +32,18 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
 
   const isTitleSlide = Boolean(slide.isTitleSlide || (slideIndex === 0 && paragraphs.length <= 1));
 
-  // Determine light vs dark
-  const isDarkBg = Boolean(
-    slide.backgroundColor && 
-    (slide.backgroundColor.startsWith('#0') || slide.backgroundColor.startsWith('#1') || slide.backgroundColor.startsWith('#2') || slide.backgroundColor.toLowerCase().includes('black'))
+  // Determine if this slide is from a PPTX or structured deck vs a standard song/verse slide
+  const isPptxOrDeck = Boolean(
+    slide.objects || 
+    slide.elements || 
+    slide.aspectRatio || 
+    slide.notes !== undefined || 
+    (slide as any).isPptx
   );
 
-  // Background styling
+  // Background styling using slide background or active theme background
   const bgStyle: React.CSSProperties = React.useMemo(() => {
+    // 1. Direct slide background URL (PPTX background or custom slide background)
     if (slide.backgroundUrl) {
       return {
         backgroundImage: `url(${slide.backgroundUrl})`,
@@ -47,21 +52,51 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
         backgroundRepeat: 'no-repeat',
       };
     }
+    // 2. Direct slide background gradient or color
     if (slide.backgroundColor) {
       if (slide.backgroundColor.startsWith('linear-gradient') || slide.backgroundColor.startsWith('radial-gradient')) {
         return { background: slide.backgroundColor };
       }
       return { backgroundColor: slide.backgroundColor };
     }
-    return { backgroundColor: '#FFFFFF' };
-  }, [slide.backgroundUrl, slide.backgroundColor]);
+    // 3. Fallback to active theme background image ONLY for native song/verse slides (not PPTX decks)
+    if (!isPptxOrDeck && themeStyles?.backgroundImageUrl) {
+      return {
+        backgroundImage: `url(${themeStyles.backgroundImageUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      };
+    }
+    // 4. Fallback to active theme gradient or color ONLY for native song/verse slides
+    if (!isPptxOrDeck) {
+      const bgGrad = themeStyles?.backgroundGradient;
+      if (bgGrad && (bgGrad.startsWith('linear-gradient') || bgGrad.startsWith('radial-gradient'))) {
+        return { background: bgGrad };
+      }
+      if (themeStyles?.backgroundColor) {
+        return { backgroundColor: themeStyles.backgroundColor };
+      }
+    }
+    // 5. Presentation default canvas
+    return { backgroundColor: '#111827' };
+  }, [slide.backgroundUrl, slide.backgroundColor, themeStyles, isPptxOrDeck]);
 
-  const titleFont = slide.titleFontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
-  const bodyFont = slide.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
-  const titleColor = slide.titleColor || (isDarkBg ? '#FFFFFF' : '#0F172A');
-  const bodyColor = slide.fontColor || (isDarkBg ? '#E2E8F0' : '#334155');
-  const accentColor = slide.accentColor || slide.headerBarColor || '#0078D4';
-  const textAlign = slide.textAlign || (isTitleSlide ? 'left' : 'left');
+  // Determine light vs dark background
+  const isDarkBg = Boolean(
+    slide.backgroundUrl ||
+    (!isPptxOrDeck && themeStyles?.backgroundImageUrl) ||
+    (slide.backgroundColor && (slide.backgroundColor.startsWith('#0') || slide.backgroundColor.startsWith('#1') || slide.backgroundColor.startsWith('#2') || slide.backgroundColor.toLowerCase().includes('black'))) ||
+    (!isPptxOrDeck && themeStyles?.backgroundColor && (themeStyles.backgroundColor.startsWith('#0') || themeStyles.backgroundColor.startsWith('#1') || themeStyles.backgroundColor.startsWith('#2') || themeStyles.backgroundColor.toLowerCase().includes('black'))) ||
+    (!slide.backgroundColor && (isPptxOrDeck || !themeStyles?.backgroundColor))
+  );
+
+  const titleFont = slide.titleFontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
+  const bodyFont = slide.fontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
+  const titleColor = slide.titleColor || themeStyles?.fontColor || (isDarkBg ? '#FFFFFF' : '#0F172A');
+  const bodyColor = slide.fontColor || themeStyles?.fontColor || (isDarkBg ? '#E2E8F0' : '#334155');
+  const accentColor = slide.accentColor || slide.headerBarColor || (themeStyles as any)?.accentColor || '#3B82F6';
+  const textAlign = slide.textAlign || (themeStyles?.textAlign as any) || (isTitleSlide ? 'center' : 'left');
 
   const getBaseDimensions = () => {
     if (slide.aspectRatioLabel?.includes('4:3') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 4/3) < 0.05)) {
@@ -91,6 +126,16 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
       className="w-full h-full relative flex flex-col justify-between overflow-hidden select-none"
       style={{ ...bgStyle, containerType: 'size' }}
     >
+      {/* Background Overlay */}
+      {(slide.backgroundUrl || themeStyles?.backgroundImageUrl) && (
+        <div 
+          className="absolute inset-0 z-0 pointer-events-none" 
+          style={{ 
+            backgroundColor: themeStyles?.backgroundOverlayColor || '#000000',
+            opacity: themeStyles?.backgroundOverlayOpacity ?? 0.35 
+          }} 
+        />
+      )}
       {/* Top Header Accent Stripe / Bar if present */}
       {slide.headerBarColor && (
         <div 
