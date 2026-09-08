@@ -45,6 +45,9 @@ export interface SlideLabelConfig {
 }
 
 export interface SystemOptions {
+  general?: {
+    defaultLogoUrl?: string;
+  };
   mainOutput: {
     general: {
       outputMonitor: string;
@@ -53,6 +56,7 @@ export interface SystemOptions {
       margins: { left: number; top: number; right: number; bottom: number };
       defaultFont: FontStyleOptions;
       disableLogoOnLive: boolean;
+      defaultLogoUrl?: string;
     };
     song: {
       songFont: FontStyleOptions;
@@ -78,6 +82,7 @@ export interface SystemOptions {
       verseFont: FontStyleOptions;
       verseNumberStyle?: 'superscript' | 'bracket' | 'parenthesis' | 'period' | 'plain';
       verseColor?: string;
+      verseLabelColor?: string;
       showReference: boolean;
       referenceFont: FontStyleOptions;
       referenceLocation: 'After Each Slide' | 'Before Each Slide' | 'Top Right' | 'Bottom Right' | 'Top Left' | 'Bottom Left';
@@ -188,6 +193,7 @@ export interface Asset {
     scriptures?: boolean;
     presentations?: boolean;
     announcements?: boolean;
+    logo?: boolean;
   };
   createdAt?: number;
 }

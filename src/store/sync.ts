@@ -331,8 +331,10 @@ export function initSync(isProjector: boolean = false) {
     });
 
     // Polling for REST sync & Remote Command execution
+    let isFetchingSync = false;
     setInterval(async () => {
-      if (!isHttpServerAvailable()) return;
+      if (!isHttpServerAvailable() || isFetchingSync) return;
+      isFetchingSync = true;
       try {
         const res = await fetch('/api/sync/state');
         if (res.ok) {
@@ -356,16 +358,30 @@ export function initSync(isProjector: boolean = false) {
             const serverState = payload.data;
             if (serverState.lastUpdated > lastLocalUpdateTime) {
               lastLocalUpdateTime = serverState.lastUpdated;
+              const currentStates = useStore.getState().groupStates || {};
+              const mergedGroupStates = serverState.groupStates ? { ...serverState.groupStates } : { ...currentStates };
+              
+              // Preserve local binary arrays and fileBytes if server payload stripped them
+              for (const gid of Object.keys(mergedGroupStates)) {
+                const curState = currentStates[gid];
+                const newState = mergedGroupStates[gid];
+                if (curState?.directLiveItem?.data?.fileBytes && newState?.directLiveItem?.data && !newState.directLiveItem.data.fileBytes) {
+                  newState.directLiveItem.data.fileBytes = curState.directLiveItem.data.fileBytes;
+                }
+              }
+
               useStore.setState({
-                groupStates: serverState.groupStates || {},
+                groupStates: mergedGroupStates,
                 alert: serverState.alert || useStore.getState().alert,
                 ...(serverState.activeSchedule ? { activeSchedule: serverState.activeSchedule } : {})
               });
             }
           }
         }
-      } catch (err) {}
-    }, 500);
+      } catch (err) {} finally {
+        isFetchingSync = false;
+      }
+    }, 2000);
   }
 }
 

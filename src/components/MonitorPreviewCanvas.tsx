@@ -17,7 +17,7 @@ import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { MediaStreamController } from '../core/MediaStreamController';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 import { PresentationCanvas } from './presentation/PresentationCanvas';
-import { resolveGroupResolution } from '../core/RenderFrameBuilder';
+import { resolveGroupResolution, buildRenderFrame } from '../core/RenderFrameBuilder';
 
 interface MonitorPreviewCanvasProps {
   groupId: string;
@@ -271,21 +271,25 @@ export default function MonitorPreviewCanvas({
       isVideo = false;
       audioSrc = activeItem?.data?.url || activeItem?.customBackgroundUrl || '';
       backgroundUrl = resolvedStyles.backgroundImageUrl || '';
-    } else if (slideBgUrl) {
-      if (slideIsVideo === true || isExplicitVideoItem || isVideoUrl(slideBgUrl)) {
-        isVideo = true;
-        videoSrc = slideBgUrl;
-      } else {
-        isVideo = false;
-        backgroundUrl = slideBgUrl;
-      }
     } else {
-      if (!isExplicitImageItem && resolvedStyles.backgroundType === 'video' && resolvedStyles.backgroundVideoUrl) {
-        isVideo = true;
-        videoSrc = resolvedStyles.backgroundVideoUrl;
+      const effectiveBgUrl = slideBgUrl || activeItem?.customBackgroundUrl;
+
+      if (effectiveBgUrl) {
+        if (slideIsVideo === true || isExplicitVideoItem || isVideoUrl(effectiveBgUrl) || PresentationContentResolver.isVideoUrl(effectiveBgUrl)) {
+          isVideo = true;
+          videoSrc = effectiveBgUrl;
+        } else {
+          isVideo = false;
+          backgroundUrl = effectiveBgUrl;
+        }
       } else {
-        isVideo = false;
-        backgroundUrl = resolvedStyles.backgroundImageUrl || '';
+        if (!isExplicitImageItem && (resolvedStyles.backgroundType === 'video' || Boolean(resolvedStyles.backgroundVideoUrl))) {
+          isVideo = true;
+          videoSrc = resolvedStyles.backgroundVideoUrl || '';
+        } else {
+          isVideo = false;
+          backgroundUrl = resolvedStyles.backgroundImageUrl || '';
+        }
       }
     }
   }
@@ -504,7 +508,7 @@ export default function MonitorPreviewCanvas({
             {isVideo && videoSrc ? (
               <video
                 ref={videoRef}
-                src={managedVideoSrc || undefined}
+                src={managedVideoSrc || videoSrc}
                 autoPlay
                 loop={presentationState.isVideoLooping ?? true}
                 muted={presentationState.isVideoMuted ?? false}
@@ -522,9 +526,7 @@ export default function MonitorPreviewCanvas({
                   transform: 'translateZ(0)',
                   willChange: 'transform',
                   backfaceVisibility: 'hidden',
-                  filter: contentType === 'video'
-                    ? 'none'
-                    : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
+                  filter: 'none'
                 }}
               />
             ) : localBackgroundUrl ? (
@@ -535,7 +537,9 @@ export default function MonitorPreviewCanvas({
                   willChange: 'transform',
                   backfaceVisibility: 'hidden',
                   backgroundImage: `url(${localBackgroundUrl})`,
-                  filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
+                  filter: (isLogoMode ? (logoStyles.backgroundBlur || 0) : (resolvedStyles.backgroundBlur || 0)) > 0
+                    ? `blur(${isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur}px)`
+                    : 'none'
                 }}
               />
             ) : isGradient ? (
@@ -731,13 +735,28 @@ export default function MonitorPreviewCanvas({
           </AnimatePresence>
 
           {/* Slide Content Layer with Margins for Songs, Scriptures, Announcements */}
-          {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && presentationState.renderFrame && (
-            <PresentationCanvas 
-              frame={presentationState.renderFrame}
-              scale={1}
-              systemOptions={systemOptions}
-            />
-          )}
+          {(() => {
+            const computedRenderFrame = buildRenderFrame(
+              groupId,
+              presentationState,
+              activeSchedule,
+              group,
+              systemOptions,
+              songsList,
+              themesList,
+              []
+            );
+            if (!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame) {
+              return (
+                <PresentationCanvas 
+                  frame={computedRenderFrame}
+                  scale={1}
+                  systemOptions={systemOptions}
+                />
+              );
+            }
+            return null;
+          })()}
 
           {/* Bottom Corner Labels (Song Section Corner Badge or Scripture Reference) */}
           {currentSlide?.title && (
@@ -819,7 +838,26 @@ export default function MonitorPreviewCanvas({
                     }}
                   />
                 </div>
-              ) : null
+              ) : (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8 pointer-events-none">
+                  {(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl ? (
+                    <img
+                      src={(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl}
+                      alt="Logo"
+                      className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+                      <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
+                        <Sparkles className="w-10 h-10 text-cyan-300 animate-pulse" />
+                      </div>
+                      <span className="text-xl font-black tracking-wider uppercase text-white drop-shadow-md">
+                        {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
             ) : (resolvedStyles.showLogo && resolvedStyles.logoUrl) ? (
               <div 
                 className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg ${

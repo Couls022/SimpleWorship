@@ -256,4 +256,21 @@ export class PresentationContentResolver {
     if (!name || typeof name !== 'string') return false;
     return /\.(png|jpe?g|webp|gif|svg|bmp)$/i.test(name);
   }
+
+  static isAssetVideo(asset?: any, url?: string, name?: string): boolean {
+    if (asset) {
+      if (asset.type === 'video' || asset.type === 'motion') return true;
+      if (asset.data?.isVideo === true) return true;
+      if (asset.data?.type === 'video' || asset.data?.type === 'motion') return true;
+      if (this.isVideoName(asset.name)) return true;
+      if (this.isVideoUrl(asset.url)) return true;
+    }
+    if (url) {
+      if (this.isVideoUrl(url)) return true;
+    }
+    if (name) {
+      if (this.isVideoName(name)) return true;
+    }
+    return false;
+  }
 }

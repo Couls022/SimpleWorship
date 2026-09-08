@@ -88,14 +88,10 @@ export default function App() {
                   const result = await readSwsFile(file);
                   if (result.schedule) {
                     if (result.bundledSongs && result.bundledSongs.length > 0) {
-                      for (const song of result.bundledSongs) {
-                        await dbApi.addSong(song).catch(() => {});
-                      }
+                      await Promise.all(result.bundledSongs.map(song => dbApi.addSong(song).catch(() => {})));
                     }
                     if (result.bundledThemes && result.bundledThemes.length > 0) {
-                      for (const thm of result.bundledThemes) {
-                        await dbApi.addTheme(thm).catch(() => {});
-                      }
+                      await Promise.all(result.bundledThemes.map(thm => dbApi.addTheme(thm).catch(() => {})));
                     }
                     await dbApi.addSchedule(result.schedule).catch(() => {});
                     useStore.getState().setActiveSchedule(result.schedule);

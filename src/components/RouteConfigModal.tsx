@@ -154,33 +154,6 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-300 mb-2">Display Resolution / Aspect Ratio</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { val: '16:9', label: '16:9 Widescreen', sub: '1920×1080 Full HD' },
-                { val: '4:3', label: '4:3 Standard', sub: '1024×768 Projector' },
-                { val: '1366x768', label: '16:9 HD', sub: '1366×768 Display' },
-                { val: '1280x720', label: '16:9 720p', sub: '1280×720 HD' },
-                { val: '16:10', label: '16:10 WUXGA', sub: '1920×1200' },
-                { val: 'options', label: 'Inherit Default', sub: 'From General Options' },
-              ].map(opt => (
-                <button
-                  key={opt.val}
-                  type="button"
-                  onClick={() => setAspectRatio(opt.val)}
-                  className={`text-left px-3 py-2 text-xs rounded border transition-colors ${
-                    aspectRatio === opt.val 
-                      ? 'bg-cyan-900/30 border-cyan-500 text-cyan-300 font-bold' 
-                      : 'bg-[#141519] border-[#323642] text-gray-300 hover:bg-[#1a1c23]'
-                  }`}
-                >
-                  <div className="truncate">{opt.label}</div>
-                  <div className="text-[10px] text-gray-500 truncate">{opt.sub}</div>
-                </button>
-              ))}
-            </div>
-          </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">

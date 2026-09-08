@@ -30,6 +30,17 @@ import { broadcastStateChange, sanitizeForSync } from '../utils/broadcastSync';
 import { DisplayManager } from '../core/DisplayManager';
 import { buildRenderFrame } from '../core/RenderFrameBuilder';
 
+let saveGroupStatesTimer: any = null;
+const scheduleGroupStatesSave = (updatedGroupStates: Record<string, any>) => {
+  if (saveGroupStatesTimer) clearTimeout(saveGroupStatesTimer);
+  saveGroupStatesTimer = setTimeout(() => {
+    try {
+      const sanitized = sanitizeForSync(updatedGroupStates);
+      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
+    } catch (e) {}
+  }, 1000);
+};
+
 const defaultShortcutSettings: ShortcutSettings = {
   arrowControlsLive: true,
   spacebarAdvancesLive: true,
@@ -432,12 +443,13 @@ export const useStore = create<AppState>((set, get) => ({
 
       updatedThemes.forEach(t => dbApi.addTheme(t));
 
-      // Trigger timestamp update on all groupStates so live displays re-render instantly
+      // Trigger timestamp update on all groupStates so live displays re-render instantly with fresh system options
       const updatedGroupStates = { ...state.groupStates };
       Object.keys(updatedGroupStates).forEach(groupId => {
         if (updatedGroupStates[groupId]) {
           updatedGroupStates[groupId] = {
             ...updatedGroupStates[groupId],
+            renderFrame: undefined,
             timestamp: Date.now(),
           };
         }
@@ -827,36 +839,28 @@ export const useStore = create<AppState>((set, get) => ({
       const current = state.groupStates[groupId] || defaultState;
       const combinedState = { ...current, ...newState, timestamp: Date.now() };
 
-      // Build RenderFrame for the group
-      const targetGroup = state.outputGroups.find(g => g.id === groupId);
-      const systemOptions = state.systemOptions;
-      
-      const themeList = state.themesList;
-      
-      // Look up current slide
-      let currentSlide = undefined;
-      const activeSchedule = state.activeSchedule;
-      const activeItem = activeSchedule?.items?.find((i: any) => i.id === combinedState.activeItemId);
-      if (activeItem) {
-        if (activeItem.type === 'bible' && activeItem.data?.scriptureData?.slides) {
-          currentSlide = activeItem.data.scriptureData.slides[combinedState.activeSlideIndex || 0];
-        } else if (activeItem.data?.slides) {
-          currentSlide = activeItem.data.slides[combinedState.activeSlideIndex || 0];
-        } else if ((activeItem as any).slides) {
-          currentSlide = (activeItem as any).slides[combinedState.activeSlideIndex || 0];
-        }
-      }
-
-      const frame = buildRenderFrame(
-        groupId,
-        combinedState,
-        state.activeSchedule,
-        targetGroup,
-        systemOptions,
-        state.songsList,
-        state.themesList,
-        DisplayManager.getCachedDisplays()
+      // Fast-path optimization for video/audio scrub time updates
+      const isOnlyPlaybackTimeUpdate = (
+        Object.keys(newState).every(k => k === 'videoCurrentTime' || k === 'videoDuration')
       );
+
+      let frame = current.renderFrame;
+      if (!isOnlyPlaybackTimeUpdate) {
+        // Build RenderFrame for the group
+        const targetGroup = state.outputGroups.find(g => g.id === groupId);
+        const systemOptions = state.systemOptions;
+        
+        frame = buildRenderFrame(
+          groupId,
+          combinedState,
+          state.activeSchedule,
+          targetGroup,
+          systemOptions,
+          state.songsList,
+          state.themesList,
+          DisplayManager.getCachedDisplays()
+        );
+      }
 
       combinedState.renderFrame = frame;
 
@@ -865,17 +869,15 @@ export const useStore = create<AppState>((set, get) => ({
         [groupId]: combinedState
       };
 
-      try {
-        const sanitized = sanitizeForSync(updatedGroupStates);
-        localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
-      } catch (e) {}
+      // Debounce blocking synchronous localStorage writes to keep UI thread fluid and zero-lag
+      scheduleGroupStatesSave(updatedGroupStates);
 
       broadcastStateChange({
         type: 'GROUP_STATES_UPDATE',
         data: { groupStates: updatedGroupStates }
       });
 
-      if (newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
+      if (!isOnlyPlaybackTimeUpdate && newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
         DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
       }
 
@@ -1678,14 +1680,24 @@ export const useStore = create<AppState>((set, get) => ({
   setAvailableCameras: (cameras) => set({ availableCameras: cameras }),
 
   loadAllData: async () => {
-    const [songs, themes, assets, outputGroups, schedules, scriptures] = await Promise.all([
+    const [songs, themes, assets, outputGroups, schedules, scriptures, storedOptions] = await Promise.all([
       dbApi.getAllSongs(),
       dbApi.getAllThemes(),
       dbApi.getAllAssets(),
       dbApi.getOutputGroups(),
       dbApi.getAllSchedules(),
       dbApi.getAllScriptures(),
+      dbApi.getSystemOptions().catch(() => null),
     ]);
+
+    if (storedOptions) {
+      set(state => ({
+        systemOptions: {
+          ...state.systemOptions,
+          ...storedOptions,
+        }
+      }));
+    }
 
     // Ensure all seed songs and Baptist Hymnal songs are populated
     let mergedSongs = songs.map(s => {
@@ -1700,7 +1712,7 @@ export const useStore = create<AppState>((set, get) => ({
       const existingIds = new Set(mergedSongs.map(s => s.id));
       const missing = defaultSongs.filter(s => !existingIds.has(s.id));
       mergedSongs = [...mergedSongs, ...missing];
-      missing.forEach(s => dbApi.addSong(s));
+      Promise.all(missing.map(s => dbApi.addSong(s))).catch(() => {});
     }
     set({ songsList: mergedSongs.length > 0 ? mergedSongs : defaultSongs });
 
@@ -1725,11 +1737,30 @@ export const useStore = create<AppState>((set, get) => ({
     const missingDefaultThemes = defaultThemes.filter(t => !existingThemeIds.has(t.id));
     if (missingDefaultThemes.length > 0) {
       mergedThemes = [...mergedThemes, ...missingDefaultThemes];
-      missingDefaultThemes.forEach(t => dbApi.addTheme(t));
+      Promise.all(missingDefaultThemes.map(t => dbApi.addTheme(t))).catch(() => {});
     }
     set({ themesList: mergedThemes.length > 0 ? mergedThemes : defaultThemes });
 
-    if (assets.length > 0) set({ assetsList: assets });
+    if (assets.length > 0) {
+      // Cross-check default themes / systemOptions to populate isDefaultScope if not already set
+      const logoUrl = storedOptions?.general?.defaultLogoUrl || storedOptions?.mainOutput?.general?.defaultLogoUrl || mergedThemes.find(t => t.type === 'logo' || t.id === 'theme-logo')?.styles?.logoUrl;
+      const songBgUrl = mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundVideoUrl;
+      const bibleBgUrl = mergedThemes.find(t => t.type === 'bible' || t.id === 'theme-scripture')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'bible' || t.id === 'theme-scripture')?.styles?.backgroundVideoUrl;
+      const pptBgUrl = mergedThemes.find(t => t.type === 'presentation' || t.id === 'theme-presentation')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'presentation' || t.id === 'theme-presentation')?.styles?.backgroundVideoUrl;
+      const annBgUrl = mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundVideoUrl;
+
+      const hydratedAssets = assets.map(a => {
+        const scopes = { ...(a.isDefaultScope || {}) };
+        if (logoUrl && (a.url === logoUrl || a.id === logoUrl)) scopes.logo = true;
+        if (songBgUrl && (a.url === songBgUrl || a.id === songBgUrl)) scopes.songs = true;
+        if (bibleBgUrl && (a.url === bibleBgUrl || a.id === bibleBgUrl)) scopes.scriptures = true;
+        if (pptBgUrl && (a.url === pptBgUrl || a.id === pptBgUrl)) scopes.presentations = true;
+        if (annBgUrl && (a.url === annBgUrl || a.id === annBgUrl)) scopes.announcements = true;
+        return { ...a, isDefaultScope: scopes };
+      });
+
+      set({ assetsList: hydratedAssets });
+    }
     
     // Ensure scriptures
     let mergedScriptures = scriptures;
@@ -1737,29 +1768,26 @@ export const useStore = create<AppState>((set, get) => ({
       const existingIds = new Set(scriptures.map(sc => sc.id));
       const missing = defaultScriptures.filter(sc => !existingIds.has(sc.id));
       mergedScriptures = [...scriptures, ...missing];
-      missing.forEach(sc => dbApi.addScripture(sc));
+      Promise.all(missing.map(sc => dbApi.addScripture(sc))).catch(() => {});
     }
     set({ scripturesList: mergedScriptures.length > 0 ? mergedScriptures : defaultScriptures });
 
-    // Enforce exactly two default output groups with Live deactivated on every load
-    try {
-      const allExisting = await dbApi.getOutputGroups();
-      await Promise.all(allExisting.map(g => dbApi.deleteOutputGroup(g.id)));
-    } catch (e) {}
-
-    for (const g of defaultOutputGroups) {
-      await dbApi.saveOutputGroup(g);
+    // Load or initialize output groups efficiently without deleting DB records
+    let finalOutputGroups = outputGroups;
+    if (!finalOutputGroups || finalOutputGroups.length === 0) {
+      finalOutputGroups = defaultOutputGroups;
+      await Promise.all(defaultOutputGroups.map(g => dbApi.saveOutputGroup(g)));
     }
-    set({ outputGroups: defaultOutputGroups });
+    set({ outputGroups: finalOutputGroups });
 
-    // Always reset/initialize group states so that Live is OFF (isLiveEnabled: false)
-    const initialStates = {
-      'group-congregation': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
-      'group-stage': { ...defaultState, isLiveEnabled: false, timestamp: Date.now() },
-    };
+    // Always reset/initialize group states so that Live is OFF (isLiveEnabled: false) on fresh load
+    const initialStates: Record<string, any> = {};
+    finalOutputGroups.forEach(g => {
+      initialStates[g.id] = { ...defaultState, isLiveEnabled: false, timestamp: Date.now() };
+    });
     set({ 
       groupStates: initialStates, 
-      activeControlGroupId: 'group-congregation' 
+      activeControlGroupId: finalOutputGroups[0]?.id || 'group-congregation' 
     });
 
     try {
@@ -1807,6 +1835,61 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const targetType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : (scope === 'announcements' ? 'announcement' : 'logo')));
 
+      // Check if target asset is currently the active default for this scope to support toggle-off
+      const targetAsset = state.assetsList.find(a => a.url === assetUrl || a.id === assetUrl);
+      const isCurrentlyActiveDefault = targetAsset?.isDefaultScope?.[scope] === true;
+      const isTogglingOff = isCurrentlyActiveDefault;
+
+      const finalAssetUrl = isTogglingOff ? '' : assetUrl;
+
+      // 1. Update assetsList so ONLY target asset is marked default for this scope (automatic replacement)
+      const updatedAssetsList = state.assetsList.map(a => {
+        const isMatch = a.url === assetUrl || a.id === assetUrl;
+        const currentScopes = a.isDefaultScope || {};
+        
+        let newScopeState = false;
+        if (isMatch) {
+          newScopeState = !isCurrentlyActiveDefault;
+        }
+
+        const nextScopes = {
+          ...currentScopes,
+          [scope]: newScopeState,
+        };
+
+        const updated = {
+          ...a,
+          isDefaultScope: nextScopes,
+        };
+
+        dbApi.addAsset(updated).catch(() => {});
+        return updated;
+      });
+
+      // 2. Persist in SystemOptions if scope is 'logo'
+      let nextSystemOptions = state.systemOptions;
+      if (scope === 'logo') {
+        nextSystemOptions = {
+          ...state.systemOptions,
+          mainOutput: {
+            ...state.systemOptions?.mainOutput,
+            general: {
+              ...(state.systemOptions?.mainOutput?.general || {}),
+              defaultLogoUrl: finalAssetUrl,
+            } as any
+          },
+          general: {
+            ...((state.systemOptions as any)?.general || {}),
+            defaultLogoUrl: finalAssetUrl,
+          } as any
+        };
+        try {
+          localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextSystemOptions));
+        } catch (e) {}
+        dbApi.saveSystemOptions(nextSystemOptions).catch(() => {});
+      }
+
+      // 3. Update Theme in themesList
       let themeFound = false;
       const updatedThemes: Theme[] = state.themesList.map(t => {
         const isMatch = (
@@ -1824,26 +1907,26 @@ export const useStore = create<AppState>((set, get) => ({
             ...t,
             styles: {
               ...t.styles,
-              backgroundType: isVideo ? 'video' : 'image',
-              backgroundImageUrl: !isVideo ? assetUrl : undefined,
-              backgroundVideoUrl: isVideo ? assetUrl : undefined,
-              logoUrl: (scope === 'logo' && !isVideo) ? assetUrl : t.styles?.logoUrl,
+              backgroundType: isTogglingOff ? ('color' as const) : (isVideo ? 'video' : 'image'),
+              backgroundImageUrl: (!isTogglingOff && !isVideo) ? finalAssetUrl : undefined,
+              backgroundVideoUrl: (!isTogglingOff && isVideo) ? finalAssetUrl : undefined,
+              logoUrl: scope === 'logo' ? finalAssetUrl : t.styles?.logoUrl,
             }
           };
         }
         return t;
       });
 
-      if (!themeFound) {
+      if (!themeFound && !isTogglingOff) {
         const newTheme: Theme = {
           id: scope === 'logo' ? 'theme-logo' : (scope === 'scriptures' ? 'theme-scripture' : (scope === 'songs' ? 'theme-song' : (scope === 'presentations' ? 'theme-presentation' : `theme-${targetType}`))),
           name: `Default ${scope.charAt(0).toUpperCase() + scope.slice(1)} Theme`,
           type: targetType as any,
           styles: {
             backgroundType: isVideo ? 'video' : 'image',
-            backgroundImageUrl: !isVideo ? assetUrl : undefined,
-            backgroundVideoUrl: isVideo ? assetUrl : undefined,
-            logoUrl: scope === 'logo' && !isVideo ? assetUrl : undefined,
+            backgroundImageUrl: !isVideo ? finalAssetUrl : undefined,
+            backgroundVideoUrl: isVideo ? finalAssetUrl : undefined,
+            logoUrl: scope === 'logo' && !isVideo ? finalAssetUrl : undefined,
             showLogo: scope === 'logo',
           }
         };
@@ -1851,19 +1934,19 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       // Persist updated themes to DB
-      updatedThemes.forEach(t => dbApi.addTheme(t));
+      updatedThemes.forEach(t => dbApi.addTheme(t).catch(() => {}));
 
-      // Update Songs defaultBackgroundUrl if scope === 'songs'
+      // 4. Update Songs defaultBackgroundUrl if scope === 'songs'
       let updatedSongs = state.songsList;
       if (scope === 'songs') {
         updatedSongs = state.songsList.map(song => ({
           ...song,
-          defaultBackgroundUrl: assetUrl,
+          defaultBackgroundUrl: finalAssetUrl,
         }));
-        updatedSongs.forEach(song => dbApi.addSong(song));
+        updatedSongs.forEach(song => dbApi.addSong(song).catch(() => {}));
       }
 
-      // Update Schedule items matching scope so they immediately reflect the new default background
+      // 5. Update Schedule items matching scope so they immediately reflect the new default background
       let updatedSchedule = state.activeSchedule;
       if (state.activeSchedule) {
         const scheduleItemType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : 'announcement'));
@@ -1871,21 +1954,38 @@ export const useStore = create<AppState>((set, get) => ({
           if (item.type === scheduleItemType || (scheduleItemType === 'presentation' && item.type === 'ppt')) {
             return {
               ...item,
-              customBackgroundUrl: assetUrl,
+              customBackgroundUrl: finalAssetUrl,
             };
           }
           return item;
         });
         updatedSchedule = { ...state.activeSchedule, items: updatedItems };
-        dbApi.addSchedule(updatedSchedule);
+        dbApi.addSchedule(updatedSchedule).catch(() => {});
       }
 
-      // Trigger timestamp updates on control state to force Live/Preview re-renders instantly
+      // 6. Update direct live items in groupStates so active live displays reflect the new default background instantly
+      const targetScheduleType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : (scope === 'announcements' ? 'announcement' : 'logo')));
+
       const updatedGroupStates = { ...state.groupStates };
       Object.keys(updatedGroupStates).forEach(groupId => {
         if (updatedGroupStates[groupId]) {
+          const stateGroup = updatedGroupStates[groupId];
+          const directItem = stateGroup.directLiveItem;
+          let newDirectItem = directItem;
+
+          if (directItem) {
+            const grpType = directItem.type === 'bible' ? 'bible' : (directItem.type === 'ppt' ? 'presentation' : directItem.type);
+            if (grpType === targetScheduleType) {
+              newDirectItem = {
+                ...directItem,
+                customBackgroundUrl: finalAssetUrl,
+              };
+            }
+          }
+
           updatedGroupStates[groupId] = {
-            ...updatedGroupStates[groupId],
+            ...stateGroup,
+            directLiveItem: newDirectItem,
             timestamp: Date.now(),
           };
         }
@@ -1906,10 +2006,12 @@ export const useStore = create<AppState>((set, get) => ({
 
       broadcastStateChange({
         type: 'SYSTEM_UPDATE',
-        data: { themesList: updatedThemes },
+        data: { themesList: updatedThemes, systemOptions: nextSystemOptions },
       });
 
       return {
+        assetsList: updatedAssetsList,
+        systemOptions: nextSystemOptions,
         themesList: updatedThemes,
         songsList: updatedSongs,
         activeSchedule: updatedSchedule,

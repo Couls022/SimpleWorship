@@ -32,9 +32,23 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
   const songOpts = systemOptions?.mainOutput?.song;
   const scriptureOpts = systemOptions?.mainOutput?.scripture;
   
-  const referenceStyles = isBible ? scriptureOpts?.referenceFont : undefined;
-  const labelStyles = isSong ? songOpts?.labelFont : undefined;
-  const copyrightStyles = isSong ? songOpts?.copyrightFont : undefined;
+  const referenceThemeStyles = isBible && scriptureOpts?.referenceFont 
+    ? ThemeEngine.fontStyleToThemeStyles(scriptureOpts.referenceFont) 
+    : undefined;
+  const verseThemeStyles = isBible && scriptureOpts?.verseFont
+    ? ThemeEngine.fontStyleToThemeStyles(scriptureOpts.verseFont)
+    : undefined;
+  const labelThemeStyles = isSong && songOpts?.labelFont 
+    ? ThemeEngine.fontStyleToThemeStyles(songOpts.labelFont) 
+    : undefined;
+  const copyrightThemeStyles = isSong && songOpts?.copyrightFont 
+    ? ThemeEngine.fontStyleToThemeStyles(songOpts.copyrightFont) 
+    : undefined;
+
+  const referenceCss = referenceThemeStyles ? ThemeEngine.getTextStyle(referenceThemeStyles, 1) : {};
+  const verseCss = verseThemeStyles ? ThemeEngine.getTextStyle(verseThemeStyles, 1) : {};
+  const labelCss = labelThemeStyles ? ThemeEngine.getTextStyle(labelThemeStyles, 1) : {};
+  const copyrightCss = copyrightThemeStyles ? ThemeEngine.getTextStyle(copyrightThemeStyles, 1) : {};
 
   const showCopyright = isSong && songOpts?.displayCopyrightInfo && activeItem?.data?.copyright;
 
@@ -70,16 +84,16 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
           <h2 
             className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
             style={{
-              ...(isBible && referenceStyles
-                ? ThemeEngine.getTextStyle(referenceStyles, 1)
-                : (labelStyles ? ThemeEngine.getTextStyle(labelStyles, 1) : {})),
-              fontSize: (isBible && referenceStyles?.fontSize)
-                ? `${referenceStyles.fontSize}px`
-                : (labelStyles?.fontSize ? `${labelStyles.fontSize}px` : '32px'),
-              fontFamily: (isBible && referenceStyles?.fontFamily)
-                ? referenceStyles.fontFamily
-                : (labelStyles?.fontFamily || resolvedStyles.fontFamily),
-              textAlign: resolvedStyles.textAlign || 'center',
+              ...(isBible && referenceThemeStyles ? referenceCss : (labelThemeStyles ? labelCss : {})),
+              fontSize: (isBible && referenceThemeStyles?.fontSize)
+                ? `${referenceThemeStyles.fontSize}px`
+                : (labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '32px'),
+              fontFamily: (isBible && referenceThemeStyles?.fontFamily)
+                ? referenceThemeStyles.fontFamily
+                : (labelThemeStyles?.fontFamily || resolvedStyles.fontFamily),
+              textAlign: (isBible && referenceThemeStyles?.textAlign)
+                ? referenceThemeStyles.textAlign
+                : (resolvedStyles.textAlign || 'center'),
             }}
           >
             {isSong ? formatSongLabel(headerText) : headerText}
@@ -101,11 +115,15 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
               <span key={v.verse} className="inline">
                 {(scriptureOpts?.showVerseNumbers ?? true) && (
                   <span 
-                    className="font-bold inline-block mr-3 select-none transition-colors"
+                    className="inline-block mr-3 select-none transition-colors"
                     style={{ 
-                      color: scriptureOpts?.verseFont?.color || scriptureOpts?.verseColor || '#F6E05E',
-                      fontFamily: scriptureOpts?.verseFont?.family || scriptureOpts?.scriptureFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
-                      fontSize: `${Math.max(14, autoFitFontSize * 0.85)}px`
+                      ...verseCss,
+                      color: scriptureOpts?.verseLabelColor || verseThemeStyles?.fontColor || scriptureOpts?.verseFont?.color || scriptureOpts?.verseColor || '#F6E05E',
+                      fontFamily: verseThemeStyles?.fontFamily || scriptureOpts?.verseFont?.family || scriptureOpts?.scriptureFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
+                      fontSize: verseThemeStyles?.fontSize ? `${verseThemeStyles.fontSize}px` : `${Math.max(14, autoFitFontSize * 0.85)}px`,
+                      fontWeight: verseThemeStyles?.fontWeight || (scriptureOpts?.verseFont?.bold ? '700' : '400'),
+                      fontStyle: verseThemeStyles?.fontStyle || (scriptureOpts?.verseFont?.italic ? 'italic' : 'normal'),
+                      textDecoration: verseThemeStyles?.textDecoration || (scriptureOpts?.verseFont?.underline ? 'underline' : 'none'),
                     }}
                   >
                     {formatVerseNumber(v.verse, scriptureOpts?.verseNumberStyle)}
@@ -120,29 +138,71 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
           )}
         </div>
 
-        {/* Footer Reference */}
+        {/* Footer Reference (After Each Slide) */}
         {isBible && scriptureOpts?.showReference && refLocation === 'After Each Slide' && headerText && (
           <div 
             className="mt-6 pt-2 font-bold max-w-full opacity-90"
             style={{
-              ...(referenceStyles ? ThemeEngine.getTextStyle(referenceStyles, 1) : { color: '#E2E8F0', fontWeight: '700' }),
-              fontSize: referenceStyles?.fontSize ? `${referenceStyles.fontSize}px` : '32px',
-              fontFamily: referenceStyles?.fontFamily || resolvedStyles.fontFamily,
-              textAlign: resolvedStyles.textAlign === 'left' ? 'left' : resolvedStyles.textAlign === 'right' ? 'right' : 'center',
+              ...referenceCss,
+              fontSize: referenceThemeStyles?.fontSize ? `${referenceThemeStyles.fontSize}px` : '32px',
+              fontFamily: referenceThemeStyles?.fontFamily || resolvedStyles.fontFamily,
+              textAlign: referenceThemeStyles?.textAlign || (resolvedStyles.textAlign === 'left' ? 'left' : resolvedStyles.textAlign === 'right' ? 'right' : 'center'),
             }}
           >
             {headerText}
           </div>
         )}
 
-        {/* Corner Reference */}
+        {/* Top Left Reference */}
+        {isBible && scriptureOpts?.showReference && refLocation === 'Top Left' && headerText && (
+          <div 
+            className="absolute top-10 left-10 max-w-xl z-50 text-left opacity-90 font-bold"
+            style={{
+              ...referenceCss,
+              fontSize: referenceThemeStyles?.fontSize ? `${referenceThemeStyles.fontSize}px` : '32px',
+              fontFamily: referenceThemeStyles?.fontFamily || resolvedStyles.fontFamily,
+            }}
+          >
+            {headerText}
+          </div>
+        )}
+
+        {/* Top Right Reference */}
+        {isBible && scriptureOpts?.showReference && refLocation === 'Top Right' && headerText && (
+          <div 
+            className="absolute top-10 right-10 max-w-xl z-50 text-right opacity-90 font-bold"
+            style={{
+              ...referenceCss,
+              fontSize: referenceThemeStyles?.fontSize ? `${referenceThemeStyles.fontSize}px` : '32px',
+              fontFamily: referenceThemeStyles?.fontFamily || resolvedStyles.fontFamily,
+            }}
+          >
+            {headerText}
+          </div>
+        )}
+
+        {/* Bottom Left Reference */}
+        {isBible && scriptureOpts?.showReference && refLocation === 'Bottom Left' && headerText && (
+          <div 
+            className="absolute bottom-10 left-10 max-w-xl z-50 text-left opacity-90 font-bold"
+            style={{
+              ...referenceCss,
+              fontSize: referenceThemeStyles?.fontSize ? `${referenceThemeStyles.fontSize}px` : '32px',
+              fontFamily: referenceThemeStyles?.fontFamily || resolvedStyles.fontFamily,
+            }}
+          >
+            {headerText}
+          </div>
+        )}
+
+        {/* Bottom Right Reference */}
         {isBible && scriptureOpts?.showReference && refLocation === 'Bottom Right' && headerText && (
           <div 
-            className="absolute bottom-12 right-12 max-w-lg z-50 text-right opacity-90 font-bold"
+            className="absolute bottom-10 right-10 max-w-xl z-50 text-right opacity-90 font-bold"
             style={{
-              ...(referenceStyles ? ThemeEngine.getTextStyle(referenceStyles, 1) : { color: '#E2E8F0', fontWeight: '700' }),
-              fontSize: referenceStyles?.fontSize ? `${referenceStyles.fontSize}px` : '32px',
-              fontFamily: referenceStyles?.fontFamily || resolvedStyles.fontFamily,
+              ...referenceCss,
+              fontSize: referenceThemeStyles?.fontSize ? `${referenceThemeStyles.fontSize}px` : '32px',
+              fontFamily: referenceThemeStyles?.fontFamily || resolvedStyles.fontFamily,
             }}
           >
             {headerText}
@@ -163,9 +223,9 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
           <div 
             className="absolute bottom-6 w-full px-12 text-center flex flex-col gap-1 z-20 opacity-85"
             style={{
-              ...(copyrightStyles ? ThemeEngine.getTextStyle(copyrightStyles, 1) : { color: '#E2E8F0', fontWeight: '500' }),
-              fontSize: copyrightStyles?.fontSize ? `${copyrightStyles.fontSize}px` : '18px',
-              fontFamily: copyrightStyles?.fontFamily || resolvedStyles.fontFamily,
+              ...copyrightCss,
+              fontSize: copyrightThemeStyles?.fontSize ? `${copyrightThemeStyles.fontSize}px` : '18px',
+              fontFamily: copyrightThemeStyles?.fontFamily || resolvedStyles.fontFamily,
               justifyContent: 'center',
               alignItems: 'center',
             }}
@@ -188,10 +248,10 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
           <div 
             className="mt-6 pt-2 font-bold max-w-full opacity-90 text-cyan-300"
             style={{
-              ...(labelStyles ? ThemeEngine.getTextStyle(labelStyles, 1) : {}),
-              fontSize: labelStyles?.fontSize ? `${labelStyles.fontSize}px` : '32px',
-              fontFamily: labelStyles?.fontFamily || resolvedStyles.fontFamily,
-              textAlign: resolvedStyles.textAlign || 'center',
+              ...labelCss,
+              fontSize: labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '32px',
+              fontFamily: labelThemeStyles?.fontFamily || resolvedStyles.fontFamily,
+              textAlign: labelThemeStyles?.textAlign || resolvedStyles.textAlign || 'center',
             }}
           >
             {formatSongLabel(headerText)}

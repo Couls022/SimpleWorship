@@ -61,52 +61,6 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
       liveVerticalSplit: [50, 50],
       resourcesSplit: [70, 30]
     }
-  },
-  {
-    id: 'operator_cues',
-    name: 'Operator & Cues Focus',
-    description: 'Expanded Schedule and Preview columns designed for fast cueing and slide curation.',
-    isBuiltIn: true,
-    panels: {
-      schedule: { visible: true, isCollapsed: false, isDocked: true },
-      preview: { visible: true, isCollapsed: false, isDocked: true },
-      live: { visible: true, isCollapsed: false, isDocked: true },
-      multiGroup: { visible: false, isCollapsed: false, isDocked: true },
-      resources: { visible: false, isCollapsed: false, isDocked: false },
-      stageMonitor: { visible: false, isCollapsed: false, isDocked: false },
-      quickNotes: { visible: true, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
-    },
-    panelGroupSizes: {
-      verticalSplit: [100, 0],
-      horizontalMainSplit: [28, 44, 28],
-      bottomSplit: [0, 100],
-      previewVerticalSplit: [70, 30],
-      liveVerticalSplit: [65, 35],
-      resourcesSplit: [60, 40]
-    }
-  },
-  {
-    id: 'floating_modular',
-    name: 'Modular Floating Workstation',
-    description: 'Live Output & Stage Monitors popped out into draggable floating windows over the canvas.',
-    isBuiltIn: true,
-    panels: {
-      schedule: { visible: true, isCollapsed: false, isDocked: true },
-      preview: { visible: true, isCollapsed: false, isDocked: true },
-      live: { visible: true, isCollapsed: false, isDocked: false },
-      multiGroup: { visible: false, isCollapsed: false, isDocked: true },
-      resources: { visible: false, isCollapsed: false, isDocked: false },
-      stageMonitor: { visible: true, isCollapsed: false, isDocked: false },
-      quickNotes: { visible: false, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
-    },
-    panelGroupSizes: {
-      verticalSplit: [100, 0],
-      horizontalMainSplit: [30, 70, 0],
-      bottomSplit: [0, 100],
-      previewVerticalSplit: [65, 35],
-      liveVerticalSplit: [65, 35],
-      resourcesSplit: [65, 35]
-    }
   }
 ];
 

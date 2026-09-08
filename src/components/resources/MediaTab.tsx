@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { PresentationContentResolver } from '../../core/PresentationContentResolver';
 import { 
   Plus, 
   Film, 
@@ -50,6 +51,45 @@ export default function MediaTab() {
     } catch {
       // ignore
     }
+  };
+
+  const isDefaultBgFor = (asset: Asset, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo') => {
+    if (!asset) return false;
+    if (asset.isDefaultScope?.[scope] === true) return true;
+    const url = asset.url;
+    if (!url) return false;
+    if (scope === 'songs') {
+      const t = store.themesList.find(th => th.type === 'song' || th.id === 'theme-song');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (scope === 'scriptures') {
+      const t = store.themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (scope === 'presentations') {
+      const t = store.themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (scope === 'announcements') {
+      const t = store.themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
+      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+    }
+    if (scope === 'logo') {
+      const sysLogo = store.systemOptions?.general?.defaultLogoUrl || store.systemOptions?.mainOutput?.general?.defaultLogoUrl;
+      const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
+      return sysLogo === url || t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
+    }
+    return false;
+  };
+
+  const getActiveDefaultBadges = (asset: Asset) => {
+    const badges: { scope: string; label: string; color: string }[] = [];
+    if (isDefaultBgFor(asset, 'logo')) badges.push({ scope: 'logo', label: 'LOGO', color: 'bg-emerald-500/90 text-white border-emerald-400/50' });
+    if (isDefaultBgFor(asset, 'songs')) badges.push({ scope: 'songs', label: 'SONGS', color: 'bg-cyan-500/90 text-white border-cyan-400/50' });
+    if (isDefaultBgFor(asset, 'scriptures')) badges.push({ scope: 'scriptures', label: 'BIBLE', color: 'bg-amber-500/90 text-white border-amber-400/50' });
+    if (isDefaultBgFor(asset, 'presentations')) badges.push({ scope: 'presentations', label: 'PPT', color: 'bg-purple-500/90 text-white border-purple-400/50' });
+    if (isDefaultBgFor(asset, 'announcements')) badges.push({ scope: 'announcements', label: 'NOTICE', color: 'bg-rose-500/90 text-white border-rose-400/50' });
+    return badges;
   };
 
   // Context menu state
@@ -152,27 +192,32 @@ export default function MediaTab() {
   };
 
   const handleApplyToSongs = (asset: Asset) => {
-    setDefaultBackground(asset.url, 'songs', asset.type === 'video');
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, 'songs', isVideo);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Songs!` }));
   };
 
   const handleApplyToScriptures = (asset: Asset) => {
-    setDefaultBackground(asset.url, 'scriptures', asset.type === 'video');
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, 'scriptures', isVideo);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Scriptures!` }));
   };
 
   const handleApplyToPresentations = (asset: Asset) => {
-    setDefaultBackground(asset.url, 'presentations', asset.type === 'video');
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, 'presentations', isVideo);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Presentations!` }));
   };
 
   const handleApplyToAnnouncements = (asset: Asset) => {
-    setDefaultBackground(asset.url, 'announcements', asset.type === 'video');
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, 'announcements', isVideo);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Announcements!` }));
   };
 
   const handleApplyToLogo = (asset: Asset) => {
-    setDefaultBackground(asset.url, 'logo', asset.type === 'video');
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, 'logo', isVideo);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default for Logo!` }));
   };
 
@@ -544,8 +589,17 @@ export default function MediaTab() {
                   </div>
                 </div>
 
-                {/* Bottom Title */}
-                <div className="relative z-10">
+                {/* Bottom Title & Default Badges */}
+                <div className="relative z-10 flex flex-col gap-0.5">
+                  {getActiveDefaultBadges(asset).length > 0 && (
+                    <div className="flex flex-wrap gap-0.5 mb-0.5">
+                      {getActiveDefaultBadges(asset).map(b => (
+                        <span key={b.scope} className={`text-[8px] font-extrabold px-1 py-0.2 rounded shadow-xs uppercase tracking-tight flex items-center gap-0.5 ${b.color}`}>
+                          <Check size={7} /> {b.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="text-[11px] font-bold text-white drop-shadow truncate">
                     {asset.name}
                   </div>
@@ -620,15 +674,26 @@ export default function MediaTab() {
 
           <div className="border-t border-[#2a2e3d] my-1"></div>
 
+          <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+            Set as Default Background:
+          </div>
+
           <button
             onClick={() => {
               handleApplyToSongs(contextMenu.asset);
               setContextMenu(null);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2 text-cyan-300"
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-cyan-300"
           >
-            <Sparkles size={12} />
-            <span>Set Default for Songs</span>
+            <span className="flex items-center gap-2">
+              <Sparkles size={12} className="text-cyan-400" />
+              <span>For Songs</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset, 'songs') && (
+              <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-semibold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -636,10 +701,17 @@ export default function MediaTab() {
               handleApplyToScriptures(contextMenu.asset);
               setContextMenu(null);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2 text-amber-300"
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-amber-300"
           >
-            <Sparkles size={12} />
-            <span>Set Default for Scriptures</span>
+            <span className="flex items-center gap-2">
+              <Sparkles size={12} className="text-amber-400" />
+              <span>For Scriptures</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset, 'scriptures') && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -647,10 +719,17 @@ export default function MediaTab() {
               handleApplyToPresentations(contextMenu.asset);
               setContextMenu(null);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2 text-purple-300"
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-purple-300"
           >
-            <Sparkles size={12} />
-            <span>Set Default for Presentations</span>
+            <span className="flex items-center gap-2">
+              <Sparkles size={12} className="text-purple-400" />
+              <span>For Presentations</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset, 'presentations') && (
+              <span className="flex items-center gap-1 text-[10px] text-purple-400 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -658,10 +737,17 @@ export default function MediaTab() {
               handleApplyToAnnouncements(contextMenu.asset);
               setContextMenu(null);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2 text-rose-300"
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-rose-300"
           >
-            <Sparkles size={12} />
-            <span>Set Default for Announcements</span>
+            <span className="flex items-center gap-2">
+              <Sparkles size={12} className="text-rose-400" />
+              <span>For Announcements</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset, 'announcements') && (
+              <span className="flex items-center gap-1 text-[10px] text-rose-400 font-semibold bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <button
@@ -669,10 +755,17 @@ export default function MediaTab() {
               handleApplyToLogo(contextMenu.asset);
               setContextMenu(null);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2 text-emerald-300"
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-emerald-300 font-semibold"
           >
-            <Sparkles size={12} />
-            <span>Set Default for Logo</span>
+            <span className="flex items-center gap-2">
+              <Sparkles size={12} className="text-emerald-400" />
+              <span>For Logo</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset, 'logo') && (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
           </button>
 
           <div className="border-t border-[#2a2e3d] my-1"></div>

@@ -17,14 +17,6 @@ export function resolveGroupResolution(
     return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
   }
 
-  if (group?.resolution && group.resolution.width > 0 && group.resolution.height > 0) {
-    const w = group.resolution.width;
-    const h = group.resolution.height;
-    const ratio = w / h;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${w}×${h}`;
-    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
-  }
-
   const defaultRes = { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
   if (!systemOptions) return defaultRes;
 
@@ -134,8 +126,14 @@ export function buildRenderFrame(
   ));
 
   let headerText = '';
-  if (hasHeader) {
-    headerText = activeItem.type === 'song' ? (currentSlide.title.replace(/:(.*)/, '') || currentSlide.title) : currentSlide.title;
+  if (activeItem.type === 'song') {
+    if (hasHeader) {
+      headerText = currentSlide.title.replace(/:(.*)/, '') || currentSlide.title;
+    }
+  } else if (activeItem.type === 'bible') {
+    if (showReference) {
+      headerText = currentSlide.title || '';
+    }
   }
 
   const hasFooter = Boolean(

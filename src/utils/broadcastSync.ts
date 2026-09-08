@@ -76,25 +76,23 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
   if (typeof window === 'undefined') return;
   const fullPayload = { ...payload, timestamp: Date.now() };
 
-  let lightweightPayload: BroadcastPayload;
-  try {
-    lightweightPayload = sanitizeForSync(fullPayload);
-  } catch (err) {
-    console.warn('[Sync] Failed to sanitize payload for broadcast:', err);
-    lightweightPayload = fullPayload;
-  }
-
   // 1. Post to BroadcastChannel (fast in-memory IPC with no storage quota)
+  // Send fullPayload so ArrayBuffers, TypedArrays (fileBytes), and data URLs are preserved with 1:1 fidelity across windows!
   if (channel) {
     try {
-      channel.postMessage(lightweightPayload);
+      channel.postMessage(fullPayload);
     } catch (err) {
-      console.warn('[Sync] Error posting to BroadcastChannel:', err);
+      console.warn('[Sync] Error posting full payload to BroadcastChannel, falling back to sanitized:', err);
+      try {
+        const lightweight = sanitizeForSync(fullPayload);
+        channel.postMessage(lightweight);
+      } catch (e2) {}
     }
   }
 
-  // 2. Safe setItem to localStorage for cross-window StorageEvent listeners
+  // 2. Safe setItem to localStorage for cross-window StorageEvent listeners (sanitized to prevent QuotaExceededError)
   try {
+    const lightweightPayload = sanitizeForSync(fullPayload);
     const jsonString = JSON.stringify(lightweightPayload);
     localStorage.setItem('simpleworship_live_sync_event', jsonString);
   } catch (err: any) {

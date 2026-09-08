@@ -29,6 +29,7 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
   const [fontList, setFontList] = useState<SystemFontEntry[]>(() => getAvailableSystemFonts());
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Extract clean font name for display
   const primaryFamily = value.split(',')[0].replace(/['"]/g, '').trim();
@@ -78,7 +79,13 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
     };
@@ -87,6 +94,15 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
     }
     return () => window.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
+
+  const handleSelectFont = (familyName: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    onChange(`${familyName}, sans-serif`);
+    setIsOpen(false);
+  };
 
   const handleScanSystemFonts = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -142,8 +158,10 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
       {/* Dropdown Menu */}
       {isOpen && typeof document !== 'undefined' && createPortal(
       <div 
+        ref={dropdownRef}
         className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden flex flex-col text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100"
         style={dropdownStyle}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
           {/* Search Header & Auto-Detect Button */}
@@ -232,14 +250,12 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
                     <button
                       key={f.family}
                       type="button"
-                      className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition-colors ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition-colors cursor-pointer ${
                         isSelected ? 'bg-sky-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-200'
                       }`}
                       style={{ fontFamily: `${f.family}, sans-serif` }}
-                      onClick={() => {
-                        onChange(`${f.family}, sans-serif`);
-                        setIsOpen(false);
-                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => handleSelectFont(f.family, e)}
                     >
                       <span className="truncate">{f.family}</span>
                       {isSelected && <Check size={12} className="shrink-0" />}
@@ -264,14 +280,12 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
                     <button
                       key={f.family}
                       type="button"
-                      className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition-colors ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition-colors cursor-pointer ${
                         isSelected ? 'bg-sky-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-200'
                       }`}
                       style={{ fontFamily: `${f.family}, sans-serif` }}
-                      onClick={() => {
-                        onChange(`${f.family}, sans-serif`);
-                        setIsOpen(false);
-                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => handleSelectFont(f.family, e)}
                     >
                       <span className="truncate">{f.family}</span>
                       {isSelected && <Check size={12} className="shrink-0" />}
@@ -296,14 +310,12 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
                     <button
                       key={f.family}
                       type="button"
-                      className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition-colors ${
+                      className={`w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition-colors cursor-pointer ${
                         isSelected ? 'bg-sky-600 text-white font-bold' : 'hover:bg-slate-800 text-slate-200'
                       }`}
                       style={{ fontFamily: `${f.family}, sans-serif` }}
-                      onClick={() => {
-                        onChange(`${f.family}, sans-serif`);
-                        setIsOpen(false);
-                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => handleSelectFont(f.family, e)}
                     >
                       <span className="truncate">{f.family}</span>
                       {isSelected && <Check size={12} className="shrink-0" />}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { PresentationContentResolver } from '../core/PresentationContentResolver';
 import { 
   X, 
   Film, 
@@ -26,7 +27,7 @@ interface MediaLibraryModalProps {
 
 export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
   const store = useStore();
-  const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem, themesList } = store;
+  const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem, themesList, systemOptions } = store;
 
   const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'image' | 'audio' | 'video'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,6 +37,8 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
   // Check if an asset URL is the currently active default background for a given category
   const isDefaultBgFor = (url: string, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo') => {
     if (!url) return false;
+    const foundAsset = assetsList.find(a => a.url === url || a.id === url);
+    if (foundAsset?.isDefaultScope?.[category] === true) return true;
     if (category === 'songs') {
       const t = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
       return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
@@ -53,10 +56,21 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
       return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
     }
     if (category === 'logo') {
+      const sysLogo = systemOptions?.general?.defaultLogoUrl || systemOptions?.mainOutput?.general?.defaultLogoUrl;
       const t = themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
+      return sysLogo === url || t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
     }
     return false;
+  };
+
+  const getActiveDefaultBadges = (asset: Asset) => {
+    const badges: { scope: string; label: string; color: string }[] = [];
+    if (isDefaultBgFor(asset.url, 'logo')) badges.push({ scope: 'logo', label: 'LOGO', color: 'bg-emerald-500/90 text-white border-emerald-400/50' });
+    if (isDefaultBgFor(asset.url, 'songs')) badges.push({ scope: 'songs', label: 'SONGS', color: 'bg-cyan-500/90 text-white border-cyan-400/50' });
+    if (isDefaultBgFor(asset.url, 'scriptures')) badges.push({ scope: 'scriptures', label: 'BIBLE', color: 'bg-amber-500/90 text-white border-amber-400/50' });
+    if (isDefaultBgFor(asset.url, 'presentations')) badges.push({ scope: 'presentations', label: 'PPT', color: 'bg-purple-500/90 text-white border-purple-400/50' });
+    if (isDefaultBgFor(asset.url, 'announcements')) badges.push({ scope: 'announcements', label: 'NOTICE', color: 'bg-rose-500/90 text-white border-rose-400/50' });
+    return badges;
   };
   
   // Context menu state for right-click on assets
@@ -232,7 +246,8 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
 
   const handleSetDefaultBg = (asset: Asset, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo', e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setDefaultBackground(asset.url, category, asset.type === 'video' || asset.type === 'motion');
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, category, isVideo);
     setContextMenu(null);
     const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
     window.dispatchEvent(
@@ -530,28 +545,39 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
                     </div>
 
                     {/* Bottom Row: Name and Set As Default BG Menu Button */}
-                    <div className="relative z-10 flex items-center justify-between gap-1">
-                      <div className="text-[11px] font-semibold text-white truncate drop-shadow-sm flex-1" title={asset.name}>
-                        {asset.name}
-                      </div>
+                    <div className="relative z-10 flex flex-col gap-0.5">
+                      {getActiveDefaultBadges(asset).length > 0 && (
+                        <div className="flex flex-wrap gap-0.5">
+                          {getActiveDefaultBadges(asset).map(b => (
+                            <span key={b.scope} className={`text-[7px] font-extrabold px-1 py-0.2 rounded shadow-xs uppercase tracking-tight flex items-center gap-0.5 ${b.color}`}>
+                              <Check size={6} /> {b.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="text-[11px] font-semibold text-white truncate drop-shadow-sm flex-1" title={asset.name}>
+                          {asset.name}
+                        </div>
 
-                      {/* Options Button (Also opens context menu) */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const menuWidth = 230;
-                          const menuHeight = 330;
-                          const x = Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10);
-                          const y = Math.min(rect.bottom + 4, window.innerHeight - menuHeight - 10);
-                          setSelectedAssetId(asset.id);
-                          setContextMenu({ x: Math.max(10, x), y: Math.max(10, y), asset });
-                        }}
-                        className="text-[10px] p-0.5 rounded bg-black/60 hover:bg-[#343a4e] text-gray-300 hover:text-cyan-300 border border-white/10 flex items-center gap-0.5 cursor-pointer"
-                        title="Options / Set as Default (Right-click card)"
-                      >
-                        <ChevronDown size={11} />
-                      </button>
+                        {/* Options Button (Also opens context menu) */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const menuWidth = 230;
+                            const menuHeight = 330;
+                            const x = Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10);
+                            const y = Math.min(rect.bottom + 4, window.innerHeight - menuHeight - 10);
+                            setSelectedAssetId(asset.id);
+                            setContextMenu({ x: Math.max(10, x), y: Math.max(10, y), asset });
+                          }}
+                          className="text-[10px] p-0.5 rounded bg-black/60 hover:bg-[#343a4e] text-gray-300 hover:text-cyan-300 border border-white/10 flex items-center gap-0.5 cursor-pointer"
+                          title="Options / Set as Default (Right-click card)"
+                        >
+                          <ChevronDown size={11} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

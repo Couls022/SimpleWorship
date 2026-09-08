@@ -30,6 +30,8 @@ export class PresentationCore {
     return null;
   }
 
+  private static slideCache = new Map<string, { cacheKey: string; slides: Slide[] }>();
+
   // Generates slides for a presentation item
   static generateSlides(
     item: PresentationItem, 
@@ -37,6 +39,14 @@ export class PresentationCore {
     systemOptions?: SystemOptions
   ): Slide[] {
     if (!item) return [];
+
+    const songOptsStr = JSON.stringify(systemOptions?.mainOutput?.song || {});
+    const scriptureOptsStr = JSON.stringify(systemOptions?.mainOutput?.scripture || {});
+    const cacheKey = `${item.id}_${item.contentId || ''}_${item.customBackgroundUrl || ''}_${item.data?.verses?.length || 0}_${item.data?.sections?.length || 0}_${item.data?.slides?.length || 0}_${availableSongs.length}_${songOptsStr}_${scriptureOptsStr}`;
+    const cached = PresentationCore.slideCache.get(item.id);
+    if (cached && cached.cacheKey === cacheKey) {
+      return cached.slides;
+    }
 
     let generated: Slide[] = [];
 
@@ -361,9 +371,10 @@ export class PresentationCore {
       ];
     }
 
+    let finalSlides = generated;
     // Apply specific slide backgrounds overriding defaults
     if (item.data && (item.data.slideBackgrounds || item.data.slideMedia) && generated.length > 0) {
-      return generated.map((slide, idx) => {
+      finalSlides = generated.map((slide, idx) => {
         const slideMedia = item.data.slideMedia?.[idx];
         const slideBg = item.data.slideBackgrounds?.[idx];
         
@@ -377,6 +388,7 @@ export class PresentationCore {
       });
     }
 
-    return generated;
+    PresentationCore.slideCache.set(item.id, { cacheKey, slides: finalSlides });
+    return finalSlides;
   }
 }

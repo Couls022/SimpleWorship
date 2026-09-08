@@ -3,40 +3,51 @@ import { ThemeEngine } from '../core/ThemeEngine';
 import { buildRenderFrame } from '../core/RenderFrameBuilder';
 import { PresentationCore } from '../core/PresentationCore';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
-import { SystemOptions, PresentationState, Schedule, OutputGroup, ThemeStyles, PresentationItem } from '../types';
+import { SystemOptions, PresentationState, Schedule, OutputGroup, ThemeStyles, PresentationItem, FontStyleOptions } from '../types';
+
+const createFont = (overrides: Partial<FontStyleOptions> & { family: string; maxSize: number }): FontStyleOptions => ({
+  color: '#ffffff',
+  bold: false,
+  italic: false,
+  underline: false,
+  alignHorizontal: 'center',
+  alignVertical: 'middle',
+  opacity: 1,
+  ...overrides,
+});
 
 describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
   const mockSystemOptions: SystemOptions = {
-    version: '1.0',
-    selectedDisplayId: 'display-1',
-    confidenceDisplayId: 'display-2',
-    enableSecondaryWindow: false,
-    secondaryWindowTargetDisplayId: 'display-1',
-    activeThemeId: 'theme-global',
-    aspectRatio: '16:9',
     mainOutput: {
       general: {
-        defaultFont: { family: 'Montserrat, sans-serif', maxSize: 90, color: '#ffffff' },
-        defaultBackground: '#000000',
-        stageBackground: '#000000',
-        paddingHorizontal: 5,
-        paddingVertical: 5,
+        outputMonitor: 'Display 1',
+        alphaChannel: 'Disabled',
+        position: { left: 0, top: 0, width: 1920, height: 1080 },
+        margins: { left: 0, top: 0, right: 0, bottom: 0 },
+        defaultFont: createFont({ family: 'Montserrat, sans-serif', maxSize: 90 }),
+        disableLogoOnLive: false,
       },
       song: {
-        songFont: { family: 'Georgia', maxSize: 90, color: '#ffffff', bold: true },
+        songFont: createFont({ family: 'Georgia', maxSize: 90, bold: true }),
+        labelFont: createFont({ family: 'Montserrat', maxSize: 30 }),
+        copyrightFont: createFont({ family: 'Montserrat', maxSize: 20 }),
+        licenseInfo: '',
         minFontSize: 32,
         lineSpacing: 1.35,
         allCapsLyrics: false,
         showVerseChorusLabel: true,
-        verseChorusLabelLocation: 'Header',
-        verseChorusLabelStyle: 'uppercase',
+        labelLocation: 'Header',
+        labelStyle: 'uppercase',
         displayCopyrightInfo: true,
         copyrightPosition: 'Bottom Left',
         showOnFirstSlideOnly: false,
         showOnLastSlideOnly: false,
       },
       scripture: {
-        scriptureFont: { family: 'Times New Roman', maxSize: 80, color: '#ffffff', italic: false },
+        enableScriptureSupport: true,
+        scriptureFont: createFont({ family: 'Times New Roman', maxSize: 80, italic: false }),
+        verseFont: createFont({ family: 'Times New Roman', maxSize: 40 }),
+        referenceFont: createFont({ family: 'Times New Roman', maxSize: 40 }),
         minFontSize: 32,
         lineSpacing: 1.4,
         showVerseNumbers: true,
@@ -44,17 +55,73 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
         verseColor: '#F6E05E',
         showReference: true,
         referenceLocation: 'After Each Slide',
-        displayTranslationBadge: true,
+        showTranslationBadge: true,
+        showCompletePassage: true,
+        referenceIndent: false,
+        abbreviateBookNames: false,
+        additionalLineSpacing: false,
+        showReferenceOnly: false,
+        breakOnNewVerse: false,
+        automaticallyFlow: false,
       },
       presentations: {
-        titleFont: { family: 'Montserrat', maxSize: 90, color: '#ffffff' },
-        contentFont: { family: 'Montserrat', maxSize: 70, color: '#ffffff' },
+        titleFont: createFont({ family: 'Montserrat', maxSize: 90 }),
+        subTitleFont: createFont({ family: 'Montserrat', maxSize: 60 }),
+        contentFont: createFont({ family: 'Montserrat', maxSize: 70 }),
       },
       transitions: {
-        type: 'fade',
+        activeTab: 'Slide',
+        blend: 'Blend',
         duration: 500,
-        easing: 'easeInOut',
       },
+      alerts: {
+        nursery: {
+          enabled: false,
+          font: createFont({ family: 'Montserrat', maxSize: 30 }),
+          backgroundColor: '#000000',
+          backgroundOpacity: 0.8,
+          location: 'Top Right',
+          autoRemove: false,
+          autoRemoveDuration: '30s',
+        },
+        message: {
+          enabled: false,
+          font: createFont({ family: 'Montserrat', maxSize: 30 }),
+          backgroundColor: '#000000',
+          backgroundOpacity: 0.8,
+          location: 'Bottom',
+          scrollSpeed: 5,
+        },
+      },
+    },
+    alternateOutput: {
+      enabled: false,
+      outputMonitor: 'Display 2',
+      position: { left: 0, top: 0, width: 1920, height: 1080 },
+      margins: { left: 0, top: 0, right: 0, bottom: 0 },
+      defaultFont: createFont({ family: 'Montserrat', maxSize: 90 }),
+    },
+    foldback: {
+      enabled: false,
+      outputMonitor: 'Display 3',
+      position: { left: 0, top: 0, width: 1920, height: 1080 },
+      margins: { left: 0, top: 0, right: 0, bottom: 0 },
+      defaultFont: createFont({ family: 'Montserrat', maxSize: 90 }),
+      clockEnabled: true,
+    },
+    serviceIntervals: {
+      countdownEnabled: false,
+      countdownTime: '00:00',
+      intervalType: 'Service',
+    },
+    slideLabels: [],
+    advanced: {
+      showLiveOnStartup: false,
+      advanceScheduleOnGoLive: false,
+      preventDvdSpinDown: false,
+      alwaysSaveStandalone: false,
+      enableRemoteControl: false,
+      remoteName: 'SimpleWorship',
     },
   };
 
@@ -98,9 +165,7 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
     name: 'Main Auditorium',
     targetDisplayId: 'display-1',
     themeId: 'theme-global',
-    assignedRouterIds: ['router-1'],
-    resolution: { width: 1920, height: 1080 },
-    margins: { left: 80, top: 60, right: 80, bottom: 60 },
+    customResolution: { width: 1920, height: 1080 },
   };
 
   const mockSchedule: Schedule = {
@@ -108,7 +173,6 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
     name: 'Sunday Service',
     items: [mockSongItem, mockScriptureItem],
     createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 
   // TEST 1 — Song Font Cascade Fix
@@ -251,7 +315,7 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
   it('TEST 7: Target display resolution change updates target geometry in render model', () => {
     const fourKGroup: OutputGroup = {
       ...mockGroup,
-      resolution: { width: 3840, height: 2160 },
+      customResolution: { width: 3840, height: 2160 },
     };
 
     const state: PresentationState = {
@@ -362,7 +426,7 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
   // TEST 11 — End-to-End Font Style Propagation
   it('TEST 11: Font options (bold, italic, underline, casing, line spacing) propagate into render frame', () => {
     const customOptions: SystemOptions = JSON.parse(JSON.stringify(mockSystemOptions));
-    customOptions.mainOutput.song.songFont = {
+    customOptions.mainOutput.song.songFont = createFont({
       family: 'Courier New',
       maxSize: 96,
       color: '#FF0000',
@@ -371,7 +435,7 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
       underline: true,
       casing: 'uppercase',
       lineSpacing: 1.6,
-    };
+    });
 
     const state: PresentationState = {
       activeScheduleId: 'schedule-1',

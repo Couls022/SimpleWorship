@@ -188,14 +188,15 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
       liveItem?.type === 'video' ||
       (liveItem?.type === 'media' && (liveItem.data?.type === 'video' || liveItem.data?.type === 'motion' || liveItem.data?.isVideo === true)) ||
       currentSlide?.isVideo === true ||
+      (typeof currentSlide?.backgroundUrl === 'string' && PresentationContentResolver.isVideoUrl(currentSlide.backgroundUrl)) ||
+      (resolvedStyles.backgroundType === 'video' && Boolean(resolvedStyles.backgroundVideoUrl)) ||
       (typeof currentSlide?.backgroundUrl === 'string' && (
         currentSlide.backgroundUrl.toLowerCase().endsWith('.mp4') ||
         currentSlide.backgroundUrl.toLowerCase().endsWith('.webm') ||
         currentSlide.backgroundUrl.toLowerCase().endsWith('.mov') ||
         currentSlide.backgroundUrl.toLowerCase().endsWith('.m4v') ||
         currentSlide.backgroundUrl.toLowerCase().startsWith('data:video/')
-      )) ||
-      (!currentSlide?.backgroundUrl && resolvedStyles.backgroundType === 'video' && Boolean(resolvedStyles.backgroundVideoUrl) && liveItem?.type !== 'song' && liveItem?.type !== 'bible' && liveItem?.type !== 'presentation' && liveItem?.type !== 'ppt')
+      ))
     ))
   );
 

@@ -1053,19 +1053,6 @@ export default function TopToolbar({
                   );
                 })}
 
-                <button
-                  onClick={() => {
-                    const name = prompt('Save current layout as new preset:');
-                    if (name && name.trim()) {
-                      workspace.saveCustomPreset(name.trim());
-                    }
-                    setActiveMenu(null);
-                  }}
-                  className="w-full text-left px-3 py-1 text-cyan-400 hover:bg-[#323744] hover:text-cyan-300 font-medium cursor-pointer"
-                >
-                  + Save Layout as Preset...
-                </button>
-
                 <div className="border-t border-[#313540] my-1"></div>
 
                 <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
@@ -1077,9 +1064,7 @@ export default function TopToolbar({
                     { id: 'schedule', label: 'Schedule Panel' },
                     { id: 'live', label: 'Live Output Panel' },
                     { id: 'multiGroup', label: 'Multi-Group Displays' },
-                    { id: 'stageMonitor', label: 'Stage Monitor / Confidence' },
                     { id: 'quickNotes', label: 'Quick Notes & Script' },
-                    { id: 'mediaLibrary', label: 'Media Library Panel' },
                   ] as const
                 ).map(({ id, label }) => {
                   const p = workspace.panels[id];

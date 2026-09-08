@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { Sparkles, WifiOff, Music, Volume2 } from 'lucide-react';
-import { subscribeToBroadcast } from '../utils/broadcastSync';
+import { subscribeToBroadcast, broadcastStateChange } from '../utils/broadcastSync';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationState } from '../types';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
@@ -22,7 +22,7 @@ import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 import { MediaStreamController } from '../core/MediaStreamController';
 import { dbApi } from '../db';
 import { TelemetryManager } from '../utils/TelemetryManager';
-import { resolveGroupResolution } from '../core/RenderFrameBuilder';
+import { resolveGroupResolution, buildRenderFrame } from '../core/RenderFrameBuilder';
 import { PresentationCanvas } from './presentation/PresentationCanvas';
 
 interface ProjectorViewProps {
@@ -73,6 +73,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
   useEffect(() => {
     loadAllData();
+    broadcastStateChange({ type: 'REQUEST_STATE', data: null });
 
     const cleanupRouteListener = DisplayManager.listenToProjectorRouteChanged((data) => {
       if (!displayId || data.displayId === displayId) {
@@ -85,11 +86,17 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
         setIdentifyActive(true);
         setTimeout(() => setIdentifyActive(false), 3000);
       }
-      if (msg.type === 'GROUP_STATES_UPDATE' || msg.type === 'GO_LIVE') {
-        const gs = msg.data?.groupStates || (msg.data && !msg.data.groupStates ? msg.data : null);
-        if (gs) {
+      if (msg.type === 'GROUP_STATES_UPDATE' || msg.type === 'GO_LIVE' || msg.type === 'SYNC_STATE' || msg.type === 'PREVIEW_UPDATE') {
+        const data = msg.data;
+        if (data) {
+          const gs = data.groupStates || (data.isLiveEnabled !== undefined || data.activeItemId !== undefined ? { [data.groupId || 'group-congregation']: data } : null);
           useStore.setState((prev) => ({
-            groupStates: { ...prev.groupStates, ...gs }
+            ...(gs ? { groupStates: { ...prev.groupStates, ...gs } } : {}),
+            ...(data.activeSchedule ? { activeSchedule: data.activeSchedule } : {}),
+            ...(data.outputGroups ? { outputGroups: data.outputGroups } : {}),
+            ...(data.systemOptions ? { systemOptions: data.systemOptions } : {}),
+            ...(data.themesList ? { themesList: data.themesList } : {}),
+            ...(data.activeControlGroupId ? { activeControlGroupId: data.activeControlGroupId } : {}),
           }));
         }
       }
@@ -142,22 +149,30 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
 
   // Resolves the ordered array of live groups targeting this physical display
   const orderedLiveGroupIds = React.useMemo(() => {
-    if (!displayId || outputGroups.length === 0) return [];
-    const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
-    const match = assignments.get(displayId);
-    if (!match || match.liveGroupIds.length === 0) {
-      return [];
+    let list: string[] = [];
+    if (displayId && outputGroups.length > 0) {
+      const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
+      const match = assignments.get(displayId);
+      if (match && match.liveGroupIds.length > 0) {
+        list = [...match.liveGroupIds];
+      }
+    }
+
+    // FALLBACK: If no live group matched this display (or displayId is not passed/unassigned),
+    // mirror the active control group or routed group so target monitor is NEVER black!
+    if (list.length === 0) {
+      const fallbackGroup = routedGroupId || initialGroupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
+      list = [fallbackGroup];
     }
     
     // Stacking Priority: Sort so that the activeControlGroupId (the active panel being operated) is ALWAYS last
     // (meaning it renders on the very top of the stacking order in the React DOM)
-    const list = [...match.liveGroupIds];
-    if (activeControlGroupId && list.includes(activeControlGroupId)) {
+    if (activeControlGroupId && list.includes(activeControlGroupId) && list.length > 1) {
       const filtered = list.filter(id => id !== activeControlGroupId);
       return [...filtered, activeControlGroupId];
     }
     return list;
-  }, [displayId, outputGroups, groupStates, activeControlGroupId]);
+  }, [displayId, outputGroups, groupStates, activeControlGroupId, routedGroupId, initialGroupId]);
 
   // Global blackout state (active if the winning target group is black)
   const isBlackoutActive = React.useMemo(() => {
@@ -404,6 +419,7 @@ function ProjectorLayer({
   activeSchedule
 }: ProjectorLayerProps) {
   const store = useStore();
+  const { screens } = useScreens();
   const { groupStates } = store;
   
   const presentationState = groupStates[groupId] || ({
@@ -560,21 +576,25 @@ function ProjectorLayer({
       isVideo = false;
       audioSrc = activeItem?.data?.url || activeItem?.customBackgroundUrl || '';
       backgroundUrl = resolvedStyles.backgroundImageUrl || '';
-    } else if (slideBgUrl) {
-      if (slideIsVideo === true || isExplicitVideoItem || isVideoUrl(slideBgUrl)) {
-        isVideo = true;
-        videoSrc = slideBgUrl;
-      } else {
-        isVideo = false;
-        backgroundUrl = slideBgUrl;
-      }
     } else {
-      if (!isExplicitImageItem && resolvedStyles.backgroundType === 'video' && resolvedStyles.backgroundVideoUrl) {
-        isVideo = true;
-        videoSrc = resolvedStyles.backgroundVideoUrl;
+      const effectiveBgUrl = slideBgUrl || activeItem?.customBackgroundUrl;
+
+      if (effectiveBgUrl) {
+        if (slideIsVideo === true || isExplicitVideoItem || isVideoUrl(effectiveBgUrl) || PresentationContentResolver.isVideoUrl(effectiveBgUrl)) {
+          isVideo = true;
+          videoSrc = effectiveBgUrl;
+        } else {
+          isVideo = false;
+          backgroundUrl = effectiveBgUrl;
+        }
       } else {
-        isVideo = false;
-        backgroundUrl = resolvedStyles.backgroundImageUrl || '';
+        if (!isExplicitImageItem && (resolvedStyles.backgroundType === 'video' || Boolean(resolvedStyles.backgroundVideoUrl))) {
+          isVideo = true;
+          videoSrc = resolvedStyles.backgroundVideoUrl || '';
+        } else {
+          isVideo = false;
+          backgroundUrl = resolvedStyles.backgroundImageUrl || '';
+        }
       }
     }
   }
@@ -737,7 +757,23 @@ function ProjectorLayer({
     ? (logoStyles.backgroundGradient || resolvedStyles.backgroundGradient)
     : resolvedStyles.backgroundGradient;
 
-  const isLiveActive = Boolean(presentationState.isLiveEnabled || presentationState.showLogo);
+  const isLiveActive = Boolean(
+    presentationState.isLiveEnabled || 
+    presentationState.showLogo || 
+    activeItem || 
+    presentationState.directLiveItem
+  );
+
+  const computedRenderFrame = buildRenderFrame(
+    groupId,
+    presentationState,
+    activeSchedule,
+    group,
+    systemOptions,
+    songsList,
+    themesList,
+    screens
+  );
 
   return (
     <div 
@@ -768,9 +804,7 @@ function ProjectorLayer({
                 transform: 'translateZ(0)',
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
-                filter: contentType === 'video'
-                  ? 'none'
-                  : ((isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur)}px)` : 'none')
+                filter: 'none'
               }}
             />
           ) : localBackgroundUrl ? (
@@ -781,7 +815,9 @@ function ProjectorLayer({
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
                 backgroundImage: `url(${localBackgroundUrl})`,
-                filter: (isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5) ? `blur(${(isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur || 5)}px)` : 'none'
+                filter: (isLogoMode ? (logoStyles.backgroundBlur || 0) : (resolvedStyles.backgroundBlur || 0)) > 0
+                  ? `blur(${isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur}px)`
+                  : 'none'
               }}
             />
           ) : isGradient ? (
@@ -962,7 +998,7 @@ function ProjectorLayer({
         )}
 
         {/* Worship Text Slide Content Layer */}
-        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && presentationState.renderFrame && (
+        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame && (
           <motion.div 
             key={currentSlide.id || presentationState.activeSlideIndex}
             initial={motionConfig.initial}
@@ -972,7 +1008,7 @@ function ProjectorLayer({
             className="absolute inset-0 z-10 w-full h-full"
           >
             <PresentationCanvas 
-              frame={presentationState.renderFrame}
+              frame={computedRenderFrame}
               scale={1}
               systemOptions={systemOptions}
             />
@@ -1060,7 +1096,26 @@ function ProjectorLayer({
                 }}
               />
             </div>
-          ) : null
+          ) : (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-12 pointer-events-none">
+              {(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl ? (
+                <img
+                  src={(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl}
+                  alt="Logo"
+                  className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+                  <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
+                    <Sparkles className="w-12 h-12 text-cyan-300 animate-pulse" />
+                  </div>
+                  <span className="text-2xl font-black tracking-wider uppercase text-white drop-shadow-md">
+                    {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )
         ) : (resolvedStyles.showLogo && localLogoUrl) ? (
           <div 
             className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg ${

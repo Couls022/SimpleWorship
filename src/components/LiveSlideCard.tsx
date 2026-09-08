@@ -274,8 +274,26 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
               <div 
                 className={`${
                   viewMode === 'large' ? 'p-3 text-sm min-h-[64px]' : viewMode === 'small' ? 'p-1.5 text-[10px] min-h-[32px]' : 'p-2 text-[11px] min-h-[48px]'
-                } leading-relaxed font-sans whitespace-pre-line bg-[#1c1e24] relative`}
+                } leading-relaxed font-sans whitespace-pre-line bg-[#1c1e24] relative overflow-hidden`}
               >
+                {/* Background image or video preview overlay */}
+                {resolvedStyles.backgroundType === 'video' && (resolvedStyles.backgroundVideoUrl || slide.backgroundUrl || liveItem?.customBackgroundUrl) ? (
+                  <video
+                    src={slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundVideoUrl}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none z-0"
+                  />
+                ) : (slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundImageUrl) ? (
+                  <img
+                    src={slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundImageUrl}
+                    alt="background"
+                    className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none z-0"
+                  />
+                ) : null}
+
                 <div 
                   className="relative z-10"
                   style={{
@@ -314,10 +332,13 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                       <span key={v.verse || vIdx} className="inline">
                         {(systemOptions?.mainOutput?.scripture?.showVerseNumbers ?? true) && (
                           <span 
-                            className="font-bold inline-block mr-1.5 select-none"
+                            className="inline-block mr-1.5 select-none"
                             style={{ 
-                              color: systemOptions?.mainOutput?.scripture?.verseFont?.color || systemOptions?.mainOutput?.scripture?.verseColor || '#F6E05E',
+                              color: systemOptions?.mainOutput?.scripture?.verseLabelColor || systemOptions?.mainOutput?.scripture?.verseFont?.color || systemOptions?.mainOutput?.scripture?.verseColor || '#F6E05E',
                               fontFamily: systemOptions?.mainOutput?.scripture?.verseFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
+                              fontWeight: systemOptions?.mainOutput?.scripture?.verseFont?.bold ? '700' : '400',
+                              fontStyle: systemOptions?.mainOutput?.scripture?.verseFont?.italic ? 'italic' : 'normal',
+                              textDecoration: systemOptions?.mainOutput?.scripture?.verseFont?.underline ? 'underline' : 'none',
                             }}
                           >
                             {formatVerseNumber(v.verse, systemOptions?.mainOutput?.scripture?.verseNumberStyle)}
@@ -352,6 +373,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
     prevProps.mediaFormat === nextProps.mediaFormat &&
     prevProps.liveItem?.id === nextProps.liveItem?.id &&
     prevProps.liveItem?.contentId === nextProps.liveItem?.contentId &&
-    prevProps.slide === nextProps.slide
+    prevProps.slide === nextProps.slide &&
+    prevProps.systemOptions === nextProps.systemOptions
   );
 });

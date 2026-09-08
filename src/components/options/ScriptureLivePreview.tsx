@@ -157,6 +157,7 @@ export default function ScriptureLivePreview({
 
   const scriptureThemeStyles = ThemeEngine.fontStyleToThemeStyles(scriptureOptions?.scriptureFont);
   const referenceThemeStyles = ThemeEngine.fontStyleToThemeStyles(scriptureOptions?.referenceFont);
+  const verseThemeStyles = ThemeEngine.fontStyleToThemeStyles(scriptureOptions?.verseFont);
 
   const referenceTitle = formatScriptureReference({
     book: selectedPassage.book,
@@ -172,7 +173,7 @@ export default function ScriptureLivePreview({
   const refLocation = scriptureOptions?.referenceLocation || 'After Each Slide';
   const showVerseNumbers = scriptureOptions?.showVerseNumbers ?? true;
   const verseNumberStyle = scriptureOptions?.verseNumberStyle || 'superscript';
-  const verseColor = scriptureOptions?.verseFont?.color || scriptureOptions?.verseColor || '#F6E05E';
+  const verseColor = scriptureOptions?.verseLabelColor || scriptureOptions?.verseFont?.color || scriptureOptions?.verseColor || '#F6E05E';
 
   return (
     <div className="bg-[#12141a] border border-[#2d3240] rounded-xl p-3.5 space-y-3 shadow-2xl">
@@ -395,11 +396,14 @@ export default function ScriptureLivePreview({
                       <span key={v.verse} className="inline">
                         {showVerseNumbers && (
                           <span 
-                            className="font-bold inline-block mr-3 select-none transition-colors"
+                            className="inline-block mr-3 select-none transition-colors"
                             style={{ 
                               color: verseColor,
                               fontFamily: scriptureOptions?.verseFont?.family || scriptureOptions?.scriptureFont?.family || 'Tahoma, sans-serif',
-                              fontSize: `${Math.max(14, autoFitSize * 0.85)}px`
+                              fontSize: verseThemeStyles?.fontSize ? `${verseThemeStyles.fontSize}px` : `${Math.max(14, autoFitSize * 0.85)}px`,
+                              fontWeight: verseThemeStyles?.fontWeight || (scriptureOptions?.verseFont?.bold ? '700' : '400'),
+                              fontStyle: verseThemeStyles?.fontStyle || (scriptureOptions?.verseFont?.italic ? 'italic' : 'normal'),
+                              textDecoration: verseThemeStyles?.textDecoration || (scriptureOptions?.verseFont?.underline ? 'underline' : 'none'),
                             }}
                           >
                             {formatVerseNumber(v.verse, verseNumberStyle)}

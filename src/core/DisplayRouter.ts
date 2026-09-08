@@ -97,7 +97,14 @@ export function resolveDisplayAssignments(
     if (!groupStates) return false;
     const st = (groupStates as any)[gid];
     if (!st) return false;
-    return st.isLiveEnabled === true;
+    return Boolean(
+      st.isLiveEnabled === true || 
+      st.showLogo === true || 
+      st.isBlack === true || 
+      st.isClear === true || 
+      st.activeItemId || 
+      st.directLiveItem
+    );
   };
 
   for (const displayId of displayIdSet) {
