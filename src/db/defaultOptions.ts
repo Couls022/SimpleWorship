@@ -53,6 +53,8 @@ export const defaultSystemOptions: SystemOptions = {
       minFontSize: 24,
       allCapsLyrics: false,
       lineSpacing: 1.35,
+      margins: { left: 0, top: 0, right: 0, bottom: 0 },
+      autoAdjust: true,
     },
     scripture: {
       enableScriptureSupport: true,
@@ -81,6 +83,8 @@ export const defaultSystemOptions: SystemOptions = {
       automaticallyFlow: true,
       minFontSize: 24,
       lineSpacing: 1.35,
+      margins: { left: 0, top: 0, right: 0, bottom: 0 },
+      autoAdjust: true,
     },
     presentations: {
       titleFont: { ...defaultBaseFont, maxSize: 90, bold: true },

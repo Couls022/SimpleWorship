@@ -35,7 +35,6 @@ import {
   BookOpen,
   Film,
   Trash2,
-  Pen,
   Plus
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -1356,23 +1355,6 @@ export default function TopToolbar({
             <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Clear</span>
           </button>
 
-          {/* DRAW / ANNOTATION */}
-          <button
-            onClick={() => store.toggleAnnotationMode()}
-            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
-              store.annotationState?.enabled
-                ? 'bg-amber-500/30 text-amber-300 border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.4)]'
-                : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
-            }`}
-            title="Live Slide Drawing & Highlighter Tool (Ctrl+Shift+A)"
-          >
-            <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
-              store.annotationState?.enabled ? 'bg-amber-500 text-black border-amber-300' : 'bg-white/10 text-white border-white/20'
-            }`}>
-              <Pen size={12} />
-            </div>
-            <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Draw</span>
-          </button>
 
           {/* MASTER LIVE COLOR BARS SWITCH */}
           <button

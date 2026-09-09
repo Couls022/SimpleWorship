@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
+import { PresentationItem } from '../types';
 import { 
   Tv, 
   Play, 
@@ -176,12 +177,34 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
   // Extract active slide and active item details
   const activeGroupId = store.activeControlGroupId || (store.outputGroups[0]?.id) || 'group-congregation';
   const groupState = store.groupStates[activeGroupId];
+  const stagedState = store.stagedGroupStates[activeGroupId];
   const activeSchedule = store.activeSchedule;
   
-  const currentItem = activeSchedule?.items.find(item => item.id === groupState?.activeItemId);
-  const currentSlideIndex = groupState?.activeSlideIndex ?? 0;
-  const slides = currentItem?.data?.slides || [];
+  // Staged item & slide (operator preview)
+  const stagedItem = activeSchedule?.items.find(item => item.id === stagedState?.activeItemId) || (stagedState?.directLiveItem as PresentationItem | undefined);
+  const stagedSlideIndex = stagedState?.activeSlideIndex ?? 0;
+  const stagedSlides = stagedItem?.data?.slides || [];
+  const stagedSlide = stagedSlides[stagedSlideIndex];
+
+  // Public live item & slide (actual projector output)
+  const liveItem = activeSchedule?.items.find(item => item.id === groupState?.activeItemId) || (groupState?.directLiveItem as PresentationItem | undefined);
+  const liveSlideIndex = groupState?.activeSlideIndex ?? 0;
+
+  // Primary item to display in the controls is the staged item if available, otherwise live item
+  const currentItem = stagedItem || liveItem;
+  const currentSlideIndex = stagedItem ? stagedSlideIndex : liveSlideIndex;
+  const slides = stagedItem ? stagedSlides : (liveItem?.data?.slides || []);
   const currentSlide = slides[currentSlideIndex];
+
+  const isStagedUncommitted = Boolean(
+    stagedItem && (
+      stagedItem.id !== liveItem?.id ||
+      stagedSlideIndex !== liveSlideIndex ||
+      !groupState?.isLiveEnabled ||
+      groupState?.isBlack ||
+      groupState?.isClear
+    )
+  );
 
   // Quick alert trigger from mobile
   const handleSendAlert = (presetOrMessage?: string | any) => {
@@ -411,6 +434,21 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 </div>
               )}
 
+              {/* Live State Status Badge */}
+              <div className="flex items-center gap-1.5 mb-1.5 flex-wrap justify-center">
+                {groupState?.isLiveEnabled ? (
+                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wider flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    LIVE ON PROJECTOR
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    STANDBY (LIVE OFF)
+                  </span>
+                )}
+              </div>
+
               <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest mb-1 block truncate max-w-full">
                 {currentItem?.name || 'No Slide Selected'}
               </span>
@@ -498,8 +536,25 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               </button>
             </div>
 
+            {/* GIANT MASTER LIVE / PROJECTOR BUTTON */}
+            <button
+              type="button"
+              onClick={() => {
+                store.toggleMasterLive(activeGroupId);
+                sendRemoteCommand('toggle_live', { groupId: activeGroupId });
+              }}
+              className={`w-full py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 text-white font-black tracking-wider text-xs sm:text-sm cursor-pointer border active:scale-98 transition-all shrink-0 shadow-lg ${
+                groupState?.isLiveEnabled
+                  ? 'bg-rose-600 active:bg-rose-500 border-rose-400/80 shadow-rose-600/30'
+                  : 'bg-emerald-600 active:bg-emerald-500 border-emerald-400/80 shadow-emerald-600/30 animate-pulse'
+              }`}
+            >
+              <Play size={18} className="fill-white" />
+              <span>{groupState?.isLiveEnabled ? 'LIVE ON • PROJECTOR MIRRORING' : 'GO LIVE (START PROJECTOR)'}</span>
+            </button>
+
             {/* GIANT NEXT/PREV TOUCH TARGETS */}
-            <div className="grid grid-cols-2 gap-2.5 shrink-0 h-[105px]">
+            <div className="grid grid-cols-2 gap-2.5 shrink-0 h-[100px]">
               <button
                 type="button"
                 onClick={() => {
@@ -536,13 +591,16 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
             
             <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
               {activeSchedule?.items.map((item, idx) => {
-                const isActive = item.id === groupState?.activeItemId;
+                const isStaged = item.id === stagedState?.activeItemId;
+                const isLive = item.id === groupState?.activeItemId && groupState?.isLiveEnabled;
                 return (
                   <div 
                     key={item.id}
                     className={`border rounded-xl transition-all overflow-hidden ${
-                      isActive 
+                      isStaged 
                         ? 'bg-purple-950/30 border-purple-500/50' 
+                        : isLive
+                        ? 'bg-emerald-950/30 border-emerald-500/40'
                         : 'bg-[#12141c] border-[#222634] hover:bg-[#181a25]'
                     }`}
                   >
@@ -559,17 +617,29 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                         <span className="text-[10px] font-bold text-gray-500 font-mono">
                           {idx + 1}.
                         </span>
-                        <span className={`text-xs font-bold truncate ${isActive ? 'text-purple-300' : 'text-gray-200'}`}>
+                        <span className={`text-xs font-bold truncate ${isStaged ? 'text-purple-300' : isLive ? 'text-emerald-300' : 'text-gray-200'}`}>
                           {item.name}
                         </span>
                       </div>
-                      <span className="text-[9px] uppercase px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold shrink-0">
-                        {item.type}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isLive && (
+                          <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black">
+                            LIVE
+                          </span>
+                        )}
+                        {isStaged && !isLive && (
+                          <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-black">
+                            STAGED
+                          </span>
+                        )}
+                        <span className="text-[9px] uppercase px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold shrink-0">
+                          {item.type}
+                        </span>
+                      </div>
                     </button>
 
-                    {/* Quick Slide Sub-list if Active */}
-                    {isActive && (
+                    {/* Quick Slide Sub-list if Staged */}
+                    {isStaged && (
                       <div className="border-t border-purple-500/20 px-2.5 py-2 bg-purple-950/20 space-y-1">
                         {(item.data?.slides || []).map((slide: any, sIdx: number) => {
                           const isSlideActive = sIdx === currentSlideIndex;

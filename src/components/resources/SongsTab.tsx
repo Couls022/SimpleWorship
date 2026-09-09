@@ -22,6 +22,8 @@ import { useStore } from "../../store/useStore";
 import { Song } from "../../types";
 import { handleRangeSelection } from "../../utils/selectionUtils";
 import { BAPTIST_HYMNAL_SONGS } from "../../data/baptistHymnal";
+import { HYMNS_OF_PRAISES } from "../../data/hymnsOfPraises";
+import { BAPTIST_SPECIAL_NUMBERS } from "../../data/specialNumbers";
 import { OfflineSearchEngine } from "../../core/OfflineSearchEngine";
 import { PortalDropdown } from "../common/PortalDropdown";
 
@@ -243,7 +245,8 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
   const handleRestoreDefaultHymnal = async () => {
     try {
       let restored = 0;
-      for (const hymn of BAPTIST_HYMNAL_SONGS) {
+      const allBuiltInSongs = [...BAPTIST_HYMNAL_SONGS, ...HYMNS_OF_PRAISES, ...BAPTIST_SPECIAL_NUMBERS];
+      for (const hymn of allBuiltInSongs) {
         if (
           !songsList.some(
             (s) =>
@@ -674,10 +677,10 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                     />
                     <div className="flex flex-col">
                       <span className="font-semibold text-yellow-300">
-                        Restore Default Hymnal
+                        Restore Built-in Songs
                       </span>
                       <span className="text-[10px] text-gray-400">
-                        Add 30 standard hymns if missing
+                        Add standard hymnals and special numbers
                       </span>
                     </div>
                   </button>

@@ -688,36 +688,6 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
           </button>
 
           <button
-            onClick={() => handleSetDefaultBg(contextMenu.asset, 'presentations')}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-purple-300 cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={11} className="text-purple-400" />
-              <span>For Presentations</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset.url, 'presentations') && (
-              <span className="flex items-center gap-1 text-[10px] text-purple-400 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => handleSetDefaultBg(contextMenu.asset, 'announcements')}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-rose-300 cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={11} className="text-rose-400" />
-              <span>For Announcements</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset.url, 'announcements') && (
-              <span className="flex items-center gap-1 text-[10px] text-rose-400 font-semibold bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
-
-          <button
             onClick={() => handleSetDefaultBg(contextMenu.asset, 'logo')}
             className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-emerald-300 cursor-pointer"
           >

@@ -97,14 +97,13 @@ export function resolveDisplayAssignments(
     if (!groupStates) return false;
     const st = (groupStates as any)[gid];
     if (!st) return false;
-    return Boolean(
-      st.isLiveEnabled === true || 
-      st.showLogo === true || 
-      st.isBlack === true || 
-      st.isClear === true || 
-      st.activeItemId || 
-      st.directLiveItem
-    );
+    
+    // If explicitly live, consider the route active
+    if (st.isLiveEnabled) {
+      return true;
+    }
+    
+    return false;
   };
 
   for (const displayId of displayIdSet) {

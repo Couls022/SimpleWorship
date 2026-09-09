@@ -1,8 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import { translationsEn } from 'pptx-react-viewer/i18n';
-import { useEffect, useState, useCallback } from 'react';
-import html2canvas from 'html2canvas';
 
 // ==========================================
 // 1. i18n Global Initialization for Viewer

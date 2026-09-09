@@ -23,7 +23,6 @@ import {
   Repeat,
   Volume2,
   VolumeX,
-  MonitorUp,
   Presentation,
   Clock,
   Zap
@@ -88,18 +87,16 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     themesList,
     alert,
     systemOptions,
-    setGroupState,
+    setStagedGroupState,
     addOutputGroup,
     removeOutputGroup,
-    reorderOutputGroups,
-    moveOutputGroup
+    reorderOutputGroups
   } = store;
 
   const activeGroup = outputGroups.find(g => g.id === groupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === groupId);
-  const isFirst = groupIndex <= 0;
-  const isLast = groupIndex === -1 || groupIndex >= outputGroups.length - 1;
-  const activeControlState = groupStates[groupId];
+  const activeControlState = store.stagedGroupStates[groupId];
+  const publicControlState = groupStates[groupId];
   const isTargetedGroup = store.activeRouterId === routerId || (!routerId && store.activeControlGroupId === groupId);
   const isActiveControlGroup = store.activeControlGroupId === groupId;
   const groupTargetDisplays = (activeGroup?.displayIds && activeGroup.displayIds.length > 0)
@@ -253,7 +250,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         // Go live with the first dropped item immediately on this output panel
         const targetLiveItem = dropResult.items[0];
         store.goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem, routerId);
-        store.setGroupState(groupId, {
+        store.setStagedGroupState(groupId, {
           activeItemId: targetLiveItem.id,
           activeSlideIndex: 0,
           isBlack: false,
@@ -261,7 +258,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         });
         window.dispatchEvent(
           new CustomEvent('simpleworship:notify', { 
-            detail: `Going LIVE on ${activeGroup?.name || 'Output'} with "${targetLiveItem.name}"!` 
+            detail: `Staged on ${activeGroup?.name || 'Output'}: "${targetLiveItem.name}". Click Commit to send Live.` 
           })
         );
         return;
@@ -288,7 +285,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           return;
         }
 
-        // Handle schedule item, scripture verses, or song drop to go live immediately
+        // Handle schedule item, scripture verses, or song drop to stage
         if (payload && payload.item) {
           const itemId = payload.item.id || `live-${Date.now()}`;
           const newItem = {
@@ -310,7 +307,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             store.addScheduleItem(newItem);
           }
           store.goLiveItem(itemId, 0, groupId, undefined, routerId); 
-          store.setGroupState(groupId, {
+          store.setStagedGroupState(groupId, {
             activeItemId: itemId,
             activeSlideIndex: 0,
             isBlack: false,
@@ -318,7 +315,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           });
           window.dispatchEvent(
             new CustomEvent('simpleworship:notify', { 
-              detail: `Going LIVE in ${activeGroup?.name} with "${newItem.name}"!` 
+              detail: `Staged on ${activeGroup?.name || 'Output'}: "${newItem.name}". Click Commit to send Live.` 
             })
           );
         }
@@ -331,7 +328,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const handleSelectSlide = (idx: number) => {
     store.setActiveControlGroupId(groupId);
     if (activeControlState?.activeItemId === liveItem?.id) {
-      store.setGroupState(groupId, { activeSlideIndex: idx });
+      store.setStagedGroupState(groupId, { activeSlideIndex: idx });
     } else if (liveItem) {
       store.goLiveItem(liveItem.id, idx, groupId, liveItem, routerId);
     }
@@ -341,14 +338,14 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     if (slides.length === 0) return;
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
-    store.setGroupState(groupId, { activeSlideIndex: prev });
+    store.setStagedGroupState(groupId, { activeSlideIndex: prev });
   };
 
   const handleNextSlide = () => {
     if (slides.length === 0) return;
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
-    store.setGroupState(groupId, { activeSlideIndex: next });
+    store.setStagedGroupState(groupId, { activeSlideIndex: next });
   };
 
   // Auto-advance timer logic (synced from source PPTX transitions)
@@ -377,7 +374,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         clearInterval(interval);
         const current = activeControlState?.activeSlideIndex || 0;
         if (current < slides.length - 1) {
-          store.setGroupState(groupId, { activeSlideIndex: current + 1 });
+          store.setStagedGroupState(groupId, { activeSlideIndex: current + 1 });
         }
       }
     }, 200);
@@ -464,15 +461,15 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 </span>
               </>
             )}
-            {activeControlState?.isLiveEnabled ? (
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shrink-0 flex items-center gap-1 hidden min-[480px]:flex">
+            {publicControlState?.isLiveEnabled ? (
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[9px] font-bold text-emerald-300 uppercase tracking-wider shrink-0 hidden min-[480px]:flex items-center gap-1" title="Public Projector Output Connected & Active">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live
+                <span>LIVE ON</span>
               </span>
             ) : (
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 flex items-center gap-1 hidden min-[480px]:flex" title="Live button is OFF. Content is staged for preview.">
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-bold text-amber-300 uppercase tracking-wider shrink-0 hidden min-[480px]:flex items-center gap-1" title="Public Projector Output Muted / Standby">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                Live Off
+                <span>LIVE OFF</span>
               </span>
             )}
           </div>
@@ -483,27 +480,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           onClick={(e) => e.stopPropagation()} 
           onMouseDown={(e) => e.stopPropagation()}
         >
-          {/* Quick Send 1:1 Presentation Button */}
-          <button
-            onClick={async (e) => {
-              e.stopPropagation();
-              handleMakeActiveOverlay();
-              for (const disp of groupTargetDisplays) {
-                await DisplayManager.sendPresentationToTarget(groupId, disp);
-              }
-              window.dispatchEvent(
-                new CustomEvent('simpleworship:notify', {
-                  detail: `1:1 Presentation sent for ${activeGroup.name} to ${groupTargetDisplays.join(', ')}`
-                })
-              );
-            }}
-            className="p-1.5 rounded hover:bg-[#252937] text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
-            title={`Send 1:1 Presentation to ${groupTargetDisplays.join(', ')} (Overlaying as Active)`}
-          >
-            <MonitorUp size={13} />
-          </button>
-
-
           <div className="relative">
             <button
               onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
@@ -514,63 +490,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             </button>
             {isViewMenuOpen && (
               <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-[#1a1d27] border border-[#2e3447] rounded-md shadow-2xl py-1 text-xs text-gray-200 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                  Panel Arrangement
-                </div>
-                <button
-                  onClick={() => {
-                    moveOutputGroup(groupId, 'first');
-                    setIsViewMenuOpen(false);
-                  }}
-                  disabled={isFirst}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
-                    isFirst ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
-                  }`}
-                >
-                  <ArrowLeft size={12} className="text-sky-400 shrink-0" />
-                  <span>Move to First (Leftmost)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    moveOutputGroup(groupId, 'left');
-                    setIsViewMenuOpen(false);
-                  }}
-                  disabled={isFirst}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
-                    isFirst ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
-                  }`}
-                >
-                  <ChevronLeft size={12} className="text-sky-400 shrink-0" />
-                  <span>Move Left</span>
-                </button>
-                <button
-                  onClick={() => {
-                    moveOutputGroup(groupId, 'right');
-                    setIsViewMenuOpen(false);
-                  }}
-                  disabled={isLast}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
-                    isLast ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
-                  }`}
-                >
-                  <ChevronRight size={12} className="text-sky-400 shrink-0" />
-                  <span>Move Right</span>
-                </button>
-                <button
-                  onClick={() => {
-                    moveOutputGroup(groupId, 'last');
-                    setIsViewMenuOpen(false);
-                  }}
-                  disabled={isLast}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-[#262c3b] flex items-center gap-2 transition-colors ${
-                    isLast ? 'opacity-40 cursor-not-allowed' : 'text-gray-200'
-                  }`}
-                >
-                  <ArrowRight size={12} className="text-sky-400 shrink-0" />
-                  <span>Move to Last (Rightmost)</span>
-                </button>
-
-                <div className="border-t border-[#343a4a] my-1"></div>
                 <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
                   Slide Layout
                 </div>
@@ -718,6 +637,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                       idx={idx}
                       totalSlides={slides.length}
                       isSelected={activeControlState?.activeSlideIndex === idx}
+                      isPublicLive={publicControlState?.activeItemId === liveItem?.id && publicControlState?.activeSlideIndex === idx && Boolean(publicControlState?.isLiveEnabled && !publicControlState?.isBlack && !publicControlState?.isClear)}
                       viewMode={viewMode}
                       liveItem={liveItem}
                       liveContentType={liveContentType}
@@ -754,6 +674,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                         idx={idx}
                         totalSlides={slides.length}
                         isSelected={activeControlState?.activeSlideIndex === idx}
+                        isPublicLive={publicControlState?.activeItemId === liveItem?.id && publicControlState?.activeSlideIndex === idx && Boolean(publicControlState?.isLiveEnabled && !publicControlState?.isBlack && !publicControlState?.isClear)}
                         viewMode={viewMode}
                         liveItem={liveItem}
                         liveContentType={liveContentType}

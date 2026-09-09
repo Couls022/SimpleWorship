@@ -3,6 +3,14 @@ import { Asset, Theme, Song, Schedule, OutputGroup, ScriptureVerse, SystemOption
 import { defaultAssets, defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultScriptures } from './seedData';
 import { runDatabaseSeeder } from '../utils/seedDatabase';
 
+const objectUrlCache = new Map<string, string>();
+const assetUrlMap = new Map<string, string>();
+
+export function resolveAssetUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  return assetUrlMap.get(url) || url;
+}
+
 interface SimpleWorshipDB extends DBSchema {
   assets: {
     key: string;
@@ -38,7 +46,6 @@ interface SimpleWorshipDB extends DBSchema {
 }
 
 let dbPromise: Promise<IDBPDatabase<SimpleWorshipDB>> | null = null;
-const objectUrlCache = new Map<string, string>(); // Cache blob URLs
 
 export function getDB() {
   if (!dbPromise) {
@@ -149,7 +156,10 @@ export const dbApi = {
         if (!objectUrlCache.has(a.id)) {
           objectUrlCache.set(a.id, URL.createObjectURL(a.blob));
         }
+        (a as any)._oldUrl = a.url;
         a.url = objectUrlCache.get(a.id)!;
+        assetUrlMap.set((a as any)._oldUrl, a.url);
+        assetUrlMap.set(a.id, a.url);
         if (a.thumbnailUrl && a.thumbnailUrl.startsWith('blob:')) {
           a.thumbnailUrl = a.url;
         }
@@ -234,11 +244,25 @@ export const dbApi = {
   },
   async getSchedule(id: string) {
     const db = await getDB();
-    return db.get('schedules', id);
+    const sched = await db.get('schedules', id);
+    if (sched) {
+      sched.items = sched.items.map(item => ({
+        ...item,
+        customBackgroundUrl: resolveAssetUrl(item.customBackgroundUrl) || item.customBackgroundUrl
+      }));
+    }
+    return sched;
   },
   async getAllSchedules() {
     const db = await getDB();
-    return db.getAll('schedules');
+    const schedules = await db.getAll('schedules');
+    return schedules.map(sched => {
+      sched.items = sched.items.map(item => ({
+        ...item,
+        customBackgroundUrl: resolveAssetUrl(item.customBackgroundUrl) || item.customBackgroundUrl
+      }));
+      return sched;
+    });
   },
 
   // Output Groups

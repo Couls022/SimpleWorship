@@ -110,22 +110,35 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       customResolution: { width: targetW, height: targetH }
     });
 
-    // 2. Fully sync systemOptions.mainOutput.general
-    updateSystemOptions((prev) => ({
-      ...prev,
-      mainOutput: {
-        ...prev.mainOutput,
-        general: {
-          ...prev.mainOutput.general,
-          outputMonitor: primaryTarget || '',
-          position: {
-            ...prev.mainOutput.general.position,
-            width: targetW,
-            height: targetH
+    // 2. Sync legacy systemOptions if it maps to a standard legacy route
+    updateSystemOptions((prev) => {
+      const next = { ...prev };
+      if (groupId === 'group-congregation') {
+        next.mainOutput = {
+          ...next.mainOutput,
+          general: {
+            ...next.mainOutput.general,
+            outputMonitor: primaryTarget || '',
+            position: {
+              ...next.mainOutput.general.position,
+              width: targetW,
+              height: targetH
+            }
           }
-        }
+        };
+      } else if (groupId === 'group-stage') {
+        next.foldback = {
+          ...next.foldback,
+          outputMonitor: primaryTarget || '',
+        };
+      } else if (groupId === 'group-alternate') {
+        next.alternateOutput = {
+          ...next.alternateOutput,
+          outputMonitor: primaryTarget || '',
+        };
       }
-    }));
+      return next;
+    });
 
     onClose();
   };

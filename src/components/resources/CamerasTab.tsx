@@ -67,21 +67,6 @@ export default function CamerasTab() {
 
   return (
     <div className="h-full flex flex-col bg-[#141519] overflow-hidden">
-      <div className="h-10 bg-[#22252c] border-b border-[#15161a] flex items-center justify-between px-3 shrink-0">
-        <div className="flex items-center gap-2 text-xs font-semibold text-gray-200">
-          <Camera size={14} className="text-pink-400" />
-          <span>Local Cameras</span>
-        </div>
-        <button
-          onClick={refreshCameras}
-          disabled={isRefreshing}
-          className="p-1 rounded bg-[#262832] text-gray-400 hover:text-white hover:bg-[#323746] transition-colors"
-          title="Refresh Camera List"
-        >
-          <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col">
         {availableCameras.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -104,7 +89,19 @@ export default function CamerasTab() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-end">
+              <button
+                onClick={refreshCameras}
+                disabled={isRefreshing}
+                className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-white px-2 py-1 rounded bg-[#1c1e26] hover:bg-[#282b37] border border-[#2a2d39] transition-colors cursor-pointer shadow-xs"
+                title="Refresh Camera List"
+              >
+                <RefreshCw size={11} className={isRefreshing ? 'animate-spin' : ''} />
+                <span>Rescan Cameras</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {availableCameras.map((cam: CameraDeviceInfo) => {
               const isPreviewing = activePreviewId === cam.deviceId;
 
@@ -163,7 +160,8 @@ export default function CamerasTab() {
               );
             })}
           </div>
-        )}
+        </div>
+      )}
       </div>
     </div>
   );

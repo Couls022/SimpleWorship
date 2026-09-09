@@ -74,6 +74,8 @@ export interface SystemOptions {
       minFontSize?: number;
       allCapsLyrics?: boolean;
       lineSpacing?: number;
+      margins?: { left: number; top: number; right: number; bottom: number };
+      autoAdjust?: boolean;
     };
     scripture: {
       enableScriptureSupport: boolean;
@@ -103,6 +105,8 @@ export interface SystemOptions {
       automaticallyFlow: boolean;
       minFontSize: number;
       lineSpacing?: number;
+      margins?: { left: number; top: number; right: number; bottom: number };
+      autoAdjust?: boolean;
     };
     presentations: {
       titleFont: FontStyleOptions;

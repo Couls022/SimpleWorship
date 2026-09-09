@@ -167,7 +167,9 @@ export default function ScriptureLivePreview({
     options: scriptureOptions
   });
 
-  const margins = generalOptions?.margins || { left: 0, top: 0, right: 0, bottom: 0 };
+  const margins = (scriptureOptions?.margins && (scriptureOptions.margins.left || scriptureOptions.margins.top || scriptureOptions.margins.right || scriptureOptions.margins.bottom))
+    ? scriptureOptions.margins
+    : (generalOptions?.margins || { left: 0, top: 0, right: 0, bottom: 0 });
 
   const showReference = scriptureOptions?.showReference ?? true;
   const refLocation = scriptureOptions?.referenceLocation || 'After Each Slide';

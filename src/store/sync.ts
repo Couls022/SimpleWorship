@@ -101,6 +101,14 @@ function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {
     case 'toggle_logo':
       store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "");
       break;
+    case 'toggle_live':
+    case 'toggle_master_live':
+      store.toggleMasterLive(cmd.params?.groupId || store.activeControlGroupId || store.outputGroups[0]?.id || "");
+      break;
+    case 'commit':
+    case 'commit_staged':
+      store.commitStagedState(cmd.params?.groupId || store.activeControlGroupId || store.outputGroups[0]?.id || "");
+      break;
     case 'go_live':
       store.goLive();
       break;
@@ -225,9 +233,17 @@ export function initSync(isProjector: boolean = false) {
           ...(data.themesList ? { themesList: data.themesList } : {}),
           ...(data.systemOptions ? { systemOptions: data.systemOptions } : {})
         });
-      } else if (payload.type === 'GROUP_STATES_UPDATE') {
+      } else if (payload.type === 'GROUP_STATES_UPDATE' || payload.type === 'PREVIEW_UPDATE') {
         if (data.groupStates) {
           useStore.setState({ groupStates: data.groupStates });
+        } else if (data.groupId && (data.isLiveEnabled !== undefined || data.activeItemId !== undefined)) {
+          const currentGroupStates = useStore.getState().groupStates;
+          useStore.setState({
+            groupStates: {
+              ...currentGroupStates,
+              [data.groupId]: data
+            }
+          });
         }
       } else if (payload.type === 'GO_LIVE') {
         if (data.groupId && data.state) {
@@ -330,14 +346,21 @@ export function initSync(isProjector: boolean = false) {
       }
     });
 
-    // Polling for REST sync & Remote Command execution
+    // Adaptive Polling for REST sync & Remote Command execution
     let isFetchingSync = false;
-    setInterval(async () => {
-      if (!isHttpServerAvailable() || isFetchingSync) return;
+    let consecutiveSyncFailures = 0;
+    let pollTimer: any = null;
+
+    const runPoll = async () => {
+      if (!isHttpServerAvailable() || isFetchingSync) {
+        pollTimer = setTimeout(runPoll, 3000);
+        return;
+      }
       isFetchingSync = true;
       try {
         const res = await fetch('/api/sync/state');
         if (res.ok) {
+          consecutiveSyncFailures = 0;
           const ct = res.headers.get('content-type') || '';
           if (!ct.includes('application/json')) return;
           const payload = await res.json();
@@ -377,11 +400,22 @@ export function initSync(isProjector: boolean = false) {
               });
             }
           }
+        } else {
+          consecutiveSyncFailures++;
         }
-      } catch (err) {} finally {
+      } catch (err) {
+        consecutiveSyncFailures++;
+      } finally {
         isFetchingSync = false;
+        // Adaptive backoff: 2000ms on success, exponentially scales to 8000ms on network failures
+        const nextDelay = consecutiveSyncFailures > 2 
+          ? Math.min(8000, 2000 + consecutiveSyncFailures * 1000) 
+          : 2000;
+        pollTimer = setTimeout(runPoll, nextDelay);
       }
-    }, 2000);
+    };
+
+    pollTimer = setTimeout(runPoll, 1500);
   }
 }
 

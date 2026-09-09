@@ -235,7 +235,7 @@ export default function MultiGroupPreviewBar() {
                       const groupState = store.groupStates[group.id];
                       if (groupState?.activeItemId) {
                         // Keep whatever is currently loaded in this output group
-                        store.setGroupState(group.id, {
+                        store.setStagedGroupState(group.id, {
                           isBlack: false,
                           isClear: false,
                           showLogo: false,

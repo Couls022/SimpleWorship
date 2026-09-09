@@ -167,16 +167,41 @@ export class DisplayManager {
       }
     }
 
-    // 2. Web Standalone Mode (No external browser popups to prevent 403 Google auth bridge errors)
+    // 2. Web Standalone Mode
     if (typeof window !== 'undefined') {
       this.localStatuses[groupId] = 'CONNECTED';
       
-      // Dispatch in-app activation event so the internal Live Display canvas activates/fullscreens
+      // Dispatch in-app activation event as fallback
       window.dispatchEvent(
         new CustomEvent('simpleworship:projector-activate', {
           detail: { groupId, displayId: displayId || 'primary-display', status: 'CONNECTED' },
         })
       );
+
+      // Attempt to open an actual popup window that can be dragged to a secondary monitor
+      const popupUrl = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${groupId}${displayId ? `&displayId=${displayId}` : ''}`;
+      const existingPopup = this.browserPopups.get(groupId);
+      if (existingPopup && !existingPopup.closed) {
+        existingPopup.focus();
+      } else {
+        let features = 'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no';
+        try {
+          if ('getScreenDetails' in window) {
+            const screenDetails = await (window as any).getScreenDetails();
+            const targetScreen = screenDetails.screens.find((s: any) => s.label === displayId || s.id === displayId) || screenDetails.screens.find((s: any) => !s.isInternal) || screenDetails.screens[0];
+            if (targetScreen) {
+              features = `left=${targetScreen.availLeft},top=${targetScreen.availTop},width=${targetScreen.availWidth},height=${targetScreen.availHeight},menubar=no,toolbar=no,location=no,status=no`;
+            }
+          }
+        } catch (e) {
+          console.warn('Screen details permission denied or unavailable for popup placement', e);
+        }
+        
+        const newPopup = window.open(popupUrl, `projector_${groupId}`, features);
+        if (newPopup) {
+          this.browserPopups.set(groupId, newPopup);
+        }
+      }
 
       window.dispatchEvent(
         new CustomEvent('simpleworship:projector-status', {

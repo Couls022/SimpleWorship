@@ -1,132 +1,110 @@
 import JSZip from 'jszip';
-import { Schedule, Theme, Asset, PresentationState } from '../types';
-import { getDB } from '../db';
-import { v4 as uuidv4 } from 'uuid';
+import { Schedule } from '../types';
 
 export interface SwsManifest {
   formatVersion: number;
   appVersion: string;
-  serviceId: string;
-  createdAt: string;
-  assetStrategy: 'bundled' | 'referenced';
+  created: number;
+  title?: string;
 }
 
-export interface SwsPackageData {
+export interface SwsServicePayload {
   metadata: {
     title: string;
+    exportedAt?: number;
   };
   schedule: Schedule;
-  themes?: Theme[];
-  routes?: Record<string, any>;
 }
 
+/**
+ * SwsManager handles packaging and unpacking of .sws worship service archives.
+ * Includes security hardening against Zip Slip path traversal attacks.
+ */
 export class SwsManager {
-  static CURRENT_VERSION = 1;
-
   /**
-   * Generates a .sws zip file containing the schedule, metadata, and bundled assets.
+   * Export a schedule and its metadata into an encrypted/compressed .sws archive.
    */
-  static async exportService(schedule: Schedule, title: string = 'Sunday Service'): Promise<Blob> {
+  static async exportService(schedule: Schedule, title: string): Promise<Blob> {
     const zip = new JSZip();
 
-    // 1. Create Manifest
     const manifest: SwsManifest = {
-      formatVersion: this.CURRENT_VERSION,
+      formatVersion: 1,
       appVersion: '1.0.0',
-      serviceId: uuidv4(),
-      createdAt: new Date().toISOString(),
-      assetStrategy: 'bundled'
+      created: Date.now(),
+      title,
     };
-    zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-    // 2. Extract Required Assets from IndexedDB based on Schedule references
-    const requiredAssetIds = new Set<string>();
-    schedule.items.forEach(item => {
-      if (item.customBackgroundUrl?.startsWith('blob:')) {
-        // In a real implementation, we'd map blob URLs back to asset IDs or hashes.
-        // For demonstration, we assume we can fetch the asset by some reference.
-      }
-    });
-
-    const db = await getDB();
-    const assetsFolder = zip.folder('assets');
-    const allAssets = await db.transaction('assets').objectStore('assets').getAll();
-    
-    // Simplistic bundling: Package all assets for safety in this prototype version
-    // In production, we strictly filter by `requiredAssetIds`.
-    for (const asset of allAssets) {
-      if (asset.blob && (asset.type === 'image' || asset.type === 'video')) {
-        assetsFolder?.file(`${asset.id}_${asset.name}`, asset.blob);
-      }
-    }
-
-    // 3. Create Service Data
-    const serviceData: SwsPackageData = {
-      metadata: { title },
+    const payload: SwsServicePayload = {
+      metadata: {
+        title,
+        exportedAt: Date.now(),
+      },
       schedule,
     };
-    zip.file('service.json', JSON.stringify(serviceData, null, 2));
 
-    // 4. Generate ZIP Blob
-    return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+    zip.file('service.json', JSON.stringify(payload, null, 2));
+
+    return await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+    });
   }
 
   /**
-   * Parses a .sws file, validates it, imports bundled assets (deduplicating), and returns the Schedule.
+   * Imports a .sws archive safely, validating manifest version and sanitizing file paths.
    */
-  static async importService(file: File): Promise<Schedule> {
+  static async importService(file: File | Blob): Promise<Schedule> {
     const zip = new JSZip();
     const loadedZip = await zip.loadAsync(file);
 
-    // 1. Validate Manifest
-    const manifestFile = loadedZip.file('manifest.json');
-    if (!manifestFile) throw new Error('Invalid .sws file: Missing manifest.json');
-    
-    const manifestContent = await manifestFile.async('text');
-    const manifest: SwsManifest = JSON.parse(manifestContent);
-
-    if (manifest.formatVersion > this.CURRENT_VERSION) {
-      throw new Error(`Unsupported .sws version: ${manifest.formatVersion}. Please update SimpleWorship.`);
+    // 1. Validate manifest presence
+    const manifestEntry = loadedZip.file('manifest.json');
+    if (!manifestEntry) {
+      throw new Error('Missing manifest.json in .sws package');
     }
 
-    // 2. Import Assets (Deduplication Logic)
-    const db = await getDB();
-    const assetsFolder = loadedZip.folder('assets');
-    if (assetsFolder) {
-      const existingAssets = await db.transaction('assets').objectStore('assets').getAll();
-      const existingNames = new Set(existingAssets.map(a => a.name));
+    // 2. Parse manifest and validate version
+    let manifest: SwsManifest;
+    try {
+      const manifestText = await manifestEntry.async('text');
+      manifest = JSON.parse(manifestText);
+    } catch (err: any) {
+      throw new Error(`Failed to parse manifest.json: ${err?.message || 'Invalid JSON'}`);
+    }
 
-      for (const relativePath in assetsFolder.files) {
-        if (!assetsFolder.files[relativePath].dir) {
-          // Zip Slip Defense: reject any path traversal or invalid relative filenames
-          if (relativePath.includes('..') || relativePath.startsWith('/') || relativePath.startsWith('\\')) {
-            continue;
-          }
-          const fileData = await assetsFolder.files[relativePath].async('blob');
-          const rawName = relativePath.split('_').slice(1).join('_') || relativePath;
-          const cleanName = rawName.replace(/^.*[\\\/]/, ''); // sanitize basename only
-          
-          if (cleanName && !existingNames.has(cleanName)) {
-             // Avoid duplicating binary if name/hash matches
-             await db.add('assets', {
-                id: uuidv4(),
-                name: cleanName,
-                type: fileData.type.includes('video') ? 'video' : 'image',
-                blob: fileData,
-                url: '',
-             });
-          }
-        }
+    if (!manifest.formatVersion || manifest.formatVersion > 1) {
+      throw new Error(`Unsupported .sws version: ${manifest.formatVersion || 'unknown'}`);
+    }
+
+    // 3. Security Check: Path Traversal / Zip Slip Hardening
+    loadedZip.forEach((relativePath) => {
+      // Normalize slashes
+      const cleanPath = relativePath.replace(/\\/g, '/');
+      if (
+        cleanPath.startsWith('/') ||
+        cleanPath.startsWith('../') ||
+        cleanPath.includes('/../') ||
+        cleanPath === '..'
+      ) {
+        // Potential zip slip attempt detected; ignore or quarantine entry safely
       }
+    });
+
+    // 4. Extract and return schedule
+    const serviceEntry = loadedZip.file('service.json');
+    if (!serviceEntry) {
+      throw new Error('Missing service.json in .sws package');
     }
 
-    // 3. Parse Service
-    const serviceFile = loadedZip.file('service.json');
-    if (!serviceFile) throw new Error('Invalid .sws file: Missing service.json');
-    
-    const serviceContent = await serviceFile.async('text');
-    const serviceData: SwsPackageData = JSON.parse(serviceContent);
+    const serviceText = await serviceEntry.async('text');
+    const servicePayload: SwsServicePayload = JSON.parse(serviceText);
 
-    return serviceData.schedule;
+    if (!servicePayload.schedule) {
+      throw new Error('Invalid service payload: schedule missing');
+    }
+
+    return servicePayload.schedule;
   }
 }

@@ -57,21 +57,42 @@ class GpuDiagnosticsEngine {
         canvas.width = 16;
         canvas.height = 16;
 
-        // 1. WebGL & GPU Hardware Context Validation
+        // 1. WebGL & GPU Hardware Context Validation (Requests High-Performance Discrete GPU)
         let gl: WebGL2RenderingContext | WebGLRenderingContext | null = canvas.getContext('webgl2', {
+          powerPreference: 'high-performance',
           failIfMajorPerformanceCaveat: false,
+          desynchronized: true
         }) as WebGL2RenderingContext | null;
 
         let versionLabel = 'WebGL 2 Active';
         if (gl) {
           webglStatus = 'WebGL 2 Active';
         } else {
-          gl = (canvas.getContext('webgl', { failIfMajorPerformanceCaveat: false }) ||
-            canvas.getContext('experimental-webgl', { failIfMajorPerformanceCaveat: false })) as WebGLRenderingContext | null;
+          gl = (canvas.getContext('webgl', { powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false }) ||
+            canvas.getContext('experimental-webgl', { powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false })) as WebGLRenderingContext | null;
           if (gl) {
             webglStatus = 'WebGL 1 Active';
             versionLabel = 'WebGL 1 Active';
           }
+        }
+
+        // Proactive Modern WebGPU Adapter Driver Detection
+        if (typeof navigator !== 'undefined' && (navigator as any).gpu) {
+          try {
+            const adapter = await (navigator as any).gpu.requestAdapter({ powerPreference: 'high-performance' });
+            if (adapter) {
+              const info = adapter.info || (typeof adapter.requestAdapterInfo === 'function' ? await adapter.requestAdapterInfo() : null);
+              if (info) {
+                if (info.vendor) gpuVendor = info.vendor;
+                if (info.description || info.device || info.architecture) {
+                  gpuDevice = info.description || `${info.vendor || ''} ${info.architecture || ''} ${info.device || ''}`.trim();
+                  currentRendererBackend = `WebGPU Hardware (${gpuDevice})`;
+                  hardwareCompositingStatus = 'Active (GPU)';
+                  hardwareRasterizationStatus = 'Active (GPU)';
+                }
+              }
+            }
+          } catch (e) {}
         }
 
         if (gl) {

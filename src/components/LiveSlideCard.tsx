@@ -28,6 +28,7 @@ export interface LiveSlideCardProps {
   resolvedStyles: ThemeStyles;
   systemOptions: any;
   activeControlState?: any;
+  isPublicLive?: boolean;
   onSelect: (idx: number) => void;
 }
 
@@ -43,6 +44,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
   resolvedStyles,
   systemOptions,
   activeControlState,
+  isPublicLive,
   onSelect,
 }) => {
   const isScripture = liveContentType === 'bible';
@@ -152,6 +154,18 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
           {mediaFormat && (
             <span className="shrink-0 text-[9px] font-mono font-extrabold px-1.5 py-0.2 rounded bg-black/40 border border-white/10 uppercase tracking-wider">
               {mediaFormat}
+            </span>
+          )}
+
+          {/* Staged & Live Badges */}
+          {isPublicLive && (
+            <span className="shrink-0 text-[9px] font-mono font-black px-1.5 py-0.5 rounded bg-red-600 text-white border border-red-400 uppercase tracking-widest flex items-center gap-1 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse">
+              ● LIVE
+            </span>
+          )}
+          {isSelected && !isPublicLive && (
+            <span className="shrink-0 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-600/90 text-white border border-blue-400/80 uppercase tracking-wider">
+              STAGED
             </span>
           )}
         </div>

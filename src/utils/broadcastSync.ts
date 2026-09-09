@@ -14,6 +14,26 @@ export interface BroadcastPayload {
   type: 'GROUP_STATES_UPDATE' | 'SCHEDULE_UPDATE' | 'SYSTEM_UPDATE' | 'SYSTEM_OPTIONS' | 'ALERT_UPDATE' | 'ALERT_PRESETS_UPDATE' | 'GO_LIVE' | 'ANNOTATION_UPDATE' | 'LASER_UPDATE' | 'IDENTIFY_DISPLAYS' | 'REQUEST_STATE' | 'SYNC_STATE' | 'PREVIEW_UPDATE';
   data: any;
   timestamp?: number;
+  msgId?: string;
+}
+
+// Global deduplication cache to eliminate duplicate execution cycles between BroadcastChannel and StorageEvent
+const recentProcessedIds = new Set<string>();
+const recentProcessedQueue: string[] = [];
+
+function isDuplicateMessage(msg: BroadcastPayload): boolean {
+  const id = msg.msgId || `${msg.type}_${msg.timestamp || 0}`;
+  if (recentProcessedIds.has(id)) {
+    return true;
+  }
+  recentProcessedIds.add(id);
+  recentProcessedQueue.push(id);
+  // Keep ring buffer at max 50 entries to prevent memory growth
+  if (recentProcessedQueue.length > 50) {
+    const oldest = recentProcessedQueue.shift();
+    if (oldest) recentProcessedIds.delete(oldest);
+  }
+  return false;
 }
 
 // Helper to recursively strip heavy binary buffers, TypedArrays, base64 data URLs, and bloated structures
@@ -74,7 +94,12 @@ export const sanitizeForSync = (val: any, depth = 0): any => {
 
 export const broadcastStateChange = (payload: BroadcastPayload) => {
   if (typeof window === 'undefined') return;
-  const fullPayload = { ...payload, timestamp: Date.now() };
+  const now = Date.now();
+  const fullPayload: BroadcastPayload = {
+    ...payload,
+    timestamp: now,
+    msgId: payload.msgId || `${payload.type}_${now}_${Math.random().toString(36).slice(2, 7)}`
+  };
 
   // 1. Post to BroadcastChannel (fast in-memory IPC with no storage quota)
   // Send fullPayload so ArrayBuffers, TypedArrays (fileBytes), and data URLs are preserved with 1:1 fidelity across windows!
@@ -103,7 +128,8 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
         // Retry with an ultra-lightweight signal
         const minimalSignal = {
           type: payload.type,
-          timestamp: Date.now(),
+          timestamp: now,
+          msgId: fullPayload.msgId,
           data: { type: payload.type }
         };
         localStorage.setItem('simpleworship_live_sync_event', JSON.stringify(minimalSignal));
@@ -121,15 +147,20 @@ export const subscribeToBroadcast = (callback: (payload: BroadcastPayload) => vo
 
   const handleMessage = (event: MessageEvent) => {
     if (event.data && typeof event.data === 'object') {
-      callback(event.data as BroadcastPayload);
+      const msg = event.data as BroadcastPayload;
+      if (!isDuplicateMessage(msg)) {
+        callback(msg);
+      }
     }
   };
 
   const handleStorage = (event: StorageEvent) => {
     if (event.key === 'simpleworship_live_sync_event' && event.newValue) {
       try {
-        const parsed = JSON.parse(event.newValue);
-        callback(parsed);
+        const parsed = JSON.parse(event.newValue) as BroadcastPayload;
+        if (parsed && typeof parsed === 'object' && !isDuplicateMessage(parsed)) {
+          callback(parsed);
+        }
       } catch (err) {}
     }
   };

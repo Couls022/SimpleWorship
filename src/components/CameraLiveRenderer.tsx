@@ -102,11 +102,11 @@ export default function CameraLiveRenderer({
       
       {/* Logo Overlay */}
       {showLogo && logoUrl && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-50 pointer-events-none">
           <img 
             src={logoUrl} 
             alt="Logo" 
-            className="w-[60%] h-[60%] object-contain drop-shadow-2xl opacity-90 transition-opacity duration-500" 
+            className="w-full h-full object-cover transition-opacity duration-500" 
           />
         </div>
       )}

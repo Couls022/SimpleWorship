@@ -48,7 +48,7 @@ interface OptionsDialogProps {
 }
 
 type MainCategory = 'Main Output' | 'Alternate Output' | 'Foldback' | 'Service Intervals' | 'Slide Labels' | 'Appearance' | 'Advanced';
-type OutputTab = 'General' | 'Song' | 'Scripture' | 'Presentations' | 'Transitions' | 'Alerts';
+type OutputTab = 'General' | 'Song' | 'Scripture' | 'Transitions' | 'Alerts';
 
 function OptionsDialog({ onClose }: OptionsDialogProps) {
   const store = useStore();
@@ -94,7 +94,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
     { id: 'Advanced', label: 'Advanced', icon: <Settings size={15} className="text-gray-400" /> },
   ];
 
-  const outputTabs: OutputTab[] = ['General', 'Song', 'Scripture', 'Presentations', 'Transitions', 'Alerts'];
+  const outputTabs: OutputTab[] = ['General', 'Song', 'Scripture', 'Transitions', 'Alerts'];
 
   const { screens, refreshScreens } = useScreens();
 
@@ -325,14 +325,31 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
     // Bi-directionally sync with active output group(s)
     const pos = localOptions.mainOutput?.general?.position;
     if (pos && pos.width > 0 && pos.height > 0) {
-      const primaryGroup = store.outputGroups[0];
+      const primaryGroup = store.outputGroups.find(g => g.id === 'group-congregation') || store.outputGroups[0];
       if (primaryGroup) {
         store.updateOutputGroup(primaryGroup.id, {
           aspectRatio: `${pos.width}x${pos.height}`,
           customResolution: { width: pos.width, height: pos.height },
-          displayIds: localOptions.mainOutput.general.outputMonitor ? [localOptions.mainOutput.general.outputMonitor] : primaryGroup.displayIds
+          displayIds: localOptions.mainOutput.general.outputMonitor ? [localOptions.mainOutput.general.outputMonitor] : primaryGroup.displayIds,
+          targetDisplayId: localOptions.mainOutput.general.outputMonitor || ''
         });
       }
+    }
+
+    const stageGroup = store.outputGroups.find(g => g.id === 'group-stage');
+    if (stageGroup) {
+      store.updateOutputGroup(stageGroup.id, {
+        displayIds: localOptions.foldback.outputMonitor ? [localOptions.foldback.outputMonitor] : stageGroup.displayIds,
+        targetDisplayId: localOptions.foldback.outputMonitor || ''
+      });
+    }
+
+    const altGroup = store.outputGroups.find(g => g.id === 'group-alternate');
+    if (altGroup && localOptions.alternateOutput.enabled) {
+      store.updateOutputGroup(altGroup.id, {
+        displayIds: localOptions.alternateOutput.outputMonitor ? [localOptions.alternateOutput.outputMonitor] : altGroup.displayIds,
+        targetDisplayId: localOptions.alternateOutput.outputMonitor || ''
+      });
     }
 
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Options saved successfully' }));
@@ -381,13 +398,6 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
     setLocalOptions((prev) => ({
       ...prev,
       mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, ...patch } }
-    }));
-  };
-
-  const updateMainPresentations = (patch: Partial<SystemOptions['mainOutput']['presentations']>) => {
-    setLocalOptions((prev) => ({
-      ...prev,
-      mainOutput: { ...prev.mainOutput, presentations: { ...prev.mainOutput.presentations, ...patch } }
     }));
   };
 
@@ -470,7 +480,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
             {(activeCategory === 'Main Output' || activeCategory === 'Alternate Output' || activeCategory === 'Foldback') && (
               <div className="h-8 bg-[#181a20] border-b border-[#303440] flex items-center px-2 shrink-0 space-x-1">
                 {outputTabs.map((tab) => {
-                  if (activeCategory === 'Foldback' && (tab === 'Presentations' || tab === 'Transitions')) return null;
+                  if (activeCategory === 'Foldback' && tab === 'Transitions') return null;
+                  const label = tab === 'Song' ? 'Songs' : tab === 'Scripture' ? 'Scriptures' : tab;
                   return (
                     <button
                       key={tab}
@@ -481,7 +492,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           : 'text-gray-400 hover:text-gray-200 hover:bg-[#282b34]'
                       }`}
                     >
-                      {tab}
+                      {label}
                     </button>
                   );
                 })}
@@ -1018,7 +1029,132 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     )}
                   </div>
 
-                  {/* 4. Live Interactive Song Slide Preview (16:9 Widescreen & Output Resolution Based) */}
+                  {/* 4. Song Margins ("Marging") */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
+                      <div className="font-bold text-gray-100 text-sm flex items-center gap-1.5">
+                        <span>Song Display Margins</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateMainSong({
+                            margins: { ...localOptions.mainOutput.general.margins }
+                          });
+                        }}
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline"
+                      >
+                        Copy from General Margins
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <label className="text-gray-400 block mb-1">Left (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.song.margins?.left ?? localOptions.mainOutput.general.margins.left}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.song.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainSong({ margins: { ...current, left: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 block mb-1">Top (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.song.margins?.top ?? localOptions.mainOutput.general.margins.top}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.song.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainSong({ margins: { ...current, top: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 block mb-1">Right (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.song.margins?.right ?? localOptions.mainOutput.general.margins.right}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.song.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainSong({ margins: { ...current, right: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 block mb-1">Bottom (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.song.margins?.bottom ?? localOptions.mainOutput.general.margins.bottom}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.song.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainSong({ margins: { ...current, bottom: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. Auto Adjustment */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
+                      <div className="font-bold text-gray-100 text-sm flex items-center gap-1.5">
+                        <span>Auto Adjustment</span>
+                      </div>
+                      <span className="text-[10px] text-gray-400">Dynamic Font Scaling</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-200 hover:text-white">
+                        <input
+                          type="checkbox"
+                          checked={localOptions.mainOutput.song.autoAdjust ?? true}
+                          onChange={(e) => updateMainSong({ autoAdjust: e.target.checked })}
+                          className="rounded accent-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="font-medium">Enable Dynamic Auto-Fit Font Sizing to Canvas</span>
+                      </label>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-[#252833] text-[11px]">
+                        <div>
+                          <label className="text-gray-400 block mb-1">Min Font Size (Floor):</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="16"
+                              max="90"
+                              value={localOptions.mainOutput.song.minFontSize || 32}
+                              onChange={(e) => updateMainSong({ minFontSize: parseInt(e.target.value) || 32 })}
+                              className="w-20 bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                            />
+                            <span className="text-gray-400">pt</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-gray-400 block mb-1">Line Spacing / Height:</label>
+                          <select
+                            value={localOptions.mainOutput.song.lineSpacing || 1.35}
+                            onChange={(e) => updateMainSong({ lineSpacing: parseFloat(e.target.value) })}
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white focus:border-blue-500 outline-none"
+                          >
+                            <option value="1.0">1.0 (Tight)</option>
+                            <option value="1.15">1.15 (Compact)</option>
+                            <option value="1.25">1.25 (Standard)</option>
+                            <option value="1.35">1.35 (Worship Slide Standard)</option>
+                            <option value="1.5">1.5 (Spacious)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 6. Live Interactive Song Slide Preview (16:9 Widescreen & Output Resolution Based) */}
                   <SongLivePreview
                     generalOptions={localOptions.mainOutput.general}
                     songOptions={localOptions.mainOutput.song}
@@ -1244,47 +1380,133 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     )}
                   </div>
 
-                  {/* 4. Scripture Flow & Formatting Options */}
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-2.5">
-                    <div className="font-bold text-gray-200 border-b border-[#292c36] pb-1 text-xs">
-                      Scripture Formatting & Slide Flow
+                  {/* 4. Scripture Margins ("Marging") */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
+                      <div className="font-bold text-gray-100 text-sm flex items-center gap-1.5">
+                        <span>Scripture Display Margins</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateMainScripture({
+                            margins: { ...localOptions.mainOutput.general.margins }
+                          });
+                        }}
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline"
+                      >
+                        Copy from General Margins
+                      </button>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-3 pt-1 text-[11px]">
+
+                    <div className="grid grid-cols-4 gap-3 text-xs">
                       <div>
-                        <label className="text-gray-400 block mb-1">Min Font Size (Auto-flow scale floor):</label>
+                        <label className="text-gray-400 block mb-1">Left (px):</label>
                         <input
                           type="number"
-                          value={localOptions.mainOutput.scripture.minFontSize || 40}
-                          onChange={(e) => updateMainScripture({ minFontSize: Number(e.target.value) })}
-                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                          value={localOptions.mainOutput.scripture.margins?.left ?? localOptions.mainOutput.general.margins.left}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.scripture.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainScripture({ margins: { ...current, left: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 block mb-1">Top (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.scripture.margins?.top ?? localOptions.mainOutput.general.margins.top}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.scripture.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainScripture({ margins: { ...current, top: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 block mb-1">Right (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.scripture.margins?.right ?? localOptions.mainOutput.general.margins.right}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.scripture.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainScripture({ margins: { ...current, right: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-gray-400 block mb-1">Bottom (px):</label>
+                        <input
+                          type="number"
+                          value={localOptions.mainOutput.scripture.margins?.bottom ?? localOptions.mainOutput.general.margins.bottom}
+                          onChange={(e) => {
+                            const current = localOptions.mainOutput.scripture.margins || { ...localOptions.mainOutput.general.margins };
+                            updateMainScripture({ margins: { ...current, bottom: Number(e.target.value) } });
+                          }}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
                         />
                       </div>
                     </div>
+                  </div>
 
-                    <div className="space-y-1.5 pt-2">
-                      <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white text-xs">
+                  {/* 5. Auto Adjustment */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-1">
+                      <div className="font-bold text-gray-200 text-xs">
+                        Auto Adjustment & Scripture Slide Flow
+                      </div>
+                      <span className="text-[10px] text-gray-400">Dynamic Font Scaling & Layout</span>
+                    </div>
+
+                    <div className="space-y-2.5 pt-1">
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-200 hover:text-white text-xs">
                         <input
                           type="checkbox"
-                          checked={localOptions.mainOutput.scripture.breakOnNewVerse ?? false}
-                          onChange={(e) => updateMainScripture({ breakOnNewVerse: e.target.checked })}
-                          className="rounded accent-blue-500 cursor-pointer"
+                          checked={localOptions.mainOutput.scripture.autoAdjust ?? true}
+                          onChange={(e) => updateMainScripture({ autoAdjust: e.target.checked })}
+                          className="rounded accent-blue-500 w-4 h-4 cursor-pointer"
                         />
-                        <span>Break on new verse (create a separate slide for each verse)</span>
+                        <span className="font-medium">Enable Dynamic Auto-Fit Font Sizing to Canvas</span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white text-xs">
-                        <input
-                          type="checkbox"
-                          checked={localOptions.mainOutput.scripture.automaticallyFlow ?? true}
-                          onChange={(e) => updateMainScripture({ automaticallyFlow: e.target.checked })}
-                          className="rounded accent-blue-500 cursor-pointer"
-                        />
-                        <span>Automatically flow text to next slide when length exceeds limit</span>
-                      </label>
+
+                      <div className="grid grid-cols-2 gap-3 pt-1 text-[11px]">
+                        <div>
+                          <label className="text-gray-400 block mb-1">Min Font Size (Auto-flow scale floor):</label>
+                          <input
+                            type="number"
+                            value={localOptions.mainOutput.scripture.minFontSize || 40}
+                            onChange={(e) => updateMainScripture({ minFontSize: Number(e.target.value) })}
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1 border-t border-[#252833]">
+                        <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white text-xs">
+                          <input
+                            type="checkbox"
+                            checked={localOptions.mainOutput.scripture.breakOnNewVerse ?? false}
+                            onChange={(e) => updateMainScripture({ breakOnNewVerse: e.target.checked })}
+                            className="rounded accent-blue-500 cursor-pointer"
+                          />
+                          <span>Break on new verse (create a separate slide for each verse)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white text-xs">
+                          <input
+                            type="checkbox"
+                            checked={localOptions.mainOutput.scripture.automaticallyFlow ?? true}
+                            onChange={(e) => updateMainScripture({ automaticallyFlow: e.target.checked })}
+                            className="rounded accent-blue-500 cursor-pointer"
+                          />
+                          <span>Automatically flow text to next slide when length exceeds limit</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 5. Live Interactive Preview of Scripture Configuration (16:9 Widescreen & Output Resolution Based) */}
+                  {/* 6. Live Interactive Preview of Scripture Configuration (16:9 Widescreen & Output Resolution Based) */}
                   <ScriptureLivePreview
                     generalOptions={localOptions.mainOutput.general}
                     scriptureOptions={localOptions.mainOutput.scripture}
@@ -1292,73 +1514,6 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     onUpdateScripture={updateMainScripture}
                     onUpdateBackdrop={(bg) => store.setDefaultBackground(bg, 'scriptures', false)}
                   />
-                </div>
-              )}
-
-              {/* ================= MAIN OUTPUT -> PRESENTATIONS ================= */}
-              {activeCategory === 'Main Output' && activeOutputTab === 'Presentations' && (
-                <div className="space-y-4">
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-bold text-gray-200">Presentation Title Font</div>
-                        <div className="text-[11px] text-gray-400">{localOptions.mainOutput.presentations.titleFont.family}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingFontTarget({
-                            title: 'Presentation Title Font',
-                            font: localOptions.mainOutput.presentations.titleFont,
-                            apply: (f) => updateMainPresentations({ titleFont: f })
-                          });
-                        }}
-                        className="px-3 py-1 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350]"
-                      >
-                        Title Font ▾
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between border-t border-[#292c36] pt-3">
-                      <div>
-                        <div className="font-bold text-gray-200">SubTitle Font</div>
-                        <div className="text-[11px] text-gray-400">{localOptions.mainOutput.presentations.subTitleFont.family}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingFontTarget({
-                            title: 'Presentation SubTitle Font',
-                            font: localOptions.mainOutput.presentations.subTitleFont,
-                            apply: (f) => updateMainPresentations({ subTitleFont: f })
-                          });
-                        }}
-                        className="px-3 py-1 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350]"
-                      >
-                        SubTitle Font ▾
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between border-t border-[#292c36] pt-3">
-                      <div>
-                        <div className="font-bold text-gray-200">Content / Body Font</div>
-                        <div className="text-[11px] text-gray-400">{localOptions.mainOutput.presentations.contentFont.family}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingFontTarget({
-                            title: 'Presentation Content Font',
-                            font: localOptions.mainOutput.presentations.contentFont,
-                            apply: (f) => updateMainPresentations({ contentFont: f })
-                          });
-                        }}
-                        className="px-3 py-1 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350]"
-                      >
-                        Content Font ▾
-                      </button>
-                    </div>
-                  </div>
                 </div>
               )}
 

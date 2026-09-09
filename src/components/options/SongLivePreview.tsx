@@ -235,7 +235,9 @@ export default function SongLivePreview({
   const labelThemeStyles = ThemeEngine.fontStyleToThemeStyles(songOptions?.labelFont);
   const copyrightThemeStyles = ThemeEngine.fontStyleToThemeStyles(songOptions?.copyrightFont);
 
-  const margins = generalOptions?.margins || { left: 0, top: 0, right: 0, bottom: 0 };
+  const margins = (songOptions?.margins && (songOptions.margins.left || songOptions.margins.top || songOptions.margins.right || songOptions.margins.bottom))
+    ? songOptions.margins
+    : (generalOptions?.margins || { left: 0, top: 0, right: 0, bottom: 0 });
 
   const showLabel = songOptions?.showVerseChorusLabel ?? true;
   const labelLoc = songOptions?.labelLocation || 'Header';

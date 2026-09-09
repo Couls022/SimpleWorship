@@ -170,12 +170,6 @@ export default function PresentationsTab() {
       {/* Sleek Compact Header Bar */}
       <div className="h-10 bg-[#22252c] border-b border-[#15161a] flex items-center justify-between px-2.5 gap-2 shrink-0 relative z-10">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <h3 className="font-bold text-xs text-gray-100 flex items-center gap-1.5 shrink-0">
-            <Layout size={13} className="text-indigo-400 shrink-0" />
-            <span className="hidden sm:inline">Presentations</span>
-            <span className="sm:hidden">Decks</span>
-          </h3>
-
           {/* Quick Search */}
           <div className="relative flex-1 min-w-[80px] max-w-xs shrink">
             <Search size={12} className="absolute left-2.5 top-2.5 text-gray-400 pointer-events-none" />

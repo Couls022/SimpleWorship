@@ -42,7 +42,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
     systemOptions, 
     songsList, 
     themesList, 
-    setGroupState 
+    setStagedGroupState 
   } = store;
 
   // Selected display mode: 'follow-target' or specific groupId
@@ -84,12 +84,19 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
   const activeGroup = outputGroups.find(g => g.id === effectiveGroupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === effectiveGroupId);
-  const activeControlState = groupStates[effectiveGroupId];
+  const publicControlState = groupStates[effectiveGroupId];
+  const stagedControlState = store.stagedGroupStates[effectiveGroupId];
 
   // Active item & slide info
-  const liveItem = activeControlState ? PresentationCore.getActiveContent(activeSchedule, activeControlState) : null;
-  const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
-  const currentSlide = activeControlState && slides.length > 0 ? slides[activeControlState.activeSlideIndex] : null;
+  const liveItem = React.useMemo(() => {
+    return stagedControlState ? PresentationCore.getActiveContent(activeSchedule, stagedControlState) : null;
+  }, [activeSchedule, stagedControlState]);
+
+  const slides = React.useMemo(() => {
+    return liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
+  }, [liveItem, songsList, systemOptions]);
+
+  const currentSlide = stagedControlState && slides.length > 0 ? slides[stagedControlState.activeSlideIndex] : null;
 
   // Resolve theme for this live output group
   const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
@@ -104,16 +111,18 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
   const systemFontOverride = ThemeEngine.getSystemFontForContent(systemOptions, liveItem?.type);
 
-  const resolvedStyles = ThemeEngine.resolveStyles(
-    globalTheme?.styles || ThemeEngine.getDefaultGlobalTheme(),
-    groupTheme?.styles,
-    typeTheme?.styles,
-    systemFontOverride,
-    itemTheme?.styles,
-    elementOverride
-  );
+  const resolvedStyles = React.useMemo(() => {
+    return ThemeEngine.resolveStyles(
+      globalTheme?.styles || ThemeEngine.getDefaultGlobalTheme(),
+      groupTheme?.styles,
+      typeTheme?.styles,
+      systemFontOverride,
+      itemTheme?.styles,
+      elementOverride
+    );
+  }, [globalTheme?.styles, groupTheme?.styles, typeTheme?.styles, systemFontOverride, itemTheme?.styles, elementOverride]);
 
-  const isLogoMode = Boolean(activeControlState?.showLogo);
+  const isLogoMode = Boolean(stagedControlState?.showLogo);
   const logoTheme = themesList.find(t => t.type === 'logo' || t.id === 'theme-logo');
   const logoStyles = logoTheme?.styles || {};
 
@@ -164,10 +173,10 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const isLive = Boolean(activeControlState?.isLiveEnabled && activeControlState?.activeItemId && !activeControlState?.isBlack && !activeControlState?.isClear);
-  const isBlack = Boolean(activeControlState?.isBlack);
-  const isClear = Boolean(activeControlState?.isClear);
-  const isLogo = Boolean(activeControlState?.showLogo);
+  const isLive = Boolean(publicControlState?.isLiveEnabled && publicControlState?.activeItemId && !publicControlState?.isBlack && !publicControlState?.isClear);
+  const isBlack = Boolean(publicControlState?.isBlack);
+  const isClear = Boolean(publicControlState?.isClear);
+  const isLogo = Boolean(publicControlState?.showLogo);
 
   // Group resolution details
   const resInfo = resolveGroupResolution(activeGroup, systemOptions);
@@ -199,12 +208,12 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               isClear ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]' :
               isLogo ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]' :
               isLive ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]' :
-              (activeControlState?.activeItemId ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'bg-gray-600')
+              (stagedControlState?.activeItemId ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'bg-gray-600')
             }`} />
             <span className={`text-[11px] font-extrabold uppercase tracking-wider shrink-0 hidden min-[450px]:inline ${
-              isLive ? 'text-emerald-400' : (activeControlState?.activeItemId ? 'text-amber-400' : 'text-gray-400')
+              isLive ? 'text-emerald-400' : 'text-amber-400'
             }`}>
-              {isBlack ? 'BLACKOUT' : isClear ? 'CLEARED' : isLogo ? 'LOGO' : isLive ? 'LIVE DISPLAY' : (activeControlState?.activeItemId ? 'PREVIEW (LIVE OFF)' : 'STANDBY')}
+              {isBlack ? 'BLACKOUT' : isClear ? 'CLEARED' : isLogo ? 'LOGO' : isLive ? 'LIVE ON (MIRRORING)' : 'LIVE OFF (STANDBY)'}
             </span>
           </div>
         </div>
@@ -229,7 +238,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             return (
               <button
                 onClick={() => setIsConfigOpen(true)}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#151722] hover:bg-[#1f2230] border border-[#2a2e40] text-[10px] text-gray-300 transition-colors cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-[#151722] hover:bg-[#1f2230] border border-[#2a2e40] text-[10px] text-gray-300 transition-colors cursor-pointer shrink-0"
                 title={hasTarget ? `Current 1:1 Target Monitor: ${targetText} (Click to change)` : "No target monitor selected (Click to configure)"}
               >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasTarget ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`} />
@@ -276,7 +285,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               }
               const targetItem = dropResult.items[0];
               store.goLiveItem(targetItem.id, 0, effectiveGroupId, targetItem);
-              store.setGroupState(effectiveGroupId, {
+              store.setStagedGroupState(effectiveGroupId, {
                 activeItemId: targetItem.id,
                 activeSlideIndex: 0,
                 isBlack: false,
@@ -284,7 +293,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               });
               window.dispatchEvent(
                 new CustomEvent('simpleworship:notify', {
-                  detail: `Projecting LIVE on ${activeGroup?.name || 'Display'}: "${targetItem.name}"!`
+                  detail: `Loaded on ${activeGroup?.name || 'Display'}: "${targetItem.name}"`
                 })
               );
               return;
@@ -302,7 +311,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                   store.addScheduleItem(item);
                 }
                 store.goLiveItem(item.id, 0, effectiveGroupId, item);
-                store.setGroupState(effectiveGroupId, {
+                store.setStagedGroupState(effectiveGroupId, {
                   activeItemId: item.id,
                   activeSlideIndex: 0,
                   isBlack: false,
@@ -310,7 +319,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                 });
                 window.dispatchEvent(
                   new CustomEvent('simpleworship:notify', {
-                    detail: `Projecting LIVE on ${activeGroup?.name || 'Display'}: "${item.name}"!`
+                    detail: `Loaded on ${activeGroup?.name || 'Display'}: "${item.name}"`
                   })
                 );
               }
@@ -329,29 +338,21 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             className="w-full h-full"
           />
 
-          {/* Drag & Drop Live Overlay */}
+          {/* Drag & Drop Overlay */}
           {isDraggingOver && (
             <div className="absolute inset-0 bg-cyan-950/85 backdrop-blur-[2px] z-40 flex flex-col items-center justify-center text-cyan-200 border-2 border-dashed border-cyan-400 p-4 text-center pointer-events-none animate-in fade-in duration-150">
               <Tv size={42} className="text-cyan-400 mb-2 animate-bounce" />
-              <span className="text-sm font-black uppercase tracking-wider text-white">Drop to Go Live on Display</span>
-              <span className="text-xs text-cyan-300 mt-1">Directly projects to {activeGroup?.name || 'Display Output'}</span>
+              <span className="text-sm font-black uppercase tracking-wider text-white">Drop to Load Content</span>
+              <span className="text-xs text-cyan-300 mt-1">{activeGroup?.name || 'Display Output'}</span>
             </div>
           )}
 
           {/* Mute Overlays for clear operator feedback */}
-          {(!activeControlState?.activeItemId && !isLogo) && (
+          {(!stagedControlState?.activeItemId && !isLogo) && (
             <div className="absolute inset-0 bg-[#0a0b0e] flex flex-col items-center justify-center pointer-events-none z-30">
               <Tv size={36} className="mb-2 text-gray-700" />
               <span className="text-sm font-black tracking-widest uppercase text-gray-500">STANDBY DISPLAY</span>
-              <span className="text-[10px] text-gray-600 mt-1">Ready for Live Content</span>
-            </div>
-          )}
-
-          {/* Staged / Preview Mode Badge when Live is OFF */}
-          {!isLive && Boolean(activeControlState?.activeItemId) && !isBlack && !isClear && !isLogo && (
-            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-[#13151c]/90 border border-amber-500/50 text-amber-300 text-[10px] font-bold tracking-wider uppercase pointer-events-none z-25 flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              <span>PREVIEW MODE • LIVE OFF (STAGED)</span>
+              <span className="text-[10px] text-gray-600 mt-1">Ready for Content</span>
             </div>
           )}
 
@@ -403,48 +404,48 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setGroupState(effectiveGroupId, { isVideoPlaying: !(activeControlState?.isVideoPlaying ?? true) })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { isVideoPlaying: !(stagedControlState?.isVideoPlaying ?? true) })}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer select-none active:scale-95 ${
-                    activeControlState?.isVideoPlaying ?? true
+                    stagedControlState?.isVideoPlaying ?? true
                       ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/80 hover:bg-emerald-900 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
                       : 'bg-amber-950/90 text-amber-300 border border-amber-700/80 hover:bg-amber-900 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
                   }`}
-                  title={activeControlState?.isVideoPlaying ?? true ? 'Click to Pause' : 'Click to Resume Playback'}
+                  title={stagedControlState?.isVideoPlaying ?? true ? 'Click to Pause' : 'Click to Resume Playback'}
                 >
-                  {activeControlState?.isVideoPlaying ?? true ? '► PLAYING' : '❚❚ PAUSED'}
+                  {stagedControlState?.isVideoPlaying ?? true ? '► PLAYING' : '❚❚ PAUSED'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGroupState(effectiveGroupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { isVideoLooping: !(stagedControlState?.isVideoLooping ?? true) })}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-all cursor-pointer select-none active:scale-95 ${
-                    activeControlState?.isVideoLooping ?? true
+                    stagedControlState?.isVideoLooping ?? true
                       ? 'bg-cyan-950/90 text-cyan-300 border-cyan-600/80 hover:bg-cyan-900 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
                       : 'bg-gray-800/80 text-gray-400 border-gray-700 hover:text-gray-200'
                   }`}
                   title="Toggle Continuous Media Looping"
                 >
-                  {activeControlState?.isVideoLooping ?? true ? '🔁 LOOP ON' : '➡️ LOOP OFF'}
+                  {stagedControlState?.isVideoLooping ?? true ? '🔁 LOOP ON' : '➡️ LOOP OFF'}
                 </button>
               </div>
             </div>
 
             {/* Seek Progress Bar */}
             <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
-              <span className="w-9 text-right shrink-0 font-bold text-gray-300">{formatVideoTime(activeControlState?.videoCurrentTime || 0)}</span>
+              <span className="w-9 text-right shrink-0 font-bold text-gray-300">{formatVideoTime(stagedControlState?.videoCurrentTime || 0)}</span>
               <input
                 type="range"
                 min={0}
-                max={activeControlState?.videoDuration && activeControlState.videoDuration > 0 ? activeControlState.videoDuration : 100}
+                max={stagedControlState?.videoDuration && stagedControlState.videoDuration > 0 ? stagedControlState.videoDuration : 100}
                 step={0.1}
-                value={activeControlState?.videoCurrentTime || 0}
+                value={stagedControlState?.videoCurrentTime || 0}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
-                  setGroupState(effectiveGroupId, { videoSeekTime: val, videoCurrentTime: val });
+                  setStagedGroupState(effectiveGroupId, { videoSeekTime: val, videoCurrentTime: val });
                 }}
                 className="flex-1 h-1.5 bg-[#262936] accent-cyan-400 rounded-lg cursor-pointer animate-none transition-all hover:h-2"
-                title={`Seek position: ${formatVideoTime(activeControlState?.videoCurrentTime || 0)}`}
+                title={`Seek position: ${formatVideoTime(stagedControlState?.videoCurrentTime || 0)}`}
               />
-              <span className="w-9 shrink-0 font-bold text-gray-300">{formatVideoTime(activeControlState?.videoDuration || 0)}</span>
+              <span className="w-9 shrink-0 font-bold text-gray-300">{formatVideoTime(stagedControlState?.videoDuration || 0)}</span>
             </div>
 
             {/* Button Controls Row */}
@@ -453,15 +454,15 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                 {/* Play / Pause Toggle */}
                 <button
                   type="button"
-                  onClick={() => setGroupState(effectiveGroupId, { isVideoPlaying: !(activeControlState?.isVideoPlaying ?? true) })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { isVideoPlaying: !(stagedControlState?.isVideoPlaying ?? true) })}
                   className={`px-3 py-1 rounded text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer select-none active:scale-95 ${
-                    activeControlState?.isVideoPlaying ?? true
+                    stagedControlState?.isVideoPlaying ?? true
                       ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-[0_0_8px_rgba(217,119,6,0.4)]'
                       : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]'
                   }`}
-                  title={activeControlState?.isVideoPlaying ?? true ? 'Pause Media Playback (Space)' : 'Play Media (Space)'}
+                  title={stagedControlState?.isVideoPlaying ?? true ? 'Pause Media Playback (Space)' : 'Play Media (Space)'}
                 >
-                  {activeControlState?.isVideoPlaying ?? true ? (
+                  {stagedControlState?.isVideoPlaying ?? true ? (
                     <>
                       <Pause size={12} className="fill-white" />
                       <span>PAUSE</span>
@@ -477,7 +478,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                 {/* Restart Button */}
                 <button
                   type="button"
-                  onClick={() => setGroupState(effectiveGroupId, { videoSeekTime: 0, videoCurrentTime: 0, isVideoPlaying: true })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { videoSeekTime: 0, videoCurrentTime: 0, isVideoPlaying: true })}
                   className="px-2.5 py-1 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[11px] font-semibold flex items-center gap-1 border border-[#373b4d] transition-all cursor-pointer select-none active:scale-95"
                   title="Restart Media from 0:00"
                 >
@@ -488,16 +489,16 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                 {/* Loop Toggle Button */}
                 <button
                   type="button"
-                  onClick={() => setGroupState(effectiveGroupId, { isVideoLooping: !(activeControlState?.isVideoLooping ?? true) })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { isVideoLooping: !(stagedControlState?.isVideoLooping ?? true) })}
                   className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
-                    activeControlState?.isVideoLooping ?? true
+                    stagedControlState?.isVideoLooping ?? true
                       ? 'bg-cyan-950/90 border-cyan-500/80 text-cyan-300 hover:bg-cyan-900 shadow-[0_0_8px_rgba(6,182,212,0.3)]'
                       : 'bg-[#252834] border-[#373b4d] text-gray-400 hover:text-gray-200'
                   }`}
                   title="Toggle Continuous Loop Mode"
                 >
                   <Repeat size={11} />
-                  <span>{activeControlState?.isVideoLooping ?? true ? 'Loop On' : 'Loop Off'}</span>
+                  <span>{stagedControlState?.isVideoLooping ?? true ? 'Loop On' : 'Loop Off'}</span>
                 </button>
               </div>
 
@@ -505,31 +506,31 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setGroupState(effectiveGroupId, { isVideoMuted: !(activeControlState?.isVideoMuted ?? false) })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { isVideoMuted: !(stagedControlState?.isVideoMuted ?? false) })}
                   className={`p-1.5 rounded transition-all cursor-pointer select-none active:scale-95 ${
-                    activeControlState?.isVideoMuted
+                    stagedControlState?.isVideoMuted
                       ? 'bg-rose-950 border border-rose-700/80 text-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
                       : 'bg-[#252834] border border-[#373b4d] text-gray-300 hover:text-white'
                   }`}
-                  title={activeControlState?.isVideoMuted ? 'Unmute Audio' : 'Mute Audio'}
+                  title={stagedControlState?.isVideoMuted ? 'Unmute Audio' : 'Mute Audio'}
                 >
-                  {activeControlState?.isVideoMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                  {stagedControlState?.isVideoMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
                 </button>
                 <input
                   type="range"
                   min={0}
                   max={1}
                   step={0.05}
-                  value={activeControlState?.isVideoMuted ? 0 : (activeControlState?.videoVolume ?? 1)}
+                  value={stagedControlState?.isVideoMuted ? 0 : (stagedControlState?.videoVolume ?? 1)}
                   onChange={(e) => {
                     const vol = parseFloat(e.target.value);
-                    setGroupState(effectiveGroupId, { videoVolume: vol, isVideoMuted: vol === 0 });
+                    setStagedGroupState(effectiveGroupId, { videoVolume: vol, isVideoMuted: vol === 0 });
                   }}
                   className="w-16 h-1.5 bg-[#262936] accent-cyan-400 rounded cursor-pointer"
-                  title={`Volume: ${Math.round((activeControlState?.isVideoMuted ? 0 : (activeControlState?.videoVolume ?? 1)) * 100)}%`}
+                  title={`Volume: ${Math.round((stagedControlState?.isVideoMuted ? 0 : (stagedControlState?.videoVolume ?? 1)) * 100)}%`}
                 />
                 <span className="text-[9px] font-mono text-gray-400 min-w-[24px]">
-                  {activeControlState?.isVideoMuted ? '0%' : `${Math.round((activeControlState?.videoVolume ?? 1) * 100)}%`}
+                  {stagedControlState?.isVideoMuted ? '0%' : `${Math.round((stagedControlState?.videoVolume ?? 1) * 100)}%`}
                 </span>
               </div>
             </div>

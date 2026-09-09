@@ -203,18 +203,6 @@ export default function MediaTab() {
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Scriptures!` }));
   };
 
-  const handleApplyToPresentations = (asset: Asset) => {
-    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
-    setDefaultBackground(asset.url, 'presentations', isVideo);
-    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Presentations!` }));
-  };
-
-  const handleApplyToAnnouncements = (asset: Asset) => {
-    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
-    setDefaultBackground(asset.url, 'announcements', isVideo);
-    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Announcements!` }));
-  };
-
   const handleApplyToLogo = (asset: Asset) => {
     const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
     setDefaultBackground(asset.url, 'logo', isVideo);
@@ -709,42 +697,6 @@ export default function MediaTab() {
             </span>
             {isDefaultBgFor(contextMenu.asset, 'scriptures') && (
               <span className="flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              handleApplyToPresentations(contextMenu.asset);
-              setContextMenu(null);
-            }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-purple-300"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={12} className="text-purple-400" />
-              <span>For Presentations</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset, 'presentations') && (
-              <span className="flex items-center gap-1 text-[10px] text-purple-400 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => {
-              handleApplyToAnnouncements(contextMenu.asset);
-              setContextMenu(null);
-            }}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-rose-300"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={12} className="text-rose-400" />
-              <span>For Announcements</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset, 'announcements') && (
-              <span className="flex items-center gap-1 text-[10px] text-rose-400 font-semibold bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-500/30">
                 <Check size={10} /> Active
               </span>
             )}

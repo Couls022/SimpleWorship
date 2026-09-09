@@ -324,7 +324,7 @@ export default function ModeratorView() {
         const num = parseInt(e.key, 10);
         if (store.activeControlGroupId) {
           e.preventDefault();
-          store.setGroupState(store.activeControlGroupId, { activeSlideIndex: num - 1 });
+          store.setStagedGroupState(store.activeControlGroupId, { activeSlideIndex: num - 1 });
           window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Jumped to Slide #${num}` }));
         }
         return;

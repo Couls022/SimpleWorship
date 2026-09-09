@@ -114,6 +114,15 @@ export function buildRenderFrame(
 
   const songOpts = systemOptions.mainOutput.song;
   const scriptureOpts = systemOptions.mainOutput.scripture;
+
+  const isSongContent = activeItem.type === 'song';
+  const isBibleContent = activeItem.type === 'bible';
+
+  const effectiveMargins = isSongContent && songOpts?.margins && (songOpts.margins.left || songOpts.margins.top || songOpts.margins.right || songOpts.margins.bottom)
+    ? songOpts.margins
+    : isBibleContent && scriptureOpts?.margins && (scriptureOpts.margins.left || scriptureOpts.margins.top || scriptureOpts.margins.right || scriptureOpts.margins.bottom)
+    ? scriptureOpts.margins
+    : res.margins;
   
   const showVerseChorusLabel = songOpts?.showVerseChorusLabel ?? true;
   const songLabelLoc = songOpts?.labelLocation || 'Header';
@@ -153,24 +162,30 @@ export function buildRenderFrame(
 
   const baseSize = ThemeEngine.normalizeFontSize(resolvedStyles.fontSize);
 
-  const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
-    text: currentSlide.text,
-    baseFontSize: baseSize,
-    fontFamily: resolvedStyles.fontFamily,
-    fontWeight: resolvedStyles.fontWeight,
-    fontStyle: resolvedStyles.fontStyle,
-    hasHeader,
-    hasFooter,
-    scale: 1,
-    minFontSize: activeItem.type === 'song' ? (songOpts?.minFontSize || 32) : (activeItem.type === 'bible' ? (scriptureOpts?.minFontSize || 32) : 24),
-    maxFontSize: baseSize,
-    containerWidth: res.width,
-    containerHeight: res.height,
-    isUppercase: isUpper,
-    lineSpacing: spacing,
-    widthPercent: resolvedStyles.widthPercent || 100,
-    margins: res.margins,
-  });
+  const shouldAutoAdjust = isSongContent 
+    ? (songOpts?.autoAdjust ?? true)
+    : (isBibleContent ? (scriptureOpts?.autoAdjust ?? true) : true);
+
+  const autoFitSize = shouldAutoAdjust
+    ? ThemeEngine.calculateAutoFitFontSize({
+        text: currentSlide.text,
+        baseFontSize: baseSize,
+        fontFamily: resolvedStyles.fontFamily,
+        fontWeight: resolvedStyles.fontWeight,
+        fontStyle: resolvedStyles.fontStyle,
+        hasHeader,
+        hasFooter,
+        scale: 1,
+        minFontSize: activeItem.type === 'song' ? (songOpts?.minFontSize || 32) : (activeItem.type === 'bible' ? (scriptureOpts?.minFontSize || 32) : 24),
+        maxFontSize: baseSize,
+        containerWidth: res.width,
+        containerHeight: res.height,
+        isUppercase: isUpper,
+        lineSpacing: spacing,
+        widthPercent: resolvedStyles.widthPercent || 100,
+        margins: effectiveMargins,
+      })
+    : baseSize;
 
   return {
     groupId,
@@ -178,7 +193,7 @@ export function buildRenderFrame(
     targetHeight: res.height,
     aspectRatio: res.aspectRatio,
     aspectLabel: res.aspectLabel,
-    margins: res.margins,
+    margins: effectiveMargins,
     activeItem,
     activeSlide: currentSlide,
     resolvedStyles,

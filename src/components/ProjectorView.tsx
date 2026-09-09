@@ -72,6 +72,34 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
   }, []);
 
   useEffect(() => {
+    // Automatically attempt fullscreen for target monitor presentation mirrors
+    const attemptFullscreen = async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+        }
+      } catch (e) {
+        console.warn('Auto-fullscreen blocked by browser:', e);
+      }
+    };
+    
+    // Attempt immediately and also on any first user interaction (to bypass some browser blocks)
+    attemptFullscreen();
+    const interactionHandler = () => {
+      attemptFullscreen();
+      window.removeEventListener('click', interactionHandler);
+      window.removeEventListener('keydown', interactionHandler);
+    };
+    window.addEventListener('click', interactionHandler);
+    window.addEventListener('keydown', interactionHandler);
+    
+    return () => {
+      window.removeEventListener('click', interactionHandler);
+      window.removeEventListener('keydown', interactionHandler);
+    };
+  }, []);
+
+  useEffect(() => {
     loadAllData();
     broadcastStateChange({ type: 'REQUEST_STATE', data: null });
 
@@ -81,38 +109,11 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       }
     });
 
+    // View-specific broadcast subscription (Global store syncing is handled cleanly by initSync)
     const unsubscribe = subscribeToBroadcast((msg) => {
       if (msg.type === 'IDENTIFY_DISPLAYS') {
         setIdentifyActive(true);
         setTimeout(() => setIdentifyActive(false), 3000);
-      }
-      if (msg.type === 'GROUP_STATES_UPDATE' || msg.type === 'GO_LIVE' || msg.type === 'SYNC_STATE' || msg.type === 'PREVIEW_UPDATE') {
-        const data = msg.data;
-        if (data) {
-          const gs = data.groupStates || (data.isLiveEnabled !== undefined || data.activeItemId !== undefined ? { [data.groupId || 'group-congregation']: data } : null);
-          useStore.setState((prev) => ({
-            ...(gs ? { groupStates: { ...prev.groupStates, ...gs } } : {}),
-            ...(data.activeSchedule ? { activeSchedule: data.activeSchedule } : {}),
-            ...(data.outputGroups ? { outputGroups: data.outputGroups } : {}),
-            ...(data.systemOptions ? { systemOptions: data.systemOptions } : {}),
-            ...(data.themesList ? { themesList: data.themesList } : {}),
-            ...(data.activeControlGroupId ? { activeControlGroupId: data.activeControlGroupId } : {}),
-          }));
-        }
-      }
-      if (msg.type === 'SCHEDULE_UPDATE' && msg.data && msg.data.activeSchedule) {
-        useStore.setState({ activeSchedule: msg.data.activeSchedule });
-      }
-      if ((msg.type === 'SYSTEM_UPDATE' || msg.type === 'SYSTEM_OPTIONS') && msg.data) {
-        if (msg.data.systemOptions) useStore.setState({ systemOptions: msg.data.systemOptions });
-        else if (msg.type === 'SYSTEM_OPTIONS') useStore.setState({ systemOptions: msg.data });
-        if (msg.data.themesList) useStore.setState({ themesList: msg.data.themesList });
-      }
-      if (msg.type === 'ALERT_UPDATE' && msg.data && msg.data.alert) {
-        useStore.setState({ alert: msg.data.alert });
-      }
-      if (msg.type === 'ANNOTATION_UPDATE' && msg.data) {
-        useStore.setState({ annotationState: msg.data });
       }
     });
 
@@ -120,7 +121,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       cleanupRouteListener();
       unsubscribe();
     };
-  }, [displayId, loadAllData]);
+  }, [displayId]);
 
   // Find index of this screen in screens list to show the accurate monitor index tag
   const screenIndex = React.useMemo(() => {
@@ -147,14 +148,16 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     return 1;
   }, [screens, displayId]);
 
-  // Resolves the ordered array of live groups targeting this physical display
+  // Resolves the single WINNING active group targeting this physical display for STRICT 1:1 Solid Mapping
   const orderedLiveGroupIds = React.useMemo(() => {
     let list: string[] = [];
     if (displayId && outputGroups.length > 0) {
       const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
       const match = assignments.get(displayId);
-      if (match && match.liveGroupIds.length > 0) {
-        list = [...match.liveGroupIds];
+      if (match && match.assignedGroupId) {
+        // STRICT 1-TO-1 MAPPING: We only render the single winning assigned group! 
+        // We do NOT render multiple transparent overlay layers.
+        list = [match.assignedGroupId];
       }
     }
 
@@ -165,12 +168,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
       list = [fallbackGroup];
     }
     
-    // Stacking Priority: Sort so that the activeControlGroupId (the active panel being operated) is ALWAYS last
-    // (meaning it renders on the very top of the stacking order in the React DOM)
-    if (activeControlGroupId && list.includes(activeControlGroupId) && list.length > 1) {
-      const filtered = list.filter(id => id !== activeControlGroupId);
-      return [...filtered, activeControlGroupId];
-    }
     return list;
   }, [displayId, outputGroups, groupStates, activeControlGroupId, routedGroupId, initialGroupId]);
 
@@ -557,12 +554,13 @@ function ProjectorLayer({
   );
 
   if (isLogoMode) {
-    if (logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) {
+    const defaultLogo = (systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl || logoStyles.backgroundImageUrl || logoStyles.logoUrl || resolvedStyles.backgroundImageUrl || '';
+    if ((logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) || PresentationContentResolver.isVideoUrl(defaultLogo) || (logoStyles.backgroundVideoUrl && PresentationContentResolver.isVideoUrl(logoStyles.backgroundVideoUrl))) {
       isVideo = true;
-      videoSrc = logoStyles.backgroundVideoUrl;
+      videoSrc = logoStyles.backgroundVideoUrl || defaultLogo;
     } else {
       isVideo = false;
-      backgroundUrl = logoStyles.backgroundImageUrl || resolvedStyles.backgroundImageUrl || '';
+      backgroundUrl = defaultLogo;
     }
   } else {
     const slideBgUrl = currentSlide?.backgroundUrl;
@@ -757,12 +755,7 @@ function ProjectorLayer({
     ? (logoStyles.backgroundGradient || resolvedStyles.backgroundGradient)
     : resolvedStyles.backgroundGradient;
 
-  const isLiveActive = Boolean(
-    presentationState.isLiveEnabled || 
-    presentationState.showLogo || 
-    activeItem || 
-    presentationState.directLiveItem
-  );
+  const isLiveActive = Boolean(presentationState.isLiveEnabled);
 
   const computedRenderFrame = buildRenderFrame(
     groupId,
@@ -1084,38 +1077,18 @@ function ProjectorLayer({
       {/* Master Logo Splash Mode or Theme Watermark */}
       {!presentationState.isBlack && (
         presentationState.showLogo ? (
-          (localLogoUrl && localLogoUrl !== localBackgroundUrl) ? (
-            <div className="absolute inset-0 z-30 flex items-center justify-center p-12 pointer-events-none">
-              <img
-                src={localLogoUrl}
-                alt="Logo"
-                className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl"
-                style={{
-                  opacity: logoStyles.logoOpacity ?? 1,
-                  width: logoStyles.logoSize ? `${logoStyles.logoSize * 2}px` : undefined,
-                }}
-              />
-            </div>
-          ) : (
+          (!localBackgroundUrl && !videoSrc && !isGradient) ? (
             <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-12 pointer-events-none">
-              {(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl ? (
-                <img
-                  src={(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl}
-                  alt="Logo"
-                  className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-                  <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
-                    <Sparkles className="w-12 h-12 text-cyan-300 animate-pulse" />
-                  </div>
-                  <span className="text-2xl font-black tracking-wider uppercase text-white drop-shadow-md">
-                    {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
-                  </span>
+              <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+                <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
+                  <Sparkles className="w-12 h-12 text-cyan-300 animate-pulse" />
                 </div>
-              )}
+                <span className="text-2xl font-black tracking-wider uppercase text-white drop-shadow-md">
+                  {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
+                </span>
+              </div>
             </div>
-          )
+          ) : null
         ) : (resolvedStyles.showLogo && localLogoUrl) ? (
           <div 
             className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg ${

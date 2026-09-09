@@ -102,13 +102,20 @@ class HardwareProfileManager {
       console.warn('[HardwareProfile] GPU Diagnostics engine error:', e);
     }
 
-    // 3. Device Memory API (Browser fallback)
+    // 3. Device Memory & JS Heap Detection (Browser & Electron fallback)
     if ((navigator as any)?.deviceMemory) {
       const devMemGb = (navigator as any).deviceMemory;
       if (totalRamMb === 8192) {
         totalRamMb = devMemGb * 1024;
         freeRamMb = Math.round(totalRamMb * 0.5);
         usedRamMb = Math.round(totalRamMb * 0.5);
+      }
+    }
+
+    if (typeof performance !== 'undefined' && (performance as any).memory) {
+      const mem = (performance as any).memory;
+      if (mem.usedJSHeapSize) {
+        processMemMb = Math.round(mem.usedJSHeapSize / (1024 * 1024));
       }
     }
 
@@ -125,9 +132,21 @@ class HardwareProfileManager {
       tier = 'high'; // High-performance desktop or laptop with dedicated NVIDIA/AMD GPU
     }
 
-    // 5. Automatically tune system components according to detected hardware
-    const maxCacheFrames = tier === 'eco' ? 8 : tier === 'medium' ? 14 : 20;
+    // 5. Automatically tune system components and GPU acceleration according to detected hardware
+    const maxCacheFrames = tier === 'eco' ? 8 : tier === 'medium' ? 16 : 28;
     slideRenderCache.setMaxCacheSize(maxCacheFrames);
+
+    // Apply hardware acceleration CSS flags to document root
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.classList.remove('hw-tier-eco', 'hw-tier-medium', 'hw-tier-high');
+      root.classList.add(`hw-tier-${tier}`);
+      if (isHardwareAccelerated) {
+        root.classList.add('gpu-accelerated');
+      } else {
+        root.classList.remove('gpu-accelerated');
+      }
+    }
 
     const hardwareInfo: HardwareInfo = {
       platform,

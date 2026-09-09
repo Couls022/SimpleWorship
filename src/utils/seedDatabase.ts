@@ -1,5 +1,7 @@
 import { getDB } from '../db';
 import { BAPTIST_HYMNAL_SONGS } from '../data/baptistHymnal';
+import { HYMNS_OF_PRAISES } from '../data/hymnsOfPraises';
+import { BAPTIST_SPECIAL_NUMBERS } from '../data/specialNumbers';
 import { loadAllAuthenticBibleVerses } from '../data/fullBibleData';
 import { Song, ScriptureVerse } from '../types';
 
@@ -23,7 +25,7 @@ export async function runDatabaseSeeder(
 
     // Check if already seeded unless force === true
     if (!force) {
-      const isAlreadySeeded = await db.get('settings', 'library_seeded_v6');
+      const isAlreadySeeded = await db.get('settings', 'library_seeded_v7');
       if (isAlreadySeeded) {
         const songCount = await db.count('songs');
         const scCount = await db.count('scriptures');
@@ -39,11 +41,11 @@ export async function runDatabaseSeeder(
     onProgress?.('Loading authentic KJV and Tagalog 66 Books Bible text corpus...');
     const fullBibleVerses = await loadAllAuthenticBibleVerses();
 
-    onProgress?.('Preparing Baptist Hymnal song collection...');
-    const hymnalSongs = BAPTIST_HYMNAL_SONGS;
+    onProgress?.('Preparing Hymnals and Special Numbers collection...');
+    const hymnalSongs = [...BAPTIST_HYMNAL_SONGS, ...HYMNS_OF_PRAISES, ...BAPTIST_SPECIAL_NUMBERS];
 
     // 1. Seed Songs in Batch Transaction
-    onProgress?.(`Seeding ${hymnalSongs.length} Baptist Hymnal songs into IndexedDB...`);
+    onProgress?.(`Seeding ${hymnalSongs.length} built-in songs into IndexedDB...`);
     const songTx = db.transaction('songs', 'readwrite');
     const songStore = songTx.objectStore('songs');
     for (const song of hymnalSongs) {
@@ -68,8 +70,8 @@ export async function runDatabaseSeeder(
 
     // Mark as seeded
     await db.put('settings', {
-      id: 'library_seeded_v6',
-      key: 'library_seeded_v6',
+      id: 'library_seeded_v7',
+      key: 'library_seeded_v7',
       value: true,
       timestamp: Date.now(),
       songsCount: hymnalSongs.length,
@@ -80,7 +82,7 @@ export async function runDatabaseSeeder(
       success: true,
       songsSeeded: hymnalSongs.length,
       scripturesSeeded: fullBibleVerses.length,
-      message: `Database successfully seeded with ${hymnalSongs.length} Baptist Hymns and ${fullBibleVerses.length} KJV & Tagalog Scripture verses!`
+      message: `Database successfully seeded with ${hymnalSongs.length} built-in Hymns and ${fullBibleVerses.length} KJV & Tagalog Scripture verses!`
     };
   } catch (error: any) {
     console.error('Failed to seed database:', error);

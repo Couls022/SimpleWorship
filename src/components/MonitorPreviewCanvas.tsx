@@ -40,7 +40,7 @@ export default function MonitorPreviewCanvas({
   const store = useStore();
   const { 
     outputGroups, 
-    groupStates, 
+    stagedGroupStates, groupStates, 
     activeSchedule, 
     songsList, 
     themesList, 
@@ -52,7 +52,7 @@ export default function MonitorPreviewCanvas({
   const currentAlert = (groupId && groupAlerts?.[groupId]) || alert || { active: false, showNursery: false, message: '', nurseryText: '' };
 
   const group = customGroup || outputGroups.find(g => g.id === groupId) || outputGroups[0];
-  const presentationState = customState || groupStates[groupId] || ({
+  const presentationState = customState || stagedGroupStates[groupId] || ({
     activeScheduleId: null,
     activeItemId: null,
     activeSlideIndex: 0,
@@ -65,8 +65,12 @@ export default function MonitorPreviewCanvas({
   } as PresentationState);
   
   const isLiveOff = !presentationState.isLiveEnabled;
+  
+  const isLiveActive = Boolean(presentationState.isLiveEnabled);
 
-  const activeItem = PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
+  const activeItem = React.useMemo(() => {
+    return PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
+  }, [activeSchedule, presentationState]);
 
   const mediaControllerRef = useRef<MediaStreamController | null>(null);
   if (!mediaControllerRef.current) {
@@ -87,7 +91,9 @@ export default function MonitorPreviewCanvas({
   // Images can be fetched directly during rendering if needed.
 
   // Resolve Content & Themes
-  const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
+  const slides = React.useMemo(() => {
+    return activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
+  }, [activeItem, songsList, systemOptions]);
   const currentSlide = slides[presentationState.activeSlideIndex] || null;
 
   // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
@@ -234,12 +240,13 @@ export default function MonitorPreviewCanvas({
   let audioSrc = '';
 
   if (isLogoMode) {
-    if (logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) {
+    const defaultLogo = (systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl || logoStyles.backgroundImageUrl || logoStyles.logoUrl || resolvedStyles.backgroundImageUrl || '';
+    if ((logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) || PresentationContentResolver.isVideoUrl(defaultLogo) || (logoStyles.backgroundVideoUrl && PresentationContentResolver.isVideoUrl(logoStyles.backgroundVideoUrl))) {
       isVideo = true;
-      videoSrc = logoStyles.backgroundVideoUrl;
+      videoSrc = logoStyles.backgroundVideoUrl || defaultLogo;
     } else {
       isVideo = false;
-      backgroundUrl = logoStyles.backgroundImageUrl || resolvedStyles.backgroundImageUrl || '';
+      backgroundUrl = defaultLogo;
     }
   } else {
     const slideBgUrl = currentSlide?.backgroundUrl;
@@ -396,8 +403,8 @@ export default function MonitorPreviewCanvas({
     const now = Date.now();
     if (now - lastVideoTimeUpdateRef.current >= 200) {
       lastVideoTimeUpdateRef.current = now;
-      if (store.setGroupState) {
-        store.setGroupState(groupId, {
+      if (store.setStagedGroupState) {
+        store.setStagedGroupState(groupId, {
           videoCurrentTime: videoEl.currentTime,
           videoDuration: videoEl.duration || 0,
         });
@@ -408,8 +415,8 @@ export default function MonitorPreviewCanvas({
   const handleLoadedMetadata = () => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    if (store.setGroupState) {
-      store.setGroupState(groupId, {
+    if (store.setStagedGroupState) {
+      store.setStagedGroupState(groupId, {
         videoCurrentTime: videoEl.currentTime,
         videoDuration: videoEl.duration || 0,
       });
@@ -423,8 +430,8 @@ export default function MonitorPreviewCanvas({
     const now = Date.now();
     if (now - lastAudioTimeUpdateRef.current >= 200) {
       lastAudioTimeUpdateRef.current = now;
-      if (store.setGroupState) {
-        store.setGroupState(groupId, {
+      if (store.setStagedGroupState) {
+        store.setStagedGroupState(groupId, {
           videoCurrentTime: audioEl.currentTime,
           videoDuration: audioEl.duration || 0,
         });
@@ -435,8 +442,8 @@ export default function MonitorPreviewCanvas({
   const handleAudioLoadedMetadata = () => {
     const audioEl = audioRef.current;
     if (!audioEl) return;
-    if (store.setGroupState) {
-      store.setGroupState(groupId, {
+    if (store.setStagedGroupState) {
+      store.setStagedGroupState(groupId, {
         videoCurrentTime: audioEl.currentTime,
         videoDuration: audioEl.duration || 0,
       });
@@ -503,8 +510,10 @@ export default function MonitorPreviewCanvas({
             background: isGradient ? gradientVal : (resolvedStyles.backgroundColor || '#000000'),
           }}
         >
-          {/* Background Layer */}
-          <div className="absolute inset-0 z-0">
+          {/* Live Display Canvas Content */}
+          <div className="absolute inset-0 w-full h-full">
+            {/* Background Layer */}
+            <div className="absolute inset-0 z-0">
             {isVideo && videoSrc ? (
               <video
                 ref={videoRef}
@@ -518,7 +527,7 @@ export default function MonitorPreviewCanvas({
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={() => {
                   if (!(presentationState.isVideoLooping ?? true)) {
-                    store.setGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
+                    store.setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                   }
                 }}
                 className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
@@ -634,7 +643,7 @@ export default function MonitorPreviewCanvas({
                 onLoadedMetadata={handleAudioLoadedMetadata}
                 onEnded={() => {
                   if (!(presentationState.isVideoLooping ?? true)) {
-                    store.setGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
+                    store.setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                   }
                 }}
               />
@@ -826,38 +835,18 @@ export default function MonitorPreviewCanvas({
           {/* Master Logo Splash Mode or Theme Watermark */}
           {!presentationState.isBlack && (
             presentationState.showLogo ? (
-              (logoStyles.logoUrl && logoStyles.logoUrl !== localBackgroundUrl) ? (
-                <div className="absolute inset-0 z-30 flex items-center justify-center p-8 pointer-events-none">
-                  <img
-                    src={logoStyles.logoUrl}
-                    alt="Logo"
-                    className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl"
-                    style={{
-                      opacity: logoStyles.logoOpacity ?? 1,
-                      width: logoStyles.logoSize ? `${logoStyles.logoSize * 2}px` : undefined,
-                    }}
-                  />
-                </div>
-              ) : (
+              (!localBackgroundUrl && !videoSrc && !isGradient) ? (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8 pointer-events-none">
-                  {(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl ? (
-                    <img
-                      src={(systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl}
-                      alt="Logo"
-                      className="max-w-[50%] max-h-[50%] object-contain drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-                      <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
-                        <Sparkles className="w-10 h-10 text-cyan-300 animate-pulse" />
-                      </div>
-                      <span className="text-xl font-black tracking-wider uppercase text-white drop-shadow-md">
-                        {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
-                      </span>
+                  <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
+                      <Sparkles className="w-10 h-10 text-cyan-300 animate-pulse" />
                     </div>
-                  )}
+                    <span className="text-xl font-black tracking-wider uppercase text-white drop-shadow-md">
+                      {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
+                    </span>
+                  </div>
                 </div>
-              )
+              ) : null
             ) : (resolvedStyles.showLogo && resolvedStyles.logoUrl) ? (
               <div 
                 className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg ${
@@ -957,6 +946,7 @@ export default function MonitorPreviewCanvas({
               />
             )}
           </AnimatePresence>
+          </div>
         </div>
 
         {/* Resolution & Ratio Indicator Tag */}

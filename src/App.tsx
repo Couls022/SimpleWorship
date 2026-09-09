@@ -13,6 +13,7 @@ import { getDB, dbApi } from './db';
 import { readSwsFile } from './services/swsService';
 import { useStore } from './store/useStore';
 import { applyAppearanceSettings, initSystemThemeListener } from './utils/themeManager';
+import { hardwareProfile } from './core/HardwareProfile';
 
 export default function App() {
   const [isReady, setIsReady] = useState(true);
@@ -55,82 +56,84 @@ export default function App() {
   const groupId = rawGroupId || (isProjector ? 'group-congregation' : undefined);
 
   useEffect(() => {
-    async function init() {
-      try {
-        // Init IndexedDB in background
-        getDB().catch((e) => console.warn('[App] DB init warning:', e));
-        
-        // Init Broadcast Channel
-        initSync(isProjector);
+    // 1. Init IndexedDB in background
+    getDB().catch((e) => console.warn('[App] DB init warning:', e));
+    
+    // 2. Init Broadcast Channel
+    initSync(isProjector);
 
-        // Apply initial workspace theme & appearance
-        const initialOptions = useStore.getState().systemOptions;
-        applyAppearanceSettings(initialOptions?.appearance);
+    // 3. Auto-detect Hardware Drivers & Profile (CPU, RAM, GPU) to optimize render caches
+    hardwareProfile.detectHardware().catch((e) => console.warn('[App] Hardware detection warning:', e));
 
-        // Listen for OS system theme changes
-        initSystemThemeListener(() => useStore.getState().systemOptions);
+    // 4. Apply initial workspace theme & appearance
+    const initialOptions = useStore.getState().systemOptions;
+    applyAppearanceSettings(initialOptions?.appearance);
 
-        // Subscribe to store updates to keep theme updated live
-        useStore.subscribe((state) => {
-          applyAppearanceSettings(state.systemOptions?.appearance);
-        });
+    // Listen for OS system theme changes
+    const cleanupThemeListener = initSystemThemeListener(() => useStore.getState().systemOptions);
 
-        // Listen for Native File Association Opening (.sws double-click on Windows)
-        if (typeof window !== 'undefined' && (window as any).electronAPI?.onFileAssociationOpened) {
-          (window as any).electronAPI.onFileAssociationOpened(async (filePath: string) => {
-            try {
-              if ((window as any).electronAPI.readSwsFromPath) {
-                const res = await (window as any).electronAPI.readSwsFromPath(filePath);
-                if (res && !res.canceled && res.data) {
-                  const blob = new Blob([res.data]);
-                  const fileName = filePath.split(/[/\\]/).pop() || 'Imported.sws';
-                  const file = new File([blob], fileName);
-                  const result = await readSwsFile(file);
-                  if (result.schedule) {
-                    if (result.bundledSongs && result.bundledSongs.length > 0) {
-                      await Promise.all(result.bundledSongs.map(song => dbApi.addSong(song).catch(() => {})));
-                    }
-                    if (result.bundledThemes && result.bundledThemes.length > 0) {
-                      await Promise.all(result.bundledThemes.map(thm => dbApi.addTheme(thm).catch(() => {})));
-                    }
-                    await dbApi.addSchedule(result.schedule).catch(() => {});
-                    useStore.getState().setActiveSchedule(result.schedule);
-                    window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-                      detail: `Opened Service: ${result.schedule.name}`
-                    }));
-                  }
-                }
-              }
-            } catch (err) {
-              console.error('Failed to open SWS file from Windows association:', err);
-            }
-          });
-        }
-
-        // Listen for Native Display Hot-Plug changes
-        if (typeof window !== 'undefined' && (window as any).electronAPI?.onDisplayChanged) {
-          (window as any).electronAPI.onDisplayChanged(() => {
-            window.dispatchEvent(new CustomEvent('simpleworship:displays-changed'));
-          });
-        }
-
-        // Global dragover & drop handler to prevent browser navigation when dropping files outside drop zones
-        const preventGlobalDrop = (e: DragEvent) => {
-          e.preventDefault();
-        };
-        window.addEventListener('dragover', preventGlobalDrop);
-        window.addEventListener('drop', preventGlobalDrop);
-
-        return () => {
-          window.removeEventListener('dragover', preventGlobalDrop);
-          window.removeEventListener('drop', preventGlobalDrop);
-        };
-      } catch (err) {
-        console.error('[App] Init Error:', err);
+    // Subscribe to store updates with change check to avoid DOM thrashing
+    let lastAppearance = initialOptions?.appearance;
+    const unsubscribeStore = useStore.subscribe((state) => {
+      const current = state.systemOptions?.appearance;
+      if (current !== lastAppearance) {
+        lastAppearance = current;
+        applyAppearanceSettings(current);
       }
+    });
+
+    // Listen for Native File Association Opening (.sws double-click on Windows)
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.onFileAssociationOpened) {
+      (window as any).electronAPI.onFileAssociationOpened(async (filePath: string) => {
+        try {
+          if ((window as any).electronAPI.readSwsFromPath) {
+            const res = await (window as any).electronAPI.readSwsFromPath(filePath);
+            if (res && !res.canceled && res.data) {
+              const blob = new Blob([res.data]);
+              const fileName = filePath.split(/[/\\]/).pop() || 'Imported.sws';
+              const file = new File([blob], fileName);
+              const result = await readSwsFile(file);
+              if (result.schedule) {
+                if (result.bundledSongs && result.bundledSongs.length > 0) {
+                  await Promise.all(result.bundledSongs.map(song => dbApi.addSong(song).catch(() => {})));
+                }
+                if (result.bundledThemes && result.bundledThemes.length > 0) {
+                  await Promise.all(result.bundledThemes.map(thm => dbApi.addTheme(thm).catch(() => {})));
+                }
+                await dbApi.addSchedule(result.schedule).catch(() => {});
+                useStore.getState().setActiveSchedule(result.schedule);
+                window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                  detail: `Opened Service: ${result.schedule.name}`
+                }));
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to open SWS file from Windows association:', err);
+        }
+      });
     }
 
-    init();
+    // Listen for Native Display Hot-Plug changes
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.onDisplayChanged) {
+      (window as any).electronAPI.onDisplayChanged(() => {
+        window.dispatchEvent(new CustomEvent('simpleworship:displays-changed'));
+      });
+    }
+
+    // Global dragover & drop handler to prevent browser navigation when dropping files outside drop zones
+    const preventGlobalDrop = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', preventGlobalDrop);
+    window.addEventListener('drop', preventGlobalDrop);
+
+    return () => {
+      window.removeEventListener('dragover', preventGlobalDrop);
+      window.removeEventListener('drop', preventGlobalDrop);
+      cleanupThemeListener?.();
+      unsubscribeStore();
+    };
   }, [isProjector]);
 
   if (isProjector && groupId) {

@@ -352,13 +352,6 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
       {/* Top Header & Translation Bar */}
       <div className="bg-[#222630] border-b border-[#131519] p-2 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <BookOpen size={14} className="text-amber-400" />
-            <span className="font-bold text-xs uppercase tracking-wider text-gray-200">
-              Scriptures
-            </span>
-          </div>
-
           {/* Single Main Bible Search Bar (in top header red box position) */}
           <form onSubmit={handleQuickJump} className="relative flex-1 min-w-[100px] shrink">
             <input

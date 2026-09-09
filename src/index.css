@@ -547,10 +547,35 @@ html.light.high-contrast .text-gray-400 {
   object-fit: contain !important;
 }
 
-/* PROJECTOR OPTIMIZATION FOR HARDWARE ACCELERATION */
+/* PROJECTOR & SYSTEM-WIDE HARDWARE ACCELERATION (RAM, CPU, GPU TUNING) */
 .projector-canvas {
   will-change: transform, opacity;
-  transform: translateZ(0);
+  transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
+  contain: layout paint;
+}
+
+html.gpu-accelerated .projector-canvas,
+html.gpu-accelerated [data-presentation-canvas],
+html.gpu-accelerated video,
+html.gpu-accelerated canvas {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+html.gpu-accelerated video {
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* Eco Hardware Tier: Conserve GPU/CPU bandwidth on low-spec hardware */
+html.hw-tier-eco * {
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html.hw-tier-eco .motion-reduce {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
 }
 

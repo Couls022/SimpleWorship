@@ -1,16 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Tv, 
   Layers, 
   Plus, 
   Settings, 
   X,
-  Clock,
-  LayoutGrid,
-  RotateCcw
+  Clock
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import RouteConfigModal from '../RouteConfigModal';
 
 interface BottomModuleBarProps {
   onConfigureRoute?: (groupId: string) => void;
@@ -28,20 +25,6 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
     removeRouterPanel
   } = store;
 
-  const [configuringGroupId, setConfiguringGroupId] = useState<string | null>(null);
-  const [isLayoutMenuOpen, setIsLayoutMenuOpen] = useState(false);
-  const layoutMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (layoutMenuRef.current && !layoutMenuRef.current.contains(e.target as Node)) {
-        setIsLayoutMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
 
   useEffect(() => {
@@ -173,74 +156,12 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
 
       {/* Right: Master Screen Quick Toggles & Clock */}
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
-        {/* Layout Modes & Resizing Presets */}
-        <div className="relative" ref={layoutMenuRef}>
-          <button
-            onClick={() => setIsLayoutMenuOpen(!isLayoutMenuOpen)}
-            className="px-2 py-0.5 rounded bg-[#181b25] hover:bg-[#222736] border border-[#262c3e] text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
-            title="Workspace Layout Modes & Panel Sizing"
-          >
-            <LayoutGrid size={11} className="text-sky-400" />
-            <span className="hidden min-[620px]:inline">Layout</span>
-          </button>
-          {isLayoutMenuOpen && (
-            <div 
-              className="absolute right-0 bottom-full mb-1.5 w-56 bg-[#1b1e28] border border-[#333a4c] rounded-md shadow-2xl py-1 z-50 text-xs text-gray-200 animate-in fade-in zoom-in-95 duration-100"
-              onClick={() => setIsLayoutMenuOpen(false)}
-            >
-              <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                Layout Adjustments
-              </div>
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('simpleworship:reset-layout'));
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-[#282d3b] hover:text-white flex items-center gap-2"
-              >
-                <RotateCcw size={12} className="text-sky-400 shrink-0" />
-                <span>Reset to Balanced 3-Pane</span>
-              </button>
-              <button
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('simpleworship:toggle-sidebar'));
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-[#282d3b] hover:text-white flex items-center gap-2"
-              >
-                <Layers size={12} className="text-amber-400 shrink-0" />
-                <span>Toggle Sidebar (Ctrl+\)</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="w-px h-3.5 bg-[#222634]" />
-
-        {/* Settings Button (Output Groups) */}
-        <button
-          onClick={() => setConfiguringGroupId(outputGroups[0]?.id || 'group-1')}
-          className="px-2 py-0.5 rounded bg-[#181b25] hover:bg-[#222736] border border-[#262c3e] text-gray-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px]"
-          title="Configure Output Routes & Displays"
-        >
-          <Settings size={12} />
-          <span>Routes</span>
-        </button>
-
-        <div className="w-px h-3.5 bg-[#222634]" />
-
         {/* Real-time Clock */}
-        <div className="flex items-center gap-1 text-gray-400 font-mono text-[10px] font-semibold bg-[#181b25] px-2 py-0.5 rounded border border-[#262c3e]">
-          <Clock size={10} className="text-sky-400" />
+        <div className="flex items-center gap-1 text-gray-400 font-mono text-[10px] font-semibold px-1 py-0.5">
+          <Clock size={11} className="text-sky-400" />
           <span>{currentTime}</span>
         </div>
       </div>
-
-      {/* Route Config Modal */}
-      {configuringGroupId && (
-        <RouteConfigModal 
-          groupId={configuringGroupId} 
-          onClose={() => setConfiguringGroupId(null)} 
-        />
-      )}
     </div>
   );
 }

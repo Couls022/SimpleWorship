@@ -1,4 +1,4 @@
-import { getDB } from './index';
+import { getDB, resolveAssetUrl } from './index';
 import { Asset } from '../types';
 import { ParsedSlide } from '../utils/pptxParser';
 import { computeFileHash } from './assets';
@@ -61,11 +61,21 @@ export async function getAllPresentations(): Promise<Asset[]> {
   const allAssets = await db.getAllFromIndex('assets', 'by-type', 'document');
   // Strip heavy fileBytes to prevent massive memory consumption when listing presentations
   return allAssets.map(asset => {
+    let returnData = asset.data;
     if (asset.data && asset.data.fileBytes) {
       const { fileBytes, ...restData } = asset.data;
-      return { ...asset, data: restData };
+      returnData = restData;
     }
-    return asset;
+    
+    // Resolve slide background URLs
+    if (returnData && returnData.slides) {
+      returnData.slides = returnData.slides.map((slide: any) => ({
+        ...slide,
+        backgroundUrl: resolveAssetUrl(slide.backgroundUrl) || slide.backgroundUrl
+      }));
+    }
+
+    return { ...asset, data: returnData };
   });
 }
 
