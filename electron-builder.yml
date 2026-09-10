@@ -1,3 +1,4 @@
+npmRebuild: false
 appId: com.simpleworship.app
 productName: SimpleWorship
 directories:
@@ -8,6 +9,7 @@ files:
   - electron/**/*
 extraMetadata:
   main: electron/main.cjs
+asar: true
 win:
   target:
     - target: nsis
@@ -17,13 +19,16 @@ win:
       arch:
         - x64
   icon: public/branding/logo/SimpleWorship.ico
+  requestedExecutionLevel: asInvoker
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  perMachine: true
+  perMachine: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: SimpleWorship
+  differentialPackage: true
+  runAfterFinish: true
 fileAssociations:
   - ext: sws
     name: SimpleWorship Service

@@ -265,8 +265,10 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
     }
 
     const fullText = sorted.map(v => v.text.trim()).join('  ');
-    const defaultScriptureBg = store.themesList?.find(t => t.type === 'bible')?.styles?.backgroundImageUrl;
-
+    const bibleTheme = store.themesList?.find(t => t.type === 'bible');
+    
+    // We intentionally do not bake the default background into customBackgroundUrl
+    // so that if the default theme changes, the item automatically updates.
     return {
       id: `bible-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       type: 'bible',
@@ -274,7 +276,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
       contentId: first.id,
       notes: `${transBadge} Scripture Reading (${sorted.length} ${sorted.length === 1 ? 'verse' : 'verses'})`,
       isExpanded: true,
-      customBackgroundUrl: defaultScriptureBg || undefined,
+      customBackgroundUrl: undefined,
       data: {
         reference: refLabel,
         text: fullText,

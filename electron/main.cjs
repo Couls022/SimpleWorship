@@ -1,20 +1,70 @@
-const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session, powerSaveBlocker, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { pathToFileURL } = require('url');
 
-// Standard robust Electron flags for smooth Windows rendering
+// Register custom privileged scheme before app is ready
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      corsEnabled: true,
+      stream: true,
+      allowServiceWorkers: true
+    }
+  }
+]);
+
+// ============================================================================
+// 1. HARDWARE ACCELERATION & SYSTEM PERFORMANCE SWITCHES (CROSS-PLATFORM SAFE)
+// ============================================================================
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
+app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
+app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling');
+
+// Prevent background tab/window throttling during live multi-display worship presentation
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+app.commandLine.appendSwitch('enable-smooth-scrolling');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096 --expose-gc');
 
 let mainWindow = null;
 let powerSaveId = null;
 // Display-Centric Projector Windows: Keyed by physical display ID
 const displayWindows = new Map(); // physicalDisplayId -> BrowserWindow
 const displayRouteMap = new Map(); // physicalDisplayId -> groupId
+
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.wasm': 'application/wasm'
+};
 
 // Single Instance Lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -36,6 +86,78 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+    // Protocol handler that works reliably inside ASAR packages and unpacked files
+    protocol.handle('app', async (request) => {
+      try {
+        const parsedUrl = new URL(request.url);
+        let pathname = decodeURIComponent(parsedUrl.pathname);
+        if (pathname.startsWith('/')) {
+          pathname = pathname.substring(1);
+        }
+        pathname = pathname.replace(/^\/+/, '');
+        if (!pathname || pathname === '') {
+          pathname = 'index.html';
+        }
+
+        const distDir = path.join(__dirname, '../dist');
+        let targetPath = path.join(distDir, pathname);
+
+        // Security check: stay within distDir
+        if (!targetPath.startsWith(distDir)) {
+          targetPath = path.join(distDir, 'index.html');
+        }
+
+        // SPA fallback: if file does not exist or is a directory, serve index.html
+        if (!fs.existsSync(targetPath) || fs.statSync(targetPath).isDirectory()) {
+          targetPath = path.join(distDir, 'index.html');
+        }
+
+        const ext = path.extname(targetPath).toLowerCase();
+        const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
+        const stat = fs.statSync(targetPath);
+
+        // Support HTTP Range requests for video/audio seeking and looping
+        const rangeHeader = request.headers.get('range');
+        if (rangeHeader) {
+          const parts = rangeHeader.replace(/bytes=/, '').split('-');
+          const start = parseInt(parts[0], 10) || 0;
+          const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+          const chunkSize = (end - start) + 1;
+          const buffer = Buffer.alloc(chunkSize);
+          const fd = fs.openSync(targetPath, 'r');
+          fs.readSync(fd, buffer, 0, chunkSize, start);
+          fs.closeSync(fd);
+
+          return new Response(buffer, {
+            status: 206,
+            headers: {
+              'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+              'Accept-Ranges': 'bytes',
+              'Content-Length': String(chunkSize),
+              'Content-Type': mimeType,
+              'Access-Control-Allow-Origin': '*'
+            }
+          });
+        }
+
+        // Standard direct file read (with native ASAR support in Node fs)
+        const data = await fs.promises.readFile(targetPath);
+        return new Response(data, {
+          status: 200,
+          headers: {
+            'Content-Type': mimeType,
+            'Content-Length': String(stat.size),
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'no-cache'
+          }
+        });
+      } catch (err) {
+        console.error('[Protocol app] Error serving path:', request.url, err);
+        return new Response('File not found', { status: 404 });
+      }
+    });
+
     // Prevent OS from sleeping displays during worship / presentation
     try {
       powerSaveId = powerSaveBlocker.start('prevent-display-sleep');
@@ -77,19 +199,44 @@ function createMainWindow() {
       sandbox: false,
       webSecurity: false,
       backgroundThrottling: false,
-      spellcheck: false
+      spellcheck: false,
+      paintWhenInitiallyHidden: true,
+      navigateOnDragDrop: false
     }
   });
 
+  const fallbackShowTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  }, 1200);
+
   mainWindow.once('ready-to-show', () => {
+    clearTimeout(fallbackShowTimer);
     mainWindow.show();
     mainWindow.focus();
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error(`[mainWindow] did-fail-load: ${errorCode} - ${errorDescription} (${validatedURL})`);
+    if (errorCode !== -3) {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.loadURL('app://localhost');
+        }
+      }, 500);
+    }
+  });
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[mainWindow] render-process-gone:', details);
   });
 
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
     mainWindow.loadURL('http://localhost:3000');
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadURL('app://localhost');
   }
 
   // Forward SWS file on initial cold-start launch
@@ -334,9 +481,7 @@ function getProjectorUrl(displayId, groupId) {
     return `http://localhost:3000/?${queryParams}${hashParams}`;
   }
 
-  const indexPath = path.join(__dirname, '../dist/index.html');
-  const fileUrl = pathToFileURL(indexPath).href;
-  return `${fileUrl}${hashParams}`;
+  return `app://localhost/?${queryParams}${hashParams}`;
 }
 
 function resolveTargetDisplay(displayId, formattedDisplays) {
@@ -486,7 +631,9 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
       sandbox: false,
       webSecurity: false,
       backgroundThrottling: false,
-      spellcheck: false
+      spellcheck: false,
+      paintWhenInitiallyHidden: true,
+      navigateOnDragDrop: false
     }
   });
 

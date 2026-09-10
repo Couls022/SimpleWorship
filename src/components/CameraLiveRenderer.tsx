@@ -91,7 +91,12 @@ export default function CameraLiveRenderer({
           playsInline
           muted
           className="w-full h-full object-contain"
-          style={{ transform: 'translateZ(0)' }}
+          style={{ 
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden'
+          }}
         />
       )}
 

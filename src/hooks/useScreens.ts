@@ -28,7 +28,10 @@ function formatAndEnsureDisplays(displays: any[]) {
 }
 
 export function useScreens() {
-  const [screens, setScreens] = useState<any[]>([]);
+  const [screens, setScreens] = useState<any[]>(() => {
+    const cached = DisplayManager.getCachedDisplays();
+    return cached.length > 0 ? formatAndEnsureDisplays(cached) : [];
+  });
   const [permissionGranted, setPermissionGranted] = useState(false);
 
   useEffect(() => {

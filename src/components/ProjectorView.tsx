@@ -176,7 +176,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     if (orderedLiveGroupIds.length === 0) return false;
     const winningGroupId = orderedLiveGroupIds[orderedLiveGroupIds.length - 1];
     const winState = groupStates[winningGroupId];
-    if (winState && winState.isBlack) {
+    if (winState && (winState.isBlack || !winState.isLiveEnabled)) {
       return true;
     }
     return false;
@@ -254,15 +254,23 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     <div 
       data-canvas-preview="true"
       className="w-screen h-screen overflow-hidden relative bg-black select-none projector-canvas flex items-center justify-center"
+      style={{
+        transform: 'translate3d(0, 0, 0)',
+        willChange: 'transform',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
+      }}
     >
       <div
         className="relative overflow-hidden bg-black select-none shrink-0"
         style={{
           width: groupRes.width,
           height: groupRes.height,
-          transform: `scale(${scale})`,
+          transform: `scale(${scale}) translate3d(0, 0, 0)`,
           transformOrigin: 'center center',
-          willChange: 'transform'
+          willChange: 'transform',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
         }}
       >
         {/* 1. Multi-Layer Transparent Presentation Stacking */}
@@ -280,6 +288,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
               themesList={themesList}
               systemOptions={systemOptions}
               activeSchedule={activeSchedule}
+              screens={screens}
             />
           );
         })}
@@ -403,6 +412,7 @@ interface ProjectorLayerProps {
   themesList: any[];
   systemOptions: any;
   activeSchedule: any;
+  screens: any[];
 }
 
 function ProjectorLayer({ 
@@ -413,13 +423,13 @@ function ProjectorLayer({
   songsList,
   themesList,
   systemOptions,
-  activeSchedule
+  activeSchedule,
+  screens
 }: ProjectorLayerProps) {
   const store = useStore();
-  const { screens } = useScreens();
-  const { groupStates } = store;
+  const { groupStates, stagedGroupStates } = store;
   
-  const presentationState = groupStates[groupId] || ({
+  const presentationState = groupStates[groupId] || stagedGroupStates[groupId] || ({
     activeScheduleId: null,
     activeItemId: null,
     activeSlideIndex: 0,
@@ -435,7 +445,7 @@ function ProjectorLayer({
     activeSchedule, 
     presentationState, 
     presentationState.directLiveItem
-  );
+  ) || (presentationState.activeItemId ? songsList.find(s => s.id === presentationState.activeItemId) : null) || null;
 
   const slides = activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
   const currentSlide = slides[presentationState.activeSlideIndex] || null;
@@ -617,53 +627,53 @@ function ProjectorLayer({
   useEffect(() => {
     let isMounted = true;
     
-    // Synchronous fast path to prevent 1-frame flicker on images
+    // Fast synchronous lookup from assetsList or cache
+    const currentAssets = useStore.getState().assetsList || [];
+    const matchedAsset = currentAssets.find(a => a.url === backgroundUrl || (a as any)._oldUrl === backgroundUrl || a.id === backgroundUrl || (activeItem?.contentId && a.id === activeItem.contentId));
+    if (matchedAsset?.url) {
+      setLocalBackgroundUrl(matchedAsset.url);
+    } else if (backgroundUrl) {
+      setLocalBackgroundUrl(backgroundUrl);
+    }
+
     if (activeItem?.contentId) {
-      const cachedBg = backgroundUrl && backgroundUrl.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
       const cachedAudio = audioSrc && audioSrc.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
-      
-      if (cachedBg) setLocalBackgroundUrl(cachedBg);
       if (cachedAudio) setLocalAudioSrc(cachedAudio);
     }
     
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
-      if (!url || !url.startsWith('blob:')) return url;
-      
-      let targetId = contentId;
-      // Try to reverse lookup if contentId is missing (e.g. for theme backgrounds)
-      if (!targetId) {
-        const assetsList = useStore.getState().assetsList || [];
-        const matched = assetsList.find(a => a.url === url);
-        if (matched) {
-          targetId = matched.id;
-        }
+      if (!url) return '';
+      const assets = useStore.getState().assetsList || [];
+      const directAsset = assets.find(a => a.url === url || (a as any)._oldUrl === url || a.id === url);
+      if (directAsset?.url) return directAsset.url;
+      if (contentId) {
+        const byId = assets.find(a => a.id === contentId);
+        if (byId?.url) return byId.url;
+        const cached = dbApi.getCachedUrl(contentId);
+        if (cached) return cached;
+        try {
+          const asset = await dbApi.getAsset(contentId);
+          if (asset?.url) return asset.url;
+        } catch (e) {}
       }
-      
-      if (!targetId) return url;
-      
-      try {
-        const cachedUrl = dbApi.getCachedUrl(targetId);
-        if (cachedUrl) return cachedUrl;
-        
-        // Slow path: hit IndexedDB
-        const asset = await dbApi.getAsset(targetId);
-        if (asset?.url) return asset.url;
-      } catch (e) {}
       return url;
     };
 
+    const rawLogoUrl = resolvedStyles.logoUrl || logoStyles.logoUrl || (systemOptions as any)?.general?.defaultLogoUrl || '';
     resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
-      if (isMounted) {
+      if (isMounted && resolved) {
         setLocalBackgroundUrl(resolved);
       }
     });
-        resolveUrl(localLogoUrl || localLogoUrl || '', undefined).then(resolved => {
-      if (isMounted) {
-        setLocalLogoUrl(resolved);
-      }
-    });
+    if (rawLogoUrl) {
+      resolveUrl(rawLogoUrl, undefined).then(resolved => {
+        if (isMounted && resolved) {
+          setLocalLogoUrl(resolved);
+        }
+      });
+    }
     resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
-      if (isMounted) {
+      if (isMounted && resolved) {
         setLocalAudioSrc(resolved);
       }
     });
@@ -671,7 +681,7 @@ function ProjectorLayer({
     return () => { 
       isMounted = false; 
     };
-  }, [backgroundUrl, audioSrc, activeItem?.contentId]);
+  }, [backgroundUrl, audioSrc, activeItem?.contentId, resolvedStyles.logoUrl, logoStyles.logoUrl]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -770,19 +780,26 @@ function ProjectorLayer({
 
   return (
     <div 
-      className={`absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none transition-opacity duration-200 bg-black ${
-        isLiveActive ? 'opacity-100' : 'opacity-0'
-      }`}
+      className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none select-none bg-black"
       style={{
-        transform: 'translateZ(0)',
-        willChange: 'opacity, transform',
+        transform: 'translate3d(0, 0, 0)',
+        willChange: 'transform',
         backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
         fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif'
       }}
     >
       {/* Background Media Layer (Only rendered if isBaseLayer is TRUE to allow transparent layering) */}
       {isBaseLayer && (
-        <div className="absolute inset-0 z-0 pointer-events-auto">
+        <div 
+          className="absolute inset-0 z-0 pointer-events-auto"
+          style={{
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+          }}
+        >
           {isVideo && (managedVideoSrc || videoSrc) ? (
             <video
               ref={videoRef}
@@ -794,9 +811,10 @@ function ProjectorLayer({
               preload="auto"
               className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
               style={{ 
-                transform: 'translateZ(0)',
+                transform: 'translate3d(0, 0, 0)',
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
                 filter: 'none'
               }}
             />
@@ -804,9 +822,10 @@ function ProjectorLayer({
             <div
               className="w-full h-full bg-cover bg-center transition-all duration-300"
               style={{ 
-                transform: 'translateZ(0)',
+                transform: 'translate3d(0, 0, 0)',
                 willChange: 'transform',
                 backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
                 backgroundImage: `url(${localBackgroundUrl})`,
                 filter: (isLogoMode ? (logoStyles.backgroundBlur || 0) : (resolvedStyles.backgroundBlur || 0)) > 0
                   ? `blur(${isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur}px)`
@@ -980,6 +999,12 @@ function ProjectorLayer({
             animate={motionConfig.animate}
             exit={motionConfig.exit}
             transition={motionConfig.transition}
+            style={{
+              transform: 'translate3d(0, 0, 0)',
+              willChange: 'transform',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+            }}
             className="absolute inset-0 z-10 w-full h-full overflow-hidden"
           >
             <PptxRenderOverlay
@@ -991,20 +1016,35 @@ function ProjectorLayer({
         )}
 
         {/* Worship Text Slide Content Layer */}
-        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame && (
+        {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && (
           <motion.div 
             key={currentSlide.id || presentationState.activeSlideIndex}
             initial={motionConfig.initial}
             animate={motionConfig.animate}
             exit={motionConfig.exit}
             transition={motionConfig.transition}
+            style={{
+              transform: 'translate3d(0, 0, 0)',
+              willChange: 'transform',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+            }}
             className="absolute inset-0 z-10 w-full h-full"
           >
-            <PresentationCanvas 
-              frame={computedRenderFrame}
-              scale={1}
-              systemOptions={systemOptions}
-            />
+            {computedRenderFrame ? (
+              <PresentationCanvas 
+                frame={computedRenderFrame}
+                scale={1}
+                systemOptions={systemOptions}
+              />
+            ) : (
+              <PresentationSlideView
+                slide={currentSlide}
+                slideIndex={presentationState.activeSlideIndex || 0}
+                themeStyles={resolvedStyles}
+                mode="full"
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

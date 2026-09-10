@@ -434,21 +434,6 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 </div>
               )}
 
-              {/* Live State Status Badge */}
-              <div className="flex items-center gap-1.5 mb-1.5 flex-wrap justify-center">
-                {groupState?.isLiveEnabled ? (
-                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase tracking-wider flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    LIVE ON PROJECTOR
-                  </span>
-                ) : (
-                  <span className="text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-wider flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    STANDBY (LIVE OFF)
-                  </span>
-                )}
-              </div>
-
               <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest mb-1 block truncate max-w-full">
                 {currentItem?.name || 'No Slide Selected'}
               </span>
@@ -625,11 +610,6 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                         {isLive && (
                           <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black">
                             LIVE
-                          </span>
-                        )}
-                        {isStaged && !isLive && (
-                          <span className="text-[8px] uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 font-black">
-                            STAGED
                           </span>
                         )}
                         <span className="text-[9px] uppercase px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-bold shrink-0">

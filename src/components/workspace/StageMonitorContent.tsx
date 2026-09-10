@@ -4,6 +4,24 @@ import { PresentationCore } from '../../core/PresentationCore';
 import { ThemeEngine } from '../../core/ThemeEngine';
 import { Clock, Eye, AlertCircle } from 'lucide-react';
 
+const StageClock = React.memo(() => {
+  const [time, setTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2">
+      <Clock size={16} className="text-amber-400" />
+      <span className="text-lg font-mono font-bold text-amber-300">{time}</span>
+    </div>
+  );
+});
+
 export default function StageMonitorContent() {
   const store = useStore();
   const { 
@@ -15,15 +33,6 @@ export default function StageMonitorContent() {
     alert,
     systemOptions 
   } = store;
-
-  const [time, setTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const activeControlState = activeControlGroupId && groupStates[activeControlGroupId] 
     ? groupStates[activeControlGroupId] 
@@ -49,12 +58,7 @@ export default function StageMonitorContent() {
       {/* Top Header: Current Time & Service Interval Countdown */}
       <div className="flex items-center justify-between border-b border-gray-800 pb-2 mb-2">
         <div className="flex items-center gap-3">
-          {clockEnabled && (
-            <div className="flex items-center gap-2">
-              <Clock size={16} className="text-amber-400" />
-              <span className="text-lg font-mono font-bold text-amber-300">{time}</span>
-            </div>
-          )}
+          {clockEnabled && <StageClock />}
           {countdownEnabled && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 text-xs font-mono">
               <span className="font-semibold text-gray-300">{countdownLabel}:</span>

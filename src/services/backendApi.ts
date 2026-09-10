@@ -63,20 +63,28 @@ class BackendApiService {
     };
   }
 
+  private lastStatusString = '';
+
   private notify() {
+    const nextStatus = { isOnline: this.isOnline, latency: this.currentLatency, isSyncing: this.isSyncing };
+    const nextString = JSON.stringify(nextStatus);
+    if (nextString === this.lastStatusString) return;
+    this.lastStatusString = nextString;
+
     for (const listener of this.listeners) {
       try {
-        listener({ isOnline: this.isOnline, latency: this.currentLatency, isSyncing: this.isSyncing });
+        listener(nextStatus);
       } catch (e) {
         console.error('[BackendApi] Listener error:', e);
       }
     }
   }
 
-  public startHeartbeat(intervalMs: number = 4000) {
+  public startHeartbeat(intervalMs: number = 15000) {
     if (this.pingInterval) clearInterval(this.pingInterval);
     this.checkHealth();
     this.pingInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       this.checkHealth();
     }, intervalMs);
   }

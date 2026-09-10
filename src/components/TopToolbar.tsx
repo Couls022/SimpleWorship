@@ -1356,28 +1356,29 @@ export default function TopToolbar({
           </button>
 
 
-          {/* MASTER LIVE COLOR BARS SWITCH */}
+          {/* MASTER LIVE SWITCH (MAIN SOURCE OF TRUTH) */}
           <button
             onClick={() => toggleMasterLive(activeControlGroupId || store.outputGroups[0]?.id || "")}
-            className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
+            className={`flex items-center gap-2 justify-center px-2.5 py-1.5 rounded-md border transition-all cursor-pointer ${
               activeControlState?.isLiveEnabled
-                ? 'bg-gradient-to-b from-blue-700/60 to-blue-900/60 text-blue-200 border-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.35)]'
-                : 'bg-[#20232a] text-gray-500 border-[#373a43]'
+                ? 'bg-gradient-to-r from-emerald-900/60 to-emerald-700/60 text-emerald-200 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.35)]'
+                : 'bg-[#20232a] text-gray-400 border-[#373a43] hover:text-gray-200 hover:bg-[#282c35]'
             }`}
-            title="Target Live Output Enable / Disable"
+            title="Master Live Switch: The main source of truth for projector display. Turn ON to actively mirror Live Display Canvas to target projector. Turn OFF for Standby/Black."
           >
             {/* TV Test Pattern Color Bars Graphic */}
-            <div className="w-6 h-6 rounded overflow-hidden flex border border-white/40 shadow-xs shrink-0">
-              <div className="h-full w-[3.4px] bg-white"></div>
-              <div className="h-full w-[3.4px] bg-yellow-400"></div>
-              <div className="h-full w-[3.4px] bg-cyan-400"></div>
-              <div className="h-full w-[3.4px] bg-emerald-500"></div>
-              <div className="h-full w-[3.4px] bg-fuchsia-500"></div>
-              <div className="h-full w-[3.4px] bg-rose-600"></div>
-              <div className="h-full w-[3.4px] bg-blue-700"></div>
+            <div className="w-5 h-5 rounded overflow-hidden flex border border-white/40 shadow-xs shrink-0">
+              <div className="h-full w-[2.8px] bg-white"></div>
+              <div className="h-full w-[2.8px] bg-yellow-400"></div>
+              <div className="h-full w-[2.8px] bg-cyan-400"></div>
+              <div className="h-full w-[2.8px] bg-emerald-500"></div>
+              <div className="h-full w-[2.8px] bg-fuchsia-500"></div>
+              <div className="h-full w-[2.8px] bg-rose-600"></div>
+              <div className="h-full w-[2.8px] bg-blue-700"></div>
             </div>
-            <span className={`text-[10px] font-bold tracking-wide uppercase select-none pr-1 hidden min-[1150px]:inline ${activeControlState?.isLiveEnabled ? 'text-cyan-300 font-extrabold animate-pulse' : 'text-gray-400'}`}>
-              {activeControlState?.isLiveEnabled ? 'Live On' : 'Live'}
+            <span className={`text-[10px] font-extrabold tracking-wide uppercase select-none pr-0.5 hidden min-[1150px]:inline flex items-center gap-1.5 ${activeControlState?.isLiveEnabled ? 'text-emerald-300' : 'text-gray-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${activeControlState?.isLiveEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
+              {activeControlState?.isLiveEnabled ? 'Live On' : 'Live Off'}
             </span>
           </button>
         </div>

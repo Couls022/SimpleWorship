@@ -25,6 +25,7 @@ import ResizeHandle from '../ResizeHandle';
 import { useStore } from '../../store/useStore';
 import { Asset } from '../../types';
 import { handleRangeSelection } from '../../utils/selectionUtils';
+import { LazyVideoThumbnail } from '../common/LazyVideoThumbnail';
 
 export default function MediaTab() {
   const store = useStore();
@@ -57,27 +58,27 @@ export default function MediaTab() {
     if (!asset) return false;
     if (asset.isDefaultScope?.[scope] === true) return true;
     const url = asset.url;
-    if (!url) return false;
+    const id = asset.id;
     if (scope === 'songs') {
       const t = store.themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'scriptures') {
       const t = store.themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'presentations') {
       const t = store.themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'announcements') {
       const t = store.themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'logo') {
       const sysLogo = store.systemOptions?.general?.defaultLogoUrl || store.systemOptions?.mainOutput?.general?.defaultLogoUrl;
       const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return sysLogo === url || t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
+      return sysLogo === url || sysLogo === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id || t?.styles?.logoUrl === id));
     }
     return false;
   };
@@ -526,14 +527,13 @@ export default function MediaTab() {
               >
                 {/* Media Preview */}
                 {asset.type === 'video' || asset.type === 'motion' ? (
-                  <video
-                    src={asset.url}
-                    muted
-                    loop
-                    autoPlay
-                    playsInline
-                    className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity"
-                  />
+                  <div className="absolute inset-0 w-full h-full opacity-75 group-hover:opacity-95 transition-opacity pointer-events-none">
+                    <LazyVideoThumbnail
+                      src={asset.url}
+                      poster={asset.thumbnailUrl}
+                      alt={asset.name}
+                    />
+                  </div>
                 ) : asset.type === 'audio' ? (
                   <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 flex flex-col items-center justify-center p-2 text-indigo-200">
                     <Music size={26} className="text-cyan-400 mb-1 animate-pulse" />

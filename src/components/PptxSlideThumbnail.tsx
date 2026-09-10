@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Slide, PresentationItem, ThemeStyles } from '../types';
 import { PresentationSlideView } from './PresentationSlideView';
-import { PptxRenderOverlay } from './PptxRenderOverlay';
 
 interface PptxSlideThumbnailProps {
   slide: Slide;
@@ -73,21 +72,13 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
           contain: 'layout size style paint',
         }}
       >
-        {(fileBytes || contentId) ? (
-          <PptxRenderOverlay 
-            fileBytes={fileBytes} 
-            contentId={contentId} 
-            activeSlideIndex={slideIndex} 
-          />
-        ) : (
-          <PresentationSlideView 
-            slide={slide} 
-            slideIndex={slideIndex} 
-            totalSlides={totalSlides} 
-            mode="thumbnail" 
-            themeStyles={themeStyles} 
-          />
-        )}
+        <PresentationSlideView 
+          slide={slide} 
+          slideIndex={slideIndex} 
+          totalSlides={totalSlides} 
+          mode="thumbnail" 
+          themeStyles={themeStyles} 
+        />
       </div>
       <div className="absolute bottom-1 right-2 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono text-amber-300 border border-amber-500/30 pointer-events-none z-20">
         Slide {slideIndex + 1}

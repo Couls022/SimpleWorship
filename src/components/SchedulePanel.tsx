@@ -43,6 +43,7 @@ import { dbApi } from '../db';
 import { isValidPptxBinary } from '../utils/pptxValidator';
 import { slideRenderCache } from '../utils/SlideRenderCache';
 import { processDroppedFileList, isMediaOrPresentationFile } from '../utils/fileDropHandler';
+import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import BibleLibraryModule from './workspace/BibleLibraryModule';
 import SongsTab from './resources/SongsTab';
@@ -98,14 +99,13 @@ const ScheduleItemThumbnail: React.FC<{
     <div className={`rounded-xs bg-[#0b0c10] border border-[#2b2e38] relative overflow-hidden flex items-center justify-center shrink-0 ${sizeClass}`}>
       {isVideo && videoUrl ? (
         <div className="w-full h-full relative bg-slate-950 flex items-center justify-center overflow-hidden">
-          <video
+          <LazyVideoThumbnail
             src={videoUrl}
-            muted
-            playsInline
-            preload="metadata"
-            className="w-full h-full object-cover pointer-events-none opacity-80"
+            alt={item.name}
+            className="w-full h-full object-cover pointer-events-none opacity-85"
+            autoPlayOnHover={false}
           />
-          <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/25 flex items-center justify-center pointer-events-none">
             <span className="w-3.5 h-3.5 rounded-full bg-cyan-500/90 text-slate-950 flex items-center justify-center text-[7px] font-bold shadow-xs">
               ▶
             </span>
@@ -1116,11 +1116,11 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                     <div className="border-t border-[#1a1b20] bg-[#12141a] p-2 flex items-center gap-3">
                       <div className="w-24 h-14 rounded bg-black relative overflow-hidden shrink-0 border border-cyan-800/40 flex items-center justify-center">
                         {vUrl ? (
-                          <video
+                          <LazyVideoThumbnail
                             src={vUrl}
-                            muted
-                            playsInline
+                            alt={item.name}
                             className="w-full h-full object-cover pointer-events-none opacity-90"
+                            autoPlayOnHover={true}
                           />
                         ) : (
                           <Film size={20} className="text-cyan-400" />

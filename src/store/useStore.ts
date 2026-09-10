@@ -304,7 +304,7 @@ interface AppState {
   toggleClear: (groupId: string) => void;
   toggleLogo: (groupId: string) => void;
   isMasterLive?: boolean; // Deprecated, keep for backwards compatibility if needed, but we don't need it.
-  toggleMasterLive: (groupId: string) => void;
+  toggleMasterLive: (groupId?: string) => void;
 
   // Alert / Nursery Ticker
   alert: AlertState;
@@ -887,16 +887,18 @@ export const useStore = create<AppState>((set, get) => ({
         [groupId]: combinedState
       };
 
-      // Debounce blocking synchronous localStorage writes to keep UI thread fluid and zero-lag
-      scheduleGroupStatesSave(updatedGroupStates);
+      if (!isOnlyPlaybackTimeUpdate) {
+        // Debounce blocking synchronous localStorage writes to keep UI thread fluid and zero-lag
+        scheduleGroupStatesSave(updatedGroupStates);
 
-      broadcastStateChange({
-        type: 'GROUP_STATES_UPDATE',
-        data: { groupStates: updatedGroupStates }
-      });
+        broadcastStateChange({
+          type: 'GROUP_STATES_UPDATE',
+          data: { groupStates: updatedGroupStates }
+        });
 
-      if (!isOnlyPlaybackTimeUpdate && newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
-        DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
+        if (newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
+          DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
+        }
       }
 
       return {
@@ -968,18 +970,13 @@ export const useStore = create<AppState>((set, get) => ({
         [groupId]: updatedPublicGroup
       };
 
-      try {
-        const sanitized = sanitizeForSync(updatedGroupStates);
-        localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
-      } catch (e) {}
+      if (!isOnlyPlaybackTimeUpdate) {
+        scheduleGroupStatesSave(updatedGroupStates);
 
-      broadcastStateChange({
-        type: 'GROUP_STATES_UPDATE',
-        data: { groupStates: updatedGroupStates }
-      });
-
-      if (isCurrentlyLive && !isOnlyPlaybackTimeUpdate) {
-        DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
+        broadcastStateChange({
+          type: 'GROUP_STATES_UPDATE',
+          data: { groupStates: updatedGroupStates }
+        });
       }
 
       return {
@@ -1008,8 +1005,8 @@ export const useStore = create<AppState>((set, get) => ({
           isVideoLooping: staged.isVideoLooping,
           videoVolume: staged.videoVolume,
           videoSeekTime: staged.videoSeekTime,
-          isBlack: staged.isBlack ?? false,
-          isClear: staged.isClear ?? false,
+          isBlack: false,
+          isClear: false,
           showLogo: staged.showLogo ?? false,
           isLiveEnabled: true,
           renderFrame: staged.renderFrame,
@@ -1520,45 +1517,103 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
 
-  toggleMasterLive: (groupId: string) => {
-    if (!groupId) return;
-    const { groupStates, stagedGroupStates, outputGroups, activeControlGroupId } = get();
-    const currentState = groupStates[groupId] || defaultState;
+  toggleMasterLive: (groupId?: string) => {
+    const { groupStates, stagedGroupStates, outputGroups, activeControlGroupId, songsList, themesList, systemOptions, activeSchedule } = get();
+    const targetGroupId = groupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
+    if (!targetGroupId) return;
+
+    const currentState = groupStates[targetGroupId] || defaultState;
     const nextLive = !currentState.isLiveEnabled;
     const updatedStates = { ...groupStates };
+    const updatedStaged = { ...stagedGroupStates };
 
     if (nextLive) {
       // Turning LIVE ON:
       // Mirror the staged content from the Live Display Canvas to the projector screen
-      const staged = stagedGroupStates[groupId] || currentState;
-      updatedStates[groupId] = {
-        ...currentState,
-        activeItemId: staged.activeItemId,
-        activeSlideIndex: staged.activeSlideIndex,
-        directLiveItem: staged.directLiveItem,
+      const staged = stagedGroupStates[targetGroupId] || currentState;
+      let effectiveActiveItemId = staged.activeItemId || currentState.activeItemId;
+      let effectiveDirectLiveItem = staged.directLiveItem || currentState.directLiveItem;
+
+      // If activeItemId is still not set, default to first item in schedule or song list to avoid black screen
+      if (!effectiveActiveItemId && !effectiveDirectLiveItem) {
+        if (activeSchedule?.items && activeSchedule.items.length > 0) {
+          effectiveActiveItemId = activeSchedule.items[0].id;
+          effectiveDirectLiveItem = activeSchedule.items[0];
+        } else if (songsList.length > 0) {
+          effectiveActiveItemId = songsList[0].id;
+          const s = songsList[0];
+          effectiveDirectLiveItem = {
+            id: s.id,
+            type: 'song',
+            name: s.title,
+            contentId: s.id,
+            notes: s.author || '',
+            isExpanded: false,
+            customBackgroundUrl: s.defaultBackgroundUrl,
+          };
+        }
+      }
+
+      const targetGroup = outputGroups.find(g => g.id === targetGroupId);
+      const combined = {
+        ...staged,
+        activeScheduleId: staged.activeScheduleId || activeSchedule?.id || null,
+        activeItemId: effectiveActiveItemId,
+        activeSlideIndex: staged.activeSlideIndex ?? 0,
+        directLiveItem: effectiveDirectLiveItem || null,
         isVideoPlaying: staged.isVideoPlaying,
         isVideoMuted: staged.isVideoMuted,
         isVideoLooping: staged.isVideoLooping,
         videoVolume: staged.videoVolume,
         videoSeekTime: staged.videoSeekTime,
-        isBlack: staged.isBlack ?? false,
-        isClear: staged.isClear ?? false,
+        isBlack: false,
+        isClear: false,
         showLogo: staged.showLogo ?? false,
         isLiveEnabled: true,
-        renderFrame: staged.renderFrame,
+      };
+
+      const frame = staged.renderFrame || buildRenderFrame(
+        targetGroupId,
+        combined,
+        activeSchedule,
+        targetGroup,
+        systemOptions,
+        songsList,
+        themesList,
+        DisplayManager.getCachedDisplays()
+      );
+
+      updatedStates[targetGroupId] = {
+        ...currentState,
+        ...combined,
+        renderFrame: frame,
+        timestamp: Date.now(),
+      };
+
+      updatedStaged[targetGroupId] = {
+        ...staged,
+        ...combined,
+        renderFrame: frame,
         timestamp: Date.now(),
       };
     } else {
       // Turning LIVE OFF:
       // Projector screen returns to Standby / Black
-      updatedStates[groupId] = {
+      updatedStates[targetGroupId] = {
         ...currentState,
         isLiveEnabled: false,
         timestamp: Date.now(),
       };
+      if (updatedStaged[targetGroupId]) {
+        updatedStaged[targetGroupId] = {
+          ...updatedStaged[targetGroupId],
+          isLiveEnabled: false,
+          timestamp: Date.now(),
+        };
+      }
     }
 
-    set({ groupStates: updatedStates });
+    set({ groupStates: updatedStates, stagedGroupStates: updatedStaged });
 
     try {
       const sanitized = sanitizeForSync(updatedStates);
@@ -2014,18 +2069,30 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ outputGroups: finalOutputGroups });
 
-    // Always reset/initialize group states so that Live is OFF (isLiveEnabled: false) on fresh load
-    const initialStates: Record<string, any> = {};
+    // Initialize or rehydrate group states
+    let initialStates: Record<string, any> = {};
+    try {
+      const stored = localStorage.getItem('simpleworship_group_states_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          initialStates = parsed;
+        }
+      }
+    } catch (e) {}
+
     finalOutputGroups.forEach(g => {
-      initialStates[g.id] = { ...defaultState, isLiveEnabled: false, timestamp: Date.now() };
+      if (!initialStates[g.id]) {
+        initialStates[g.id] = { ...defaultState, isLiveEnabled: false, timestamp: Date.now() };
+      }
     });
+
     set({ 
       groupStates: initialStates, 
       activeControlGroupId: finalOutputGroups[0]?.id || 'group-congregation' 
     });
 
     try {
-      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(initialStates));
       localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(defaultOutputGroups.map(g => g.id)));
     } catch (e) {}
     // Note: When the system starts/boots, schedule panel remains blank (0 items) by default
@@ -2170,74 +2237,7 @@ export const useStore = create<AppState>((set, get) => ({
       // Persist updated themes to DB
       updatedThemes.forEach(t => dbApi.addTheme(t).catch(() => {}));
 
-      // 4. Update Songs defaultBackgroundUrl if scope === 'songs'
-      let updatedSongs = state.songsList;
-      if (scope === 'songs') {
-        updatedSongs = state.songsList.map(song => ({
-          ...song,
-          defaultBackgroundUrl: finalAssetUrl,
-        }));
-        updatedSongs.forEach(song => dbApi.addSong(song).catch(() => {}));
-      }
-
-      // 5. Update Schedule items matching scope so they immediately reflect the new default background
-      let updatedSchedule = state.activeSchedule;
-      if (state.activeSchedule) {
-        const scheduleItemType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : 'announcement'));
-        const updatedItems = state.activeSchedule.items.map(item => {
-          if (item.type === scheduleItemType || (scheduleItemType === 'presentation' && item.type === 'ppt')) {
-            return {
-              ...item,
-              customBackgroundUrl: finalAssetUrl,
-            };
-          }
-          return item;
-        });
-        updatedSchedule = { ...state.activeSchedule, items: updatedItems };
-        dbApi.addSchedule(updatedSchedule).catch(() => {});
-      }
-
-      // 6. Update direct live items in groupStates so active live displays reflect the new default background instantly
-      const targetScheduleType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : (scope === 'announcements' ? 'announcement' : 'logo')));
-
-      const updatedGroupStates = { ...state.groupStates };
-      Object.keys(updatedGroupStates).forEach(groupId => {
-        if (updatedGroupStates[groupId]) {
-          const stateGroup = updatedGroupStates[groupId];
-          const directItem = stateGroup.directLiveItem;
-          let newDirectItem = directItem;
-
-          if (directItem) {
-            const grpType = directItem.type === 'bible' ? 'bible' : (directItem.type === 'ppt' ? 'presentation' : directItem.type);
-            if (grpType === targetScheduleType) {
-              newDirectItem = {
-                ...directItem,
-                customBackgroundUrl: finalAssetUrl,
-              };
-            }
-          }
-
-          updatedGroupStates[groupId] = {
-            ...stateGroup,
-            directLiveItem: newDirectItem,
-            timestamp: Date.now(),
-          };
-        }
-      });
-
       // Broadcast to external projector displays and stage views
-      broadcastStateChange({
-        type: 'GROUP_STATES_UPDATE',
-        data: { groupStates: updatedGroupStates },
-      });
-
-      if (updatedSchedule) {
-        broadcastStateChange({
-          type: 'SCHEDULE_UPDATE',
-          data: { activeSchedule: updatedSchedule },
-        });
-      }
-
       broadcastStateChange({
         type: 'SYSTEM_UPDATE',
         data: { themesList: updatedThemes, systemOptions: nextSystemOptions },
@@ -2247,9 +2247,6 @@ export const useStore = create<AppState>((set, get) => ({
         assetsList: updatedAssetsList,
         systemOptions: nextSystemOptions,
         themesList: updatedThemes,
-        songsList: updatedSongs,
-        activeSchedule: updatedSchedule,
-        groupStates: updatedGroupStates,
       };
     });
   }

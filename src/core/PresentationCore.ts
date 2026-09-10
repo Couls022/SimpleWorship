@@ -27,6 +27,22 @@ export class PresentationCore {
       return directItemFallback;
     }
 
+    // 4. Fallback: If activeItemId is set, check default songs library
+    if (state.activeItemId) {
+      const matched = defaultSongs.find(s => s.id === state.activeItemId);
+      if (matched) {
+        return {
+          id: matched.id,
+          type: 'song',
+          name: matched.title,
+          contentId: matched.id,
+          notes: matched.author || '',
+          isExpanded: false,
+          customBackgroundUrl: matched.defaultBackgroundUrl,
+        };
+      }
+    }
+
     return null;
   }
 

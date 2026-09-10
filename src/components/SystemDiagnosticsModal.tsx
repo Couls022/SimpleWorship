@@ -679,16 +679,27 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
               <div className="bg-[#14161c] p-4 rounded-lg border border-[#2b303e] space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-white text-xs flex items-center gap-2">
-                    <Server size={14} className="text-cyan-400" />
-                    <span>Backend REST Endpoints (Express Server)</span>
+                    {typeof window !== 'undefined' && (window as any).electronAPI ? (
+                      <>
+                        <Server size={14} className="text-green-400" />
+                        <span>Native Desktop Mode (100% Offline)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Server size={14} className="text-cyan-400" />
+                        <span>Backend REST Endpoints (Express Server)</span>
+                      </>
+                    )}
                   </h3>
-                  <button
-                    onClick={handleForcePushSync}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-semibold transition-all cursor-pointer shadow-xs"
-                  >
-                    <RefreshCw size={12} />
-                    <span>Force Push State to Backend</span>
-                  </button>
+                  {!(typeof window !== 'undefined' && (window as any).electronAPI) && (
+                    <button
+                      onClick={handleForcePushSync}
+                      className="flex items-center gap-1.5 px-3 py-1 bg-cyan-700 hover:bg-cyan-600 text-white rounded text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                    >
+                      <RefreshCw size={12} />
+                      <span>Force Push State to Backend</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] font-mono">

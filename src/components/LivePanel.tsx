@@ -461,17 +461,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 </span>
               </>
             )}
-            {publicControlState?.isLiveEnabled ? (
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[9px] font-bold text-emerald-300 uppercase tracking-wider shrink-0 hidden min-[480px]:flex items-center gap-1" title="Public Projector Output Connected & Active">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>LIVE ON</span>
-              </span>
-            ) : (
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-bold text-amber-300 uppercase tracking-wider shrink-0 hidden min-[480px]:flex items-center gap-1" title="Public Projector Output Muted / Standby">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                <span>LIVE OFF</span>
-              </span>
-            )}
           </div>
         </div>
 
@@ -697,6 +686,21 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
               <div className="h-full bg-[#111216] border-t border-[#262832] p-2 flex flex-col overflow-hidden relative">
                 {/* Header Bar for Live Monitor Output */}
                 <div className="text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5 px-2 py-1 bg-[#181920] rounded border border-[#252834] flex items-center justify-between shrink-0 shadow-xs">
+  
+  <div className="flex items-center">
+    <button
+      onClick={(e) => { e.stopPropagation(); store.toggleMasterLive(groupId); }}
+      className={`px-3 py-1 rounded text-[10px] font-black tracking-widest transition-all ${
+        activeControlState?.isLiveEnabled
+          ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+          : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
+      }`}
+    >
+      {activeControlState?.isLiveEnabled ? 'LIVE ON • PROJECTOR' : 'LIVE OFF (STANDBY)'}
+    </button>
+  </div>
+  
+
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${
                       activeControlState?.isBlack || activeControlState?.isClear 

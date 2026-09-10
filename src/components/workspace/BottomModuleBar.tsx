@@ -13,6 +13,24 @@ interface BottomModuleBarProps {
   onConfigureRoute?: (groupId: string) => void;
 }
 
+const ClockDisplay = React.memo(() => {
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-1 text-gray-400 font-mono text-[10px] font-semibold px-1 py-0.5">
+      <Clock size={11} className="text-sky-400" />
+      <span>{currentTime}</span>
+    </div>
+  );
+});
+
 export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarProps) {
   const store = useStore();
   const { 
@@ -24,15 +42,6 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
     addRouterPanel,
     removeRouterPanel
   } = store;
-
-  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const handleSelectRouter = (routerId: string, routerName: string) => {
     setActiveRouterId(routerId);
@@ -157,10 +166,7 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
       {/* Right: Master Screen Quick Toggles & Clock */}
       <div className="flex items-center gap-1.5 shrink-0 ml-2">
         {/* Real-time Clock */}
-        <div className="flex items-center gap-1 text-gray-400 font-mono text-[10px] font-semibold px-1 py-0.5">
-          <Clock size={11} className="text-sky-400" />
-          <span>{currentTime}</span>
-        </div>
+        <ClockDisplay />
       </div>
     </div>
   );

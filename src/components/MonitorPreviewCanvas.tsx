@@ -307,35 +307,45 @@ export default function MonitorPreviewCanvas({
   useEffect(() => {
     let isMounted = true;
     
-    // Synchronous fast path to prevent 1-frame flicker on images
+    // Fast synchronous lookup from assetsList or cache
+    const currentAssets = useStore.getState().assetsList || [];
+    const matchedAsset = currentAssets.find(a => a.url === backgroundUrl || (a as any)._oldUrl === backgroundUrl || a.id === backgroundUrl || (activeItem?.contentId && a.id === activeItem.contentId));
+    if (matchedAsset?.url) {
+      setLocalBackgroundUrl(matchedAsset.url);
+    } else if (backgroundUrl) {
+      setLocalBackgroundUrl(backgroundUrl);
+    }
+
     if (activeItem?.contentId) {
-      const cachedBg = backgroundUrl && backgroundUrl.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
       const cachedAudio = audioSrc && audioSrc.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
-      
-      if (cachedBg) setLocalBackgroundUrl(cachedBg);
       if (cachedAudio) setLocalAudioSrc(cachedAudio);
     }
     
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
-      if (!url || !url.startsWith('blob:') || !contentId) return url;
-      try {
-        const cachedUrl = dbApi.getCachedUrl(contentId);
-        if (cachedUrl) return cachedUrl;
-        
-        // Slow path: hit IndexedDB
-        const asset = await dbApi.getAsset(contentId);
-        if (asset?.url) return asset.url; // Uses the globally cached ObjectURL
-      } catch (e) {}
+      if (!url) return '';
+      const assets = useStore.getState().assetsList || [];
+      const directAsset = assets.find(a => a.url === url || (a as any)._oldUrl === url || a.id === url);
+      if (directAsset?.url) return directAsset.url;
+      if (contentId) {
+        const byId = assets.find(a => a.id === contentId);
+        if (byId?.url) return byId.url;
+        const cached = dbApi.getCachedUrl(contentId);
+        if (cached) return cached;
+        try {
+          const asset = await dbApi.getAsset(contentId);
+          if (asset?.url) return asset.url;
+        } catch (e) {}
+      }
       return url;
     };
 
     resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
-      if (isMounted) {
+      if (isMounted && resolved) {
         setLocalBackgroundUrl(resolved);
       }
     });
     resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
-      if (isMounted) {
+      if (isMounted && resolved) {
         setLocalAudioSrc(resolved);
       }
     });
@@ -532,9 +542,10 @@ export default function MonitorPreviewCanvas({
                 }}
                 className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
                 style={{ 
-                  transform: 'translateZ(0)',
+                  transform: 'translate3d(0, 0, 0)',
                   willChange: 'transform',
                   backfaceVisibility: 'hidden',
+                  WebkitBackfaceVisibility: 'hidden',
                   filter: 'none'
                 }}
               />

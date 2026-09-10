@@ -13,6 +13,8 @@ export class DisplayManager {
   private static browserPopups: Map<string, Window> = new Map();
   private static cachedDisplays: NativeDisplayTarget[] = [];
   private static localStatuses: Record<string, ProjectorStatus> = {};
+  private static lastQueryTime = 0;
+  private static queryPromise: Promise<NativeDisplayTarget[]> | null = null;
 
   /**
    * Returns true if running inside native Electron shell.
@@ -22,84 +24,112 @@ export class DisplayManager {
   }
 
   /**
-   * Retrieves a list of available displays.
-   * Priority:
-   * 1. Native Electron IPC (via screen module)
-   * 2. Web Multi-Screen Window Placement API (getScreenDetails)
-   * 3. Standard window.screen fallback
+   * Clears the cached displays.
    */
-  static async getDisplays(): Promise<NativeDisplayTarget[]> {
-    let rawDisplays: NativeDisplayTarget[] = [];
+  static clearCache(): void {
+    this.cachedDisplays = [];
+    this.lastQueryTime = 0;
+    this.queryPromise = null;
+  }
 
-    // 1. Native Electron Shell
-    if (typeof window !== 'undefined' && (window as any).electronAPI?.getDisplays) {
-      try {
-        const nativeDisplays = await (window as any).electronAPI.getDisplays();
-        if (nativeDisplays && nativeDisplays.length > 0) {
-          rawDisplays = nativeDisplays;
+  /**
+   * Retrieves a list of available displays with intelligent caching to avoid UI lag.
+   */
+  static async getDisplays(force: boolean = false): Promise<NativeDisplayTarget[]> {
+    if (!force && this.cachedDisplays.length > 0 && Date.now() - this.lastQueryTime < 8000) {
+      const hasRealApi = typeof window !== 'undefined' && (Boolean((window as any).electronAPI?.getDisplays) || 'getScreenDetails' in window);
+      const onlyHasFallback = this.cachedDisplays.length === 1 && this.cachedDisplays[0].id === 'primary-display';
+      if (!hasRealApi || !onlyHasFallback) {
+        return this.cachedDisplays;
+      }
+    }
+
+    if (this.queryPromise) {
+      return this.queryPromise;
+    }
+
+    this.queryPromise = (async () => {
+      let rawDisplays: NativeDisplayTarget[] = [];
+
+      // 1. Native Electron Shell
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.getDisplays) {
+        try {
+          const nativeDisplays = await (window as any).electronAPI.getDisplays();
+          if (nativeDisplays && nativeDisplays.length > 0) {
+            rawDisplays = nativeDisplays;
+          }
+        } catch (e) {
+          console.warn('[DisplayManager] Native Electron display query error:', e);
         }
-      } catch (e) {
-        console.warn('[DisplayManager] Native Electron display query error:', e);
       }
-    }
 
-    // 2. Web Screen Details API (Chromium)
-    if (rawDisplays.length === 0 && typeof window !== 'undefined' && 'getScreenDetails' in window) {
-      try {
-        const screenDetails = await (window as any).getScreenDetails();
-        rawDisplays = screenDetails.screens.map((s: any, idx: number) => ({
-          id: s.label || `screen-${idx}-${s.left}-${s.top}`,
-          name: s.label || `Monitor ${idx + 1}`,
-          bounds: {
-            x: s.left ?? 0,
-            y: s.top ?? 0,
-            width: s.width ?? window.innerWidth,
-            height: s.height ?? window.innerHeight,
-          },
-          workArea: {
-            x: s.availLeft ?? s.left ?? 0,
-            y: s.availTop ?? s.top ?? 0,
-            width: s.availWidth ?? s.width ?? window.innerWidth,
-            height: s.availHeight ?? s.height ?? window.innerHeight,
-          },
-          scaleFactor: s.devicePixelRatio || window.devicePixelRatio || 1,
-          isPrimary: s.isPrimary ?? idx === 0,
-          isInternal: s.isInternal ?? false,
-          connectionState: 'connected' as const,
-        }));
-      } catch (e) {
-        // Permission denied or API unavailable
+      // 2. Web Screen Details API (Chromium) - query only if permission granted or cached
+      if (rawDisplays.length === 0 && typeof window !== 'undefined' && 'getScreenDetails' in window) {
+        try {
+          const screenDetails = await (window as any).getScreenDetails();
+          if (screenDetails && screenDetails.screens) {
+            rawDisplays = screenDetails.screens.map((s: any, idx: number) => ({
+              id: s.label || `screen-${idx}-${s.left}-${s.top}`,
+              name: s.label || `Monitor ${idx + 1}`,
+              bounds: {
+                x: s.left ?? 0,
+                y: s.top ?? 0,
+                width: s.width ?? window.innerWidth,
+                height: s.height ?? window.innerHeight,
+              },
+              workArea: {
+                x: s.availLeft ?? s.left ?? 0,
+                y: s.availTop ?? s.top ?? 0,
+                width: s.availWidth ?? s.width ?? window.innerWidth,
+                height: s.availHeight ?? s.height ?? window.innerHeight,
+              },
+              scaleFactor: s.devicePixelRatio || window.devicePixelRatio || 1,
+              isPrimary: s.isPrimary ?? idx === 0,
+              isInternal: s.isInternal ?? false,
+              connectionState: 'connected' as const,
+            }));
+          }
+        } catch (e) {
+          // Permission denied or API unavailable
+        }
       }
-    }
 
-    // 3. Browser window fallback
-    if (rawDisplays.length === 0) {
-      const width = typeof window !== 'undefined' ? window.screen.width : 1920;
-      const height = typeof window !== 'undefined' ? window.screen.height : 1080;
-      rawDisplays = [
-        {
-          id: 'primary-display',
-          name: `Primary Display (${width}x${height})`,
-          bounds: { x: 0, y: 0, width, height },
-          workArea: { x: 0, y: 0, width, height },
-          scaleFactor: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
-          isPrimary: true,
-          isInternal: true,
-          connectionState: 'connected' as const,
-        },
-      ];
-    }
+      // 3. Browser window fallback
+      if (rawDisplays.length === 0) {
+        const width = typeof window !== 'undefined' ? window.screen.width : 1920;
+        const height = typeof window !== 'undefined' ? window.screen.height : 1080;
+        rawDisplays = [
+          {
+            id: 'primary-display',
+            name: `Primary Display (${width}x${height})`,
+            bounds: { x: 0, y: 0, width, height },
+            workArea: { x: 0, y: 0, width, height },
+            scaleFactor: typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1,
+            isPrimary: true,
+            isInternal: true,
+            connectionState: 'connected' as const,
+          },
+        ];
+      }
 
-    const resultList = [...rawDisplays];
+      const resultList = [...rawDisplays];
 
-    // Ensure standard names are consistent
-    const formatted = resultList.map((d) => ({
-      ...d,
-      name: d.name || (d.isPrimary ? 'Primary Display' : 'Display')
-    }));
+      // Ensure standard names are consistent
+      const formatted = resultList.map((d) => ({
+        ...d,
+        name: d.name || (d.isPrimary ? 'Primary Display' : 'Display')
+      }));
 
-    this.cachedDisplays = formatted;
-    return formatted;
+      this.cachedDisplays = formatted;
+      this.lastQueryTime = Date.now();
+      this.queryPromise = null;
+      return formatted;
+    })().catch((err) => {
+      this.queryPromise = null;
+      return this.cachedDisplays.length > 0 ? this.cachedDisplays : [];
+    });
+
+    return this.queryPromise;
   }
 
   /**

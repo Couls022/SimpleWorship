@@ -45,6 +45,9 @@ export function resolveGroupResolution(
   return { width: physicalWidth, height: physicalHeight, aspectRatio: ratio, aspectLabel: label, margins: baseMargins };
 }
 
+const frameCache = new Map<string, { key: string; frame: RenderFrame }>();
+const MAX_FRAME_CACHE_SIZE = 64;
+
 export function buildRenderFrame(
   groupId: string,
   state: PresentationState,
@@ -60,19 +63,27 @@ export function buildRenderFrame(
   const activeItem = PresentationCore.getActiveContent(schedule, state, state.directLiveItem);
   if (!activeItem) return undefined;
 
+  // Fast bypass for non-text items
+  const isPptx = activeItem.type === 'presentation' || activeItem.type === 'ppt';
+  if (isPptx) return undefined;
+
+  const isMedia = activeItem.type === 'image' || activeItem.type === 'video' || activeItem.type === 'audio';
+  if (isMedia) return undefined;
+
+  const songFontStr = JSON.stringify(systemOptions?.mainOutput?.song || {});
+  const scriptureFontStr = JSON.stringify(systemOptions?.mainOutput?.scripture || {});
+  const cacheKey = `${groupId}_${activeItem.id}_${state.activeSlideIndex || 0}_${group?.themeId || ''}_${activeItem.themeId || ''}_${group?.customResolution?.width || 0}_${availableDisplays?.length || 0}_${songFontStr}_${scriptureFontStr}`;
+  const cached = frameCache.get(cacheKey);
+  if (cached) {
+    return { ...cached.frame, timestamp: state.timestamp };
+  }
+
   const slides = PresentationCore.generateSlides(activeItem, songsList, systemOptions);
   if (!slides || slides.length === 0) return undefined;
 
   const currentSlideIndex = Math.min(state.activeSlideIndex || 0, slides.length - 1);
   const currentSlide = slides[currentSlideIndex];
-  if (!currentSlide) return undefined;
-
-  // Re-use logic from MonitorPreviewCanvas
-  const isPptx = activeItem.type === 'presentation' || activeItem.type === 'ppt';
-  if (isPptx) return undefined; // PPTX doesn't use RenderFrame text layout
-
-  const isMedia = activeItem.type === 'image' || activeItem.type === 'video' || activeItem.type === 'audio';
-  if (isMedia) return undefined; 
+  if (!currentSlide) return undefined; 
 
   const res = resolveGroupResolution(group, systemOptions, availableDisplays);
   
@@ -187,7 +198,7 @@ export function buildRenderFrame(
       })
     : baseSize;
 
-  return {
+  const frameResult: RenderFrame = {
     groupId,
     targetWidth: res.width,
     targetHeight: res.height,
@@ -210,4 +221,12 @@ export function buildRenderFrame(
     widthPercent: resolvedStyles.widthPercent || 100,
     timestamp: state.timestamp
   };
+
+  if (frameCache.size > MAX_FRAME_CACHE_SIZE) {
+    const firstKey = frameCache.keys().next().value;
+    if (firstKey) frameCache.delete(firstKey);
+  }
+  frameCache.set(cacheKey, { key: cacheKey, frame: frameResult });
+
+  return frameResult;
 }

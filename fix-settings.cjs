@@ -1,7 +1,9 @@
+const fs = require('fs');
 
+const code = `
 import { withPortal } from './common/withPortal';
 import React, { useState, useEffect } from 'react';
-import { X, Monitor, Plus, Trash2, Settings, Type, AlignLeft, Music, Book } from 'lucide-react';
+import { X, Monitor, Plus, Trash2, Settings, Type, AlignLeft, Music, Book, Display } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { OutputGroup, FontStyleOptions } from '../types';
 import { DisplayManager } from '../core/DisplayManager';
@@ -49,9 +51,9 @@ function FontPicker({ label, value, onChange }: { label: string, value: FontStyl
         </div>
       </div>
       <div className="flex items-center gap-2 mt-1">
-        <button onClick={() => onChange({ ...value, bold: !value.bold })} className={`px-2 py-1 text-xs rounded border ${value.bold ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#2a2f3a] border-[#3f4554] text-gray-400'}`}>B</button>
-        <button onClick={() => onChange({ ...value, italic: !value.italic })} className={`px-2 py-1 text-xs italic rounded border ${value.italic ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#2a2f3a] border-[#3f4554] text-gray-400'}`}>I</button>
-        <button onClick={() => onChange({ ...value, underline: !value.underline })} className={`px-2 py-1 text-xs underline rounded border ${value.underline ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#2a2f3a] border-[#3f4554] text-gray-400'}`}>U</button>
+        <button onClick={() => onChange({ ...value, bold: !value.bold })} className={\`px-2 py-1 text-xs rounded border \${value.bold ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#2a2f3a] border-[#3f4554] text-gray-400'}\`}>B</button>
+        <button onClick={() => onChange({ ...value, italic: !value.italic })} className={\`px-2 py-1 text-xs italic rounded border \${value.italic ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#2a2f3a] border-[#3f4554] text-gray-400'}\`}>I</button>
+        <button onClick={() => onChange({ ...value, underline: !value.underline })} className={\`px-2 py-1 text-xs underline rounded border \${value.underline ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#2a2f3a] border-[#3f4554] text-gray-400'}\`}>U</button>
       </div>
     </div>
   );
@@ -105,7 +107,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
     e.preventDefault();
     if (!newGroupName.trim()) return;
     const newGroup: OutputGroup = {
-      id: `group-${Date.now()}`,
+      id: \`group-\${Date.now()}\`,
       name: newGroupName.trim(),
       role: newGroupRole,
       themeId: newGroupThemeId,
@@ -136,25 +138,25 @@ function SettingsModal({ onClose }: SettingsModalProps) {
           <div className="w-48 bg-[#181a20] border-r border-[#2d313d] flex flex-col p-2 gap-1 overflow-y-auto">
             <button 
               onClick={() => setActiveTab('displays')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'displays' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={\`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors \${activeTab === 'displays' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}\`}
             >
-              <Monitor size={14} /> Output / Routers
+              <Display size={14} /> Output / Routers
             </button>
             <button 
               onClick={() => setActiveTab('general')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'general' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={\`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors \${activeTab === 'general' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}\`}
             >
               <Settings size={14} /> General
             </button>
             <button 
               onClick={() => setActiveTab('songs')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'songs' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={\`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors \${activeTab === 'songs' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}\`}
             >
               <Music size={14} /> Songs
             </button>
             <button 
               onClick={() => setActiveTab('scriptures')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'scriptures' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={\`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors \${activeTab === 'scriptures' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}\`}
             >
               <Book size={14} /> Scriptures
             </button>
@@ -355,3 +357,6 @@ function SettingsModal({ onClose }: SettingsModalProps) {
 }
 
 export default withPortal(SettingsModal);
+`
+fs.writeFileSync('src/components/SettingsModal.tsx', code);
+console.log('patched settings modal');

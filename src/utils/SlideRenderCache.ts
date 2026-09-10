@@ -27,6 +27,7 @@ export class SlideRenderCache {
   public setMaxCacheSize(size: number) { this.maxCacheSize = size; }
   private frontCanvas: HTMLCanvasElement | null = null;
   private backCanvas: HTMLCanvasElement | null = null;
+  private syncChannel: BroadcastChannel | null = null;
 
   constructor() {
     if (typeof document !== 'undefined') {
@@ -38,31 +39,33 @@ export class SlideRenderCache {
         this.backCanvas.width = 1920;
         this.backCanvas.height = 1080;
         
-        // Listen for pre-rendered frames from the main window
-        const channel = new BroadcastChannel('pptx_render_sync');
-        channel.onmessage = (event) => {
-          if (event.data && event.data.type === 'FRAME_RENDERED') {
-            const { key, slideIndex, base64Url } = event.data;
-            if (key && base64Url) {
-              this.cache.set(key, {
-                status: 'ready',
-                frame: {
-                  key,
-                  slideIndex,
-                  canvas: null,
-                  objectUrl: base64Url,
-                  base64Url,
-                  renderedAt: Date.now(),
-                  width: 1920,
-                  height: 1080
-                }
-              });
-              
-              // Notify React state listeners
-              window.dispatchEvent(new CustomEvent('pptx_frame_synced', { detail: { key, slideIndex } }));
+        // Listen for pre-rendered frames from the main window using a persistent channel
+        if (typeof BroadcastChannel !== 'undefined') {
+          this.syncChannel = new BroadcastChannel('pptx_render_sync');
+          this.syncChannel.onmessage = (event) => {
+            if (event.data && event.data.type === 'FRAME_RENDERED') {
+              const { key, slideIndex, base64Url } = event.data;
+              if (key && base64Url) {
+                this.cache.set(key, {
+                  status: 'ready',
+                  frame: {
+                    key,
+                    slideIndex,
+                    canvas: null,
+                    objectUrl: base64Url,
+                    base64Url,
+                    renderedAt: Date.now(),
+                    width: 1920,
+                    height: 1080
+                  }
+                });
+                
+                // Notify React state listeners
+                window.dispatchEvent(new CustomEvent('pptx_frame_synced', { detail: { key, slideIndex } }));
+              }
             }
-          }
-        };
+          };
+        }
       } catch (e) {
         console.warn('[SlideRenderCache] Could not instantiate buffers:', e);
       }
@@ -129,62 +132,47 @@ export class SlideRenderCache {
           // ignore
         }
       } else if (sourceCanvasOrElement instanceof HTMLElement) {
-        try {
-          if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
-             await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 2000))]);
-          }
-
-          // Wait for images
-          const images = Array.from(sourceCanvasOrElement.querySelectorAll('img'));
-          await Promise.all(images.map(img => {
-            if (img.complete) return Promise.resolve();
-            return new Promise(resolve => {
-               img.onload = resolve;
-               img.onerror = resolve;
-               setTimeout(resolve, 3000); // Max wait per image
-            });
-          }));
-
-          const capturePromise = html2canvas(sourceCanvasOrElement, {
-            scale: 1,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: null,
-            logging: false
-          });
-          
-          const captureCanvas = await Promise.race([
-             capturePromise,
-             new Promise<null>((_, reject) => setTimeout(() => reject(new Error("html2canvas timeout")), 8000))
-          ]);
-          
-          if (captureCanvas && ctx) {
-            console.log('[SlideRenderCache] ✅ Capture completed', { width: captureCanvas.width, height: captureCanvas.height });
-            console.log('[SlideRenderCache] 🔄 toDataURL started');
-            base64Url = captureCanvas.toDataURL('image/jpeg', 0.85);
-            console.log('[SlideRenderCache] ✅ toDataURL completed, bytes:', base64Url.length);
-            
-            const blob = await new Promise<Blob | null>(res => captureCanvas.toBlob(res, 'image/jpeg', 0.85));
+        // Fast-path: If the element already contains an internal rendered canvas, copy it directly without html2canvas
+        const innerCanvas = sourceCanvasOrElement.querySelector('canvas');
+        if (innerCanvas && ctx) {
+          try {
+            ctx.drawImage(innerCanvas, 0, 0, width, height);
+            base64Url = offscreenCanvas.toDataURL('image/jpeg', 0.8);
+            const blob = await new Promise<Blob | null>(res => offscreenCanvas.toBlob(res, 'image/jpeg', 0.8));
             if (blob) {
               objectUrl = URL.createObjectURL(blob);
             }
+          } catch {
+            // fallback to html2canvas if cross-origin tainted
           }
-        } catch (captureErr) {
-          console.warn('[SlideRenderCache] html2canvas capture failed or timed out', captureErr);
-          const innerCanvas = sourceCanvasOrElement.querySelector('canvas');
-          if (innerCanvas && ctx) {
-            ctx.drawImage(innerCanvas, 0, 0, width, height);
-            try {
-              base64Url = offscreenCanvas.toDataURL('image/jpeg', 0.85);
-              const blob = await new Promise<Blob | null>(res => offscreenCanvas.toBlob(res, 'image/jpeg', 0.85));
+        }
+
+        if (!base64Url) {
+          try {
+            if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+               await Promise.race([document.fonts.ready, new Promise(r => setTimeout(r, 1000))]);
+            }
+
+            const captureCanvas = await Promise.race([
+               html2canvas(sourceCanvasOrElement, {
+                 scale: 1,
+                 useCORS: true,
+                 allowTaint: true,
+                 backgroundColor: null,
+                 logging: false
+               }),
+               new Promise<null>((_, reject) => setTimeout(() => reject(new Error("html2canvas timeout")), 3000))
+            ]);
+            
+            if (captureCanvas && ctx) {
+              base64Url = captureCanvas.toDataURL('image/jpeg', 0.8);
+              const blob = await new Promise<Blob | null>(res => captureCanvas.toBlob(res, 'image/jpeg', 0.8));
               if (blob) {
                 objectUrl = URL.createObjectURL(blob);
               }
-            } catch {
-              // ignore
             }
-          } else {
-             throw captureErr;
+          } catch (captureErr) {
+            console.warn('[SlideRenderCache] html2canvas capture skipped or timed out', captureErr);
           }
         }
       }
@@ -215,22 +203,19 @@ export class SlideRenderCache {
         frame
       });
 
-      const verification = this.cache.get(key);
-      console.log('[SlideRenderCache] 🔍 Cache Write Verification:', { 
-        putSuccess: true, 
-        getSuccess: !!verification && verification.status === 'ready' && !!verification.frame 
-      });
-
       if (base64Url && typeof window !== 'undefined') {
         try {
-          const channel = new BroadcastChannel('pptx_render_sync');
-          channel.postMessage({
-            type: 'FRAME_RENDERED',
-            key,
-            slideIndex,
-            base64Url
-          });
-          channel.close();
+          if (!this.syncChannel && typeof BroadcastChannel !== 'undefined') {
+            this.syncChannel = new BroadcastChannel('pptx_render_sync');
+          }
+          if (this.syncChannel) {
+            this.syncChannel.postMessage({
+              type: 'FRAME_RENDERED',
+              key,
+              slideIndex,
+              base64Url
+            });
+          }
         } catch (e) {
           // ignore
         }

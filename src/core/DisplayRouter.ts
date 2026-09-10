@@ -7,6 +7,32 @@ export interface DisplayAssignment {
 }
 
 /**
+ * Helper to normalize monitor label / ID for robust string matching
+ */
+function normalizeDisplayName(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/\s*\(primary\)\s*/gi, '')
+    .replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
+function isPrimaryDescriptor(str: string): boolean {
+  if (!str) return false;
+  const s = str.toLowerCase().trim();
+  return (
+    s.includes('primary') ||
+    s === 'monitor 1' ||
+    s === 'monitor-1' ||
+    s === 'display 1' ||
+    s === 'display-1' ||
+    s.startsWith('screen-0')
+  );
+}
+
+/**
  * Checks if a route group is configured to target a given physical display.
  */
 export function routeTargetsDisplay(group: OutputGroup, displayId: string): boolean {
@@ -14,46 +40,59 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
   const list = (group.displayIds && group.displayIds.length > 0) 
     ? group.displayIds 
     : (group.targetDisplayId ? [group.targetDisplayId] : []);
-  if (list.length === 0) return false;
 
   const target = String(displayId).toLowerCase().trim();
+  const targetNorm = normalizeDisplayName(displayId);
+  const targetIsPrimary = isPrimaryDescriptor(displayId);
+
+  // Default fallback when output group has no explicit display IDs set yet
+  if (list.length === 0) {
+    if ((group.role === 'broadcast' || group.id === 'group-congregation') && (targetIsPrimary || target === 'primary-display' || target === 'window')) {
+      return true;
+    }
+    if ((group.role === 'confidence' || group.id === 'group-stage') && (target.includes('stage') || target.includes('confidence') || target.includes('foldback'))) {
+      return true;
+    }
+    return false;
+  }
+
   return list.some((id) => {
     if (!id) return false;
     const raw = String(id).toLowerCase().trim();
     if (raw === target) return true;
     
-    // Support matching display names like "Monitor 2" vs "disp-2" or "display-2"
-    if (raw.replace(/\s+/g, '') === target.replace(/\s+/g, '')) return true;
-    
-    // Strict boundary-aware exact matching
-    // Extract numbers from both strings and compare if they both have numbers
-    const targetMatch = target.match(/\d+/);
-    const rawMatch = raw.match(/\d+/);
-    
-    if (targetMatch && rawMatch) {
-      if (targetMatch[0] === rawMatch[0]) {
-         const isTargetPrimary = target.includes('primary') || target.includes('monitor-1') || target === 'monitor 1' || target.includes('display-1') || target.includes('display 1');
-         const isRawPrimary = raw.includes('primary') || raw.includes('monitor-1') || raw === 'monitor 1' || raw.includes('display-1') || raw.includes('display 1');
-         if (isTargetPrimary && isRawPrimary) return true;
-         
-         if (raw.includes('monitor') && target.includes('monitor') || raw.includes('display') && target.includes('display')) {
-             return true;
-         }
+    // 1. Normalized comparison (strips punctuation, (Primary), resolutions)
+    const rawNorm = normalizeDisplayName(raw);
+    if (rawNorm && targetNorm) {
+      if (rawNorm === targetNorm) return true;
+      if (rawNorm.length >= 3 && targetNorm.length >= 3) {
+        if (rawNorm.includes(targetNorm) || targetNorm.includes(rawNorm)) return true;
       }
     }
-    
-    // Lexical matching for known primary/secondary identifiers
-    const isTargetPrimaryFallback = target.includes('primary');
-    const isTarget2Fallback = target.includes('secondary') || target.includes('alternate');
-    const isTarget3Fallback = target.includes('foldback') || target.includes('stage') || target.includes('tertiary');
 
-    const isRawPrimaryFallback = raw.includes('primary');
-    const isRaw2Fallback = raw.includes('secondary') || raw.includes('alternate');
-    const isRaw3Fallback = raw.includes('foldback') || raw.includes('stage') || raw.includes('tertiary');
+    // 2. Primary display identification
+    const rawIsPrimary = isPrimaryDescriptor(raw);
+    if (targetIsPrimary && rawIsPrimary) return true;
 
-    if (isTargetPrimaryFallback && isRawPrimaryFallback) return true;
-    if (isTarget2Fallback && isRaw2Fallback) return true;
-    if (isTarget3Fallback && isRaw3Fallback) return true;
+    // 3. Numbered monitor matching (e.g. "Monitor 2" vs "display-2")
+    const targetDigits = target.match(/\d+/g);
+    const rawDigits = raw.match(/\d+/g);
+    if (targetDigits && rawDigits && targetDigits.length === 1 && rawDigits.length === 1) {
+      if (targetDigits[0] === rawDigits[0]) {
+        const isTargetGeneric = target.includes('monitor') || target.includes('display') || target.includes('screen') || target.includes('disp');
+        const isRawGeneric = raw.includes('monitor') || raw.includes('display') || raw.includes('screen') || raw.includes('disp');
+        if (isTargetGeneric && isRawGeneric) return true;
+      }
+    }
+
+    // 4. Fallback keyword matching for roles
+    const isTargetSecondary = target.includes('secondary') || target.includes('alternate');
+    const isRawSecondary = raw.includes('secondary') || raw.includes('alternate');
+    if (isTargetSecondary && isRawSecondary) return true;
+
+    const isTargetStage = target.includes('foldback') || target.includes('stage') || target.includes('confidence');
+    const isRawStage = raw.includes('foldback') || raw.includes('stage') || raw.includes('confidence');
+    if (isTargetStage && isRawStage) return true;
 
     return false;
   });

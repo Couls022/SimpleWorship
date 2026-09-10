@@ -15,6 +15,7 @@ import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationSlideView } from './PresentationSlideView';
 import { PptxSlideThumbnail } from './PptxSlideThumbnail';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
+import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 
 export interface LiveSlideCardProps {
   slide: Slide;
@@ -163,11 +164,6 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
               ● LIVE
             </span>
           )}
-          {isSelected && !isPublicLive && (
-            <span className="shrink-0 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-600/90 text-white border border-blue-400/80 uppercase tracking-wider">
-              STAGED
-            </span>
-          )}
         </div>
 
         {/* Card Body */}
@@ -195,17 +191,11 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
             ) : isVideo ? (
               <div className="w-full aspect-video min-h-[100px] max-h-56 bg-black relative flex items-center justify-center overflow-hidden">
                 {mediaSourceUrl ? (
-                  <video
+                  <LazyVideoThumbnail
                     src={mediaSourceUrl}
-                    muted
-                    playsInline
-                    preload="metadata"
+                    alt={liveItem?.name || 'Video Track'}
                     className="w-full h-full object-contain pointer-events-none"
-                    style={{
-                      transform: 'translateZ(0)',
-                      willChange: 'transform',
-                      contain: 'strict',
-                    }}
+                    autoPlayOnHover={false}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center p-3 text-center text-gray-500">
@@ -299,6 +289,12 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                     muted
                     playsInline
                     className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none z-0"
+                    style={{
+                      transform: 'translate3d(0, 0, 0)',
+                      willChange: 'transform',
+                      backfaceVisibility: 'hidden',
+                      WebkitBackfaceVisibility: 'hidden',
+                    }}
                   />
                 ) : (slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundImageUrl) ? (
                   <img

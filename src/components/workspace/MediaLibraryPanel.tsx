@@ -4,6 +4,7 @@ import { Film, ImageIcon, Search, LayoutGrid, List, Sparkles, Plus, Play, CheckS
 import { Asset, PresentationItem } from '../../types';
 import { handleRangeSelection } from '../../utils/selectionUtils';
 import { PresentationContentResolver } from '../../core/PresentationContentResolver';
+import { LazyVideoThumbnail } from '../common/LazyVideoThumbnail';
 
 export default function MediaLibraryPanel() {
   const store = useStore();
@@ -13,27 +14,27 @@ export default function MediaLibraryPanel() {
     if (!asset) return false;
     if (asset.isDefaultScope?.[scope] === true) return true;
     const url = asset.url;
-    if (!url) return false;
+    const id = asset.id;
     if (scope === 'songs') {
       const t = store.themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'scriptures') {
       const t = store.themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'presentations') {
       const t = store.themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'announcements') {
       const t = store.themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
     }
     if (scope === 'logo') {
       const sysLogo = store.systemOptions?.general?.defaultLogoUrl || store.systemOptions?.mainOutput?.general?.defaultLogoUrl;
       const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return sysLogo === url || t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
+      return sysLogo === url || sysLogo === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id || t?.styles?.logoUrl === id));
     }
     return false;
   };
@@ -330,11 +331,15 @@ export default function MediaLibraryPanel() {
                   }`}
                 >
                   {asset.type === 'video' || asset.type === 'motion' ? (
-                    <video src={asset.url} className="w-full h-full object-cover pointer-events-none" />
+                    <LazyVideoThumbnail 
+                      src={asset.url} 
+                      poster={asset.thumbnailUrl} 
+                      alt={asset.name}
+                    />
                   ) : (
                     <img src={asset.url} className="w-full h-full object-cover pointer-events-none" referrerPolicy="no-referrer" />
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-1.5 pointer-events-none">
                     <span className="text-[10px] font-bold text-white truncate">{asset.name}</span>
                   </div>
                   {/* Default Badges on Card */}
@@ -347,11 +352,11 @@ export default function MediaLibraryPanel() {
                       ))}
                     </div>
                   )}
-                  <div className="absolute top-1 right-1 bg-black/60 rounded px-1 py-0.5 text-[8px] uppercase font-bold text-gray-300 border border-white/10 flex items-center gap-1">
+                  <div className="absolute top-1 right-1 bg-black/60 rounded px-1 py-0.5 text-[8px] uppercase font-bold text-gray-300 border border-white/10 flex items-center gap-1 pointer-events-none">
                     {asset.type === 'video' ? <Film size={8} className="text-cyan-400" /> : <ImageIcon size={8} className="text-amber-400" />}
                   </div>
                   {isSelected && (
-                    <div className="absolute top-1 left-1 bg-emerald-500 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold text-[9px] shadow-sm">
+                    <div className="absolute top-1 left-1 bg-emerald-500 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold text-[9px] shadow-sm pointer-events-none">
                       ✓
                     </div>
                   )}
@@ -385,7 +390,11 @@ export default function MediaLibraryPanel() {
                 >
                   <div className="w-12 aspect-video bg-black rounded overflow-hidden relative shrink-0">
                     {asset.type === 'video' || asset.type === 'motion' ? (
-                      <video src={asset.url} className="w-full h-full object-cover pointer-events-none" />
+                      <LazyVideoThumbnail 
+                        src={asset.url} 
+                        poster={asset.thumbnailUrl} 
+                        alt={asset.name}
+                      />
                     ) : (
                       <img src={asset.url} className="w-full h-full object-cover pointer-events-none" referrerPolicy="no-referrer" />
                     )}

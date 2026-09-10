@@ -199,23 +199,13 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
     >
       {/* Top Header Bar for Fixed Live Output Display */}
       <div className="h-9 flex items-center justify-between px-3 shrink-0 bg-[#151720] border-b border-[#222634] z-40">
-        {/* Left: Indicator + Status Title */}
+        {/* Left: Master Live Switch (Main Source of Truth) */}
         <div className="flex items-center gap-2 min-w-0">
-          {/* Pulsing Live LED Indicator */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className={`w-2.5 h-2.5 rounded-full ${
-              isBlack ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]' :
-              isClear ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]' :
-              isLogo ? 'bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.8)]' :
-              isLive ? 'bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.9)]' :
-              (stagedControlState?.activeItemId ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'bg-gray-600')
-            }`} />
-            <span className={`text-[11px] font-extrabold uppercase tracking-wider shrink-0 hidden min-[450px]:inline ${
-              isLive ? 'text-emerald-400' : 'text-amber-400'
-            }`}>
-              {isBlack ? 'BLACKOUT' : isClear ? 'CLEARED' : isLogo ? 'LOGO' : isLive ? 'LIVE ON (MIRRORING)' : 'LIVE OFF (STANDBY)'}
-            </span>
-          </div>
+          <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 hidden min-[480px]:inline ${
+            isBlack ? 'text-rose-400' : isClear ? 'text-amber-400' : isLogo ? 'text-indigo-400' : isLive ? 'text-emerald-400' : 'text-gray-400'
+          }`}>
+            {isBlack ? '• BLACKOUT' : isClear ? '• CLEARED' : isLogo ? '• LOGO' : isLive ? '• MIRRORING CANVAS' : '• STANDBY'}
+          </span>
         </div>
 
         {/* Right: Aspect Tag + 1:1 Target Monitor Quick Tag */}

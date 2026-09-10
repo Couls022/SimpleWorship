@@ -4,6 +4,13 @@ import { DisplayManager } from '../../src/core/DisplayManager';
 describe('DisplayManager', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    DisplayManager.clearCache();
+  });
+
+  afterEach(() => {
+    DisplayManager.clearCache();
+    delete (window as any).electronAPI;
+    delete (window as any).getScreenDetails;
   });
 
   it('returns default fallback screen in standard browser environment', async () => {

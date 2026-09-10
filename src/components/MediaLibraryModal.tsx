@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { Asset } from '../types';
+import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 
 interface MediaLibraryModalProps {
   onClose: () => void;
@@ -39,26 +40,27 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
     if (!url) return false;
     const foundAsset = assetsList.find(a => a.url === url || a.id === url);
     if (foundAsset?.isDefaultScope?.[category] === true) return true;
+    const assetId = foundAsset?.id;
     if (category === 'songs') {
       const t = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
     }
     if (category === 'scriptures') {
       const t = themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
     }
     if (category === 'presentations') {
       const t = themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
     }
     if (category === 'announcements') {
       const t = themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url;
+      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
     }
     if (category === 'logo') {
       const sysLogo = systemOptions?.general?.defaultLogoUrl || systemOptions?.mainOutput?.general?.defaultLogoUrl;
       const t = themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return sysLogo === url || t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url;
+      return sysLogo === url || (Boolean(assetId) && sysLogo === assetId) || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId || t?.styles?.logoUrl === assetId));
     }
     return false;
   };
@@ -450,14 +452,13 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
                   >
                     {/* Media Background / Preview */}
                     {asset.type === 'video' || asset.type === 'motion' ? (
-                      <video
-                        src={asset.url}
-                        muted
-                        loop
-                        autoPlay
-                        playsInline
-                        className="absolute inset-0 w-full h-full object-cover opacity-75 group-hover:opacity-90 transition-opacity"
-                      />
+                      <div className="absolute inset-0 w-full h-full opacity-75 group-hover:opacity-95 transition-opacity pointer-events-none">
+                        <LazyVideoThumbnail
+                          src={asset.url}
+                          poster={asset.thumbnailUrl}
+                          alt={asset.name}
+                        />
+                      </div>
                     ) : asset.type === 'audio' ? (
                       <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 flex flex-col items-center justify-center p-2 text-indigo-200">
                         <Music 

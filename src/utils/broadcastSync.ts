@@ -101,13 +101,12 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
     msgId: payload.msgId || `${payload.type}_${now}_${Math.random().toString(36).slice(2, 7)}`
   };
 
-  // 1. Post to BroadcastChannel (fast in-memory IPC with no storage quota)
+  // 1. Post to BroadcastChannel (fast in-memory IPC with zero delay and no storage quota)
   // Send fullPayload so ArrayBuffers, TypedArrays (fileBytes), and data URLs are preserved with 1:1 fidelity across windows!
   if (channel) {
     try {
       channel.postMessage(fullPayload);
     } catch (err) {
-      console.warn('[Sync] Error posting full payload to BroadcastChannel, falling back to sanitized:', err);
       try {
         const lightweight = sanitizeForSync(fullPayload);
         channel.postMessage(lightweight);
@@ -115,30 +114,29 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
     }
   }
 
-  // 2. Safe setItem to localStorage for cross-window StorageEvent listeners (sanitized to prevent QuotaExceededError)
-  try {
-    const lightweightPayload = sanitizeForSync(fullPayload);
-    const jsonString = JSON.stringify(lightweightPayload);
-    localStorage.setItem('simpleworship_live_sync_event', jsonString);
-  } catch (err: any) {
-    // Gracefully handle QuotaExceededError without throwing unhandled exceptions
-    if (err?.name === 'QuotaExceededError' || err?.code === 22 || err?.number === -2147024882) {
+  // 2. Non-blocking fallback to localStorage for older browsers or cross-origin fallback
+  // Executed asynchronously to never block frame rendering or UI interactions
+  if (typeof window !== 'undefined' && window.localStorage) {
+    setTimeout(() => {
       try {
-        localStorage.removeItem('simpleworship_live_sync_event');
-        // Retry with an ultra-lightweight signal
-        const minimalSignal = {
-          type: payload.type,
-          timestamp: now,
-          msgId: fullPayload.msgId,
-          data: { type: payload.type }
-        };
-        localStorage.setItem('simpleworship_live_sync_event', JSON.stringify(minimalSignal));
-      } catch (e) {
-        // Storage completely full from other keys; BroadcastChannel already delivered the event.
+        const lightweightPayload = sanitizeForSync(fullPayload);
+        const jsonString = JSON.stringify(lightweightPayload);
+        localStorage.setItem('simpleworship_live_sync_event', jsonString);
+      } catch (err: any) {
+        if (err?.name === 'QuotaExceededError' || err?.code === 22 || err?.number === -2147024882) {
+          try {
+            localStorage.removeItem('simpleworship_live_sync_event');
+            const minimalSignal = {
+              type: payload.type,
+              timestamp: now,
+              msgId: fullPayload.msgId,
+              data: { type: payload.type }
+            };
+            localStorage.setItem('simpleworship_live_sync_event', JSON.stringify(minimalSignal));
+          } catch (e) {}
+        }
       }
-    } else {
-      console.warn('[Sync] Storage write error:', err);
-    }
+    }, 0);
   }
 };
 
