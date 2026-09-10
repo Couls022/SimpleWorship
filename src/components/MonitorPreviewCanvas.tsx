@@ -25,6 +25,7 @@ interface MonitorPreviewCanvasProps {
   customState?: PresentationState;
   showResolutionTag?: boolean;
   className?: string;
+  isProjectorMode?: boolean;
 }
 
 export default function MonitorPreviewCanvas({
@@ -33,6 +34,7 @@ export default function MonitorPreviewCanvas({
   customState,
   showResolutionTag = false,
   className = '',
+  isProjectorMode = false,
 }: MonitorPreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -97,7 +99,7 @@ export default function MonitorPreviewCanvas({
   const currentSlide = slides[presentationState.activeSlideIndex] || null;
 
   // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
-  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = resolveGroupResolution(group, systemOptions);
+  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays());
 
   // If active item is a presentation with template aspect ratio, adapt to the PowerPoint template ratio
   const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
@@ -128,8 +130,8 @@ export default function MonitorPreviewCanvas({
   let fittedHeight = containerSize.height || 180;
 
   if (containerSize.width > 0 && containerSize.height > 0) {
-    const availWidth = Math.max(containerSize.width - 4, 10);
-    const availHeight = Math.max(containerSize.height - 4, 10);
+    const availWidth = isProjectorMode ? containerSize.width : Math.max(containerSize.width - 4, 10);
+    const availHeight = isProjectorMode ? containerSize.height : Math.max(containerSize.height - 4, 10);
     const containerAspect = availWidth / availHeight;
     if (containerAspect > aspectRatio) {
       // Height is the constraint
@@ -498,11 +500,13 @@ export default function MonitorPreviewCanvas({
   return (
     <div 
       ref={containerRef}
-      className={`w-full h-full flex items-center justify-center relative overflow-hidden bg-[#0a0b0e] select-none ${className}`}
+      className={`w-full h-full flex items-center justify-center relative overflow-hidden ${isProjectorMode ? 'bg-black' : 'bg-[#0a0b0e]'} select-none ${className}`}
     >
       {/* Aspect-Locked Scaled Monitor Canvas Wrapper */}
       <div 
-        className="relative bg-black rounded shadow-2xl overflow-hidden border border-[#2a2c36] shrink-0"
+        className={isProjectorMode
+          ? "relative bg-black overflow-hidden shrink-0"
+          : "relative bg-black rounded shadow-2xl overflow-hidden border border-[#2a2c36] shrink-0"}
         style={{
           width: `${fittedWidth}px`,
           height: `${fittedHeight}px`,
@@ -764,7 +768,7 @@ export default function MonitorPreviewCanvas({
               systemOptions,
               songsList,
               themesList,
-              []
+              DisplayManager.getCachedDisplays()
             );
             if (!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame) {
               return (
@@ -961,7 +965,7 @@ export default function MonitorPreviewCanvas({
         </div>
 
         {/* Resolution & Ratio Indicator Tag */}
-        {showResolutionTag && (
+        {showResolutionTag && !isProjectorMode && (
           <div className="absolute bottom-1 right-1.5 z-30 pointer-events-none flex items-center gap-1.5">
             <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/75 text-gray-400 border border-white/10 backdrop-blur-xs">
               {targetWidth}×{targetHeight} ({aspectLabel})

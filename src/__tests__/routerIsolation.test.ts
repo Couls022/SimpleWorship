@@ -154,7 +154,7 @@ describe('Router Panel Output Isolation & Routing Integration Tests', () => {
     expect(mon2?.assignedGroupId).toBe('group-router-2');
   });
 
-  it('Test 7: Both Router Panels LIVE OFF -> Target Monitor 1 receives NO live routes', () => {
+  it('Test 7: Both Router Panels LIVE OFF -> Target Monitor 1 is standby / idle (assignedGroupId is null)', () => {
     const outputGroups = [router1Group, router2Group];
     const groupStates: Record<string, PresentationState> = {
       'group-router-1': { ...defaultState, isLiveEnabled: false },

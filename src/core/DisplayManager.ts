@@ -121,6 +121,9 @@ export class DisplayManager {
       }));
 
       this.cachedDisplays = formatted;
+      if (typeof window !== 'undefined') {
+        (window as any).__simpleworship_cached_displays = formatted;
+      }
       this.lastQueryTime = Date.now();
       this.queryPromise = null;
       return formatted;

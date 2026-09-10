@@ -184,7 +184,7 @@ describe('Suite: Display-Centric Architecture, URL Fix, and Live Persistence (16
       const assignments = resolveDisplayAssignments(groups, states, 'group-congregation');
       expect(assignments.get('Monitor 2')?.assignedGroupId).toBe('group-stage');
 
-      // If both are not live, Monitor 2 has null assignedGroupId
+      // If both are not live, Monitor 2 is standby / not casting (assignedGroupId is null)
       const bothOff: Record<string, DisplayRouteState> = {
         'group-congregation': { isLiveEnabled: false },
         'group-stage': { isLiveEnabled: false }

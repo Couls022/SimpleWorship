@@ -4,6 +4,7 @@ export interface DisplayAssignment {
   displayId: string;
   assignedGroupId: string | null;
   liveGroupIds: string[];
+  candidateGroupIds?: string[];
 }
 
 /**
@@ -35,7 +36,7 @@ function isPrimaryDescriptor(str: string): boolean {
 /**
  * Checks if a route group is configured to target a given physical display.
  */
-export function routeTargetsDisplay(group: OutputGroup, displayId: string): boolean {
+export function routeTargetsDisplay(group: OutputGroup, displayId: string, cachedDisplays?: any[]): boolean {
   if (!group || !displayId) return false;
   const list = (group.displayIds && group.displayIds.length > 0) 
     ? group.displayIds 
@@ -45,9 +46,10 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
   const targetNorm = normalizeDisplayName(displayId);
   const targetIsPrimary = isPrimaryDescriptor(displayId);
 
-  // Default fallback when output group has no explicit display IDs set yet
+  // Default fallback when output group has no explicit display IDs set yet:
+  // Main Congregation presentation route targets any presentation display
   if (list.length === 0) {
-    if ((group.role === 'broadcast' || group.id === 'group-congregation') && (targetIsPrimary || target === 'primary-display' || target === 'window')) {
+    if (group.role === 'broadcast' || group.id === 'group-congregation') {
       return true;
     }
     if ((group.role === 'confidence' || group.id === 'group-stage') && (target.includes('stage') || target.includes('confidence') || target.includes('foldback'))) {
@@ -56,12 +58,53 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
     return false;
   }
 
+  const displays = cachedDisplays || (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
+
   return list.some((id) => {
     if (!id) return false;
     const raw = String(id).toLowerCase().trim();
     if (raw === target) return true;
+
+    // 1. Check physical cached displays (matches canonical ID, name, label, displayId)
+    if (displays && Array.isArray(displays) && displays.length > 0) {
+      const matchTarget = displays.find((d: any) => 
+        d.id === displayId || 
+        String(d.id).toLowerCase() === target ||
+        String(d.name).toLowerCase() === target ||
+        String(d.label).toLowerCase() === target ||
+        String(d.displayId) === target ||
+        `display-${d.displayId}` === target
+      );
+      const matchRaw = displays.find((d: any) => 
+        d.id === id || 
+        String(d.id).toLowerCase() === raw ||
+        String(d.name).toLowerCase() === raw ||
+        String(d.label).toLowerCase() === raw ||
+        String(d.displayId) === raw ||
+        `display-${d.displayId}` === raw
+      );
+      if (matchTarget && matchRaw && matchTarget.id === matchRaw.id) {
+        return true;
+      }
+      if (matchTarget && (
+        String(matchTarget.name).toLowerCase() === raw ||
+        String(matchTarget.label).toLowerCase() === raw ||
+        String(matchTarget.id).toLowerCase() === raw ||
+        normalizeDisplayName(matchTarget.name) === normalizeDisplayName(raw)
+      )) {
+        return true;
+      }
+      if (matchRaw && (
+        String(matchRaw.name).toLowerCase() === target ||
+        String(matchRaw.label).toLowerCase() === target ||
+        String(matchRaw.id).toLowerCase() === target ||
+        normalizeDisplayName(matchRaw.name) === normalizeDisplayName(target)
+      )) {
+        return true;
+      }
+    }
     
-    // 1. Normalized comparison (strips punctuation, (Primary), resolutions)
+    // 2. Normalized comparison (strips punctuation, (Primary), resolutions)
     const rawNorm = normalizeDisplayName(raw);
     if (rawNorm && targetNorm) {
       if (rawNorm === targetNorm) return true;
@@ -70,22 +113,22 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string): bool
       }
     }
 
-    // 2. Primary display identification
+    // 3. Primary display identification
     const rawIsPrimary = isPrimaryDescriptor(raw);
     if (targetIsPrimary && rawIsPrimary) return true;
 
-    // 3. Numbered monitor matching (e.g. "Monitor 2" vs "display-2")
-    const targetDigits = target.match(/\d+/g);
-    const rawDigits = raw.match(/\d+/g);
+    // 4. Numbered monitor matching (strip resolutions e.g. "Monitor 2 (1920x1080)" -> "Monitor 2")
+    const cleanRaw = raw.replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '').replace(/\s*\(primary\)\s*/gi, '');
+    const cleanTarget = target.replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '').replace(/\s*\(primary\)\s*/gi, '');
+    const targetDigits = cleanTarget.match(/\d+/g);
+    const rawDigits = cleanRaw.match(/\d+/g);
     if (targetDigits && rawDigits && targetDigits.length === 1 && rawDigits.length === 1) {
       if (targetDigits[0] === rawDigits[0]) {
-        const isTargetGeneric = target.includes('monitor') || target.includes('display') || target.includes('screen') || target.includes('disp');
-        const isRawGeneric = raw.includes('monitor') || raw.includes('display') || raw.includes('screen') || raw.includes('disp');
-        if (isTargetGeneric && isRawGeneric) return true;
+        return true;
       }
     }
 
-    // 4. Fallback keyword matching for roles
+    // 5. Fallback keyword matching for roles
     const isTargetSecondary = target.includes('secondary') || target.includes('alternate');
     const isRawSecondary = raw.includes('secondary') || raw.includes('alternate');
     if (isTargetSecondary && isRawSecondary) return true;
@@ -159,6 +202,7 @@ export function resolveDisplayAssignments(
         displayId,
         assignedGroupId: null,
         liveGroupIds: [],
+        candidateGroupIds: [],
       });
       continue;
     }
@@ -174,9 +218,9 @@ export function resolveDisplayAssignments(
     } else if (liveGroupIds.length > 0) {
       winningGroupId = liveGroupIds[0];
     } else {
-      // FALLBACK TO STANDBY: When LIVE OFF, still assign to the display so the projector window stays OPEN 
-      // and can act as a "Mirror Display" for the Live Display Canvas (Standby), matching the architecture chart.
-      winningGroupId = candidateGroupIds[0];
+      // When LIVE is OFF for all groups targeting this display:
+      // Standby / Not casting to projector! Source output only flows to projector when LIVE ON switch is enabled.
+      winningGroupId = null;
     }
 
     // Build the ordered layer list for multi-layer presentation stacking:
@@ -192,6 +236,7 @@ export function resolveDisplayAssignments(
       displayId,
       assignedGroupId: winningGroupId,
       liveGroupIds: orderedLiveGroupIds,
+      candidateGroupIds,
     });
   }
 
