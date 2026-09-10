@@ -225,7 +225,7 @@ export default function TopToolbar({
   };
 
   const handleSaveScheduleAs = async () => {
-    const defaultName = store.activeSchedule?.name || 'Sunday Morning Worship';
+    const defaultName = store.activeSchedule?.name || 'Sunday Morning Service';
     const newName = prompt('Save Schedule As:', defaultName);
     if (!newName) return;
 

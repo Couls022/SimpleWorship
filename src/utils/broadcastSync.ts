@@ -114,6 +114,11 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
     }
   }
 
+  // Notify window listeners of broadcast telemetry update
+  try {
+    window.dispatchEvent(new CustomEvent('simpleworship:broadcast-sent', { detail: fullPayload }));
+  } catch {}
+
   // 2. Non-blocking fallback to localStorage for older browsers or cross-origin fallback
   // Executed asynchronously to never block frame rendering or UI interactions
   if (typeof window !== 'undefined' && window.localStorage) {

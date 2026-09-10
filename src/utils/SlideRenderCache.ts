@@ -346,7 +346,12 @@ export class SlideRenderCache {
     }
   }
 
-  public clear(presKey?: string) {
+  public getCacheSize(): number {
+    return this.cache.size;
+  }
+
+  public clear(presKey?: string): number {
+    let clearedCount = 0;
     if (presKey) {
       for (const k of Array.from(this.cache.keys())) {
         if (k.startsWith(`${presKey}_`)) {
@@ -360,9 +365,11 @@ export class SlideRenderCache {
             entry.frame.canvas = null;
           }
           this.cache.delete(k);
+          clearedCount++;
         }
       }
     } else {
+      clearedCount = this.cache.size;
       for (const entry of this.cache.values()) {
         if (entry.frame?.objectUrl && entry.frame.objectUrl !== entry.frame.base64Url) {
           URL.revokeObjectURL(entry.frame.objectUrl);
@@ -375,6 +382,7 @@ export class SlideRenderCache {
       }
       this.cache.clear();
     }
+    return clearedCount;
   }
 }
 

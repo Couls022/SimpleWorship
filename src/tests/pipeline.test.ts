@@ -496,4 +496,211 @@ describe('SimpleWorship Final Presentation Pipeline Test Suite', () => {
     const type = PresentationContentResolver.detectContentType(videoItem);
     expect(type).toBe('video');
   });
+
+  // TEST 15 — Song Auto Adjustment & Auto Break on Long Verses
+  it('TEST 15: Song auto-breaks long verses into separate slides to prevent cramping', () => {
+    const longVerseSongItem: PresentationItem = {
+      id: 'item-long-song',
+      name: 'Long Worship Song',
+      type: 'song',
+      contentId: 'song-long',
+      data: {
+        sections: [
+          {
+            id: 'sec-v1',
+            name: 'Verse 1',
+            text: [
+              'Line 1 of the long verse',
+              'Line 2 of the long verse',
+              'Line 3 of the long verse',
+              'Line 4 of the long verse',
+              'Line 5 of the long verse',
+              'Line 6 of the long verse',
+              'Line 7 of the long verse',
+              'Line 8 of the long verse'
+            ].join('\n')
+          }
+        ]
+      }
+    };
+
+    const optionsWithAutoFlow: SystemOptions = {
+      ...mockSystemOptions,
+      mainOutput: {
+        ...mockSystemOptions.mainOutput,
+        song: {
+          ...mockSystemOptions.mainOutput.song,
+          automaticallyFlow: true,
+          breakOnNewVerse: true,
+          maxLinesPerSlide: 4,
+          splitLongSections: true,
+          splitLabelStyle: 'part'
+        }
+      }
+    };
+
+    const slides = PresentationCore.generateSlides(longVerseSongItem, [], optionsWithAutoFlow);
+    expect(slides.length).toBe(2);
+    expect(slides[0].title).toBe('Verse 1 (Part 1)');
+    expect(slides[0].text.split('\n').length).toBe(4);
+    expect(slides[1].title).toBe('Verse 1 (Part 2)');
+    expect(slides[1].text.split('\n').length).toBe(4);
+  });
+
+  // TEST 16 — Song Auto Break Disabled Preserves Single Slide
+  it('TEST 16: Song auto-flow can be disabled to preserve single-slide verse structure', () => {
+    const songItem: PresentationItem = {
+      id: 'item-compact-song',
+      name: 'Single Verse Song',
+      type: 'song',
+      contentId: 'song-compact',
+      data: {
+        sections: [
+          {
+            id: 'sec-v1',
+            name: 'Verse 1',
+            text: 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5'
+          }
+        ]
+      }
+    };
+
+    const optionsWithoutAutoFlow: SystemOptions = {
+      ...mockSystemOptions,
+      mainOutput: {
+        ...mockSystemOptions.mainOutput,
+        song: {
+          ...mockSystemOptions.mainOutput.song,
+          automaticallyFlow: false,
+          breakOnNewVerse: false
+        }
+      }
+    };
+
+    const slides = PresentationCore.generateSlides(songItem, [], optionsWithoutAutoFlow);
+    expect(slides.length).toBe(1);
+    expect(slides[0].title).toBe('Verse 1');
+  });
+
+  // TEST 17 — Orphan Line Balancing (e.g. 5 lines with max 4 balances into 3 and 2)
+  it('TEST 17: Balances orphan lines when splitting so the last slide is never left with a single lonely line', () => {
+    const orphanSongItem: PresentationItem = {
+      id: 'item-orphan-song',
+      name: 'Orphan Prevention Song',
+      type: 'song',
+      contentId: 'song-orphan',
+      data: {
+        sections: [
+          {
+            id: 'sec-v1',
+            name: 'Verse 1',
+            text: 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5'
+          }
+        ]
+      }
+    };
+
+    const options: SystemOptions = {
+      ...mockSystemOptions,
+      mainOutput: {
+        ...mockSystemOptions.mainOutput,
+        song: {
+          ...mockSystemOptions.mainOutput.song,
+          automaticallyFlow: true,
+          breakOnNewVerse: true,
+          maxLinesPerSlide: 4,
+          splitLongSections: true,
+          splitLabelStyle: 'part',
+        }
+      }
+    };
+
+    const slides = PresentationCore.generateSlides(orphanSongItem, [], options);
+    expect(slides.length).toBe(2);
+    expect(slides[0].text.split('\n').length).toBe(3);
+    expect(slides[1].text.split('\n').length).toBe(2);
+  });
+
+  // TEST 18 — Live Render Frame Builder fully respects auto-adjust and auto-break for songs
+  it('TEST 18: RenderFrameBuilder correctly integrates auto-break slides and calculates autoFitFontSize', () => {
+    const longSongItem: PresentationItem = {
+      id: 'item-live-long-song',
+      name: 'Long Worship Song',
+      type: 'song',
+      contentId: 'song-long-live',
+      data: {
+        sections: [
+          {
+            id: 'sec-v1',
+            name: 'Verse 1',
+            text: 'Ika\'y higit pa sa lahat ng aking inaasahan\nPag-ibig Mo\'y walang hanggan at \'di nagbabago\nSa gitna ng unos Ikaw ang aking kapayapaan\nLakas ko at tanggulan sa bawat sandali\nSa Iyo lamang natagpuan ang tunay na galak\nBuhay ko\'y binago Mo nang Iyong mahawakan\nWalang ibang hinahangad kundi ang presensya Mo\nSasambahin Kita habang ako ay may hininga'
+          }
+        ]
+      }
+    };
+
+    const schedule: Schedule = {
+      id: 'sched-live-1',
+      name: 'Sunday Worship',
+      items: [longSongItem],
+      createdAt: Date.now()
+    };
+
+    const state: PresentationState = {
+      activeScheduleId: 'sched-live-1',
+      activeItemId: longSongItem.id,
+      activeSlideIndex: 1, // Second part of the split verse
+      nextSlideIndex: 1,
+      isBlack: false,
+      isClear: false,
+      showLogo: false,
+      isLiveEnabled: true,
+      timestamp: Date.now()
+    };
+
+    const group: OutputGroup = {
+      id: 'group-congregation',
+      name: 'Main Projector',
+      themeId: 'theme-global',
+      aspectRatio: '16:9',
+      displayIds: ['Display 1'],
+      targetDisplayId: 'Display 1',
+      customResolution: { width: 1920, height: 1080 }
+    };
+
+    const options: SystemOptions = {
+      ...mockSystemOptions,
+      mainOutput: {
+        ...mockSystemOptions.mainOutput,
+        song: {
+          ...mockSystemOptions.mainOutput.song,
+          autoAdjust: true,
+          minFontSize: 28,
+          lineSpacing: 1.15,
+          automaticallyFlow: true,
+          breakOnNewVerse: true,
+          maxLinesPerSlide: 4,
+          splitLongSections: true,
+          splitLabelStyle: 'part',
+        }
+      }
+    };
+
+    const frame = buildRenderFrame(
+      group.id,
+      state,
+      schedule,
+      group,
+      options,
+      [],
+      [],
+      [{ id: 'Display 1', name: 'Display 1', bounds: { width: 1920, height: 1080 } }]
+    );
+
+    expect(frame).toBeDefined();
+    expect(frame?.activeSlide.title).toBe('Verse 1 (Part 2)');
+    expect(frame?.activeSlide.text.split('\n').length).toBe(4);
+    expect(frame?.autoFitFontSize).toBeGreaterThanOrEqual(28);
+    expect(frame?.lineSpacing).toBe(1.15);
+  });
 });

@@ -167,7 +167,7 @@ export default function ScriptureLivePreview({
     options: scriptureOptions
   });
 
-  const margins = (scriptureOptions?.margins && (scriptureOptions.margins.left || scriptureOptions.margins.top || scriptureOptions.margins.right || scriptureOptions.margins.bottom))
+  const margins = scriptureOptions?.margins
     ? scriptureOptions.margins
     : (generalOptions?.margins || { left: 0, top: 0, right: 0, bottom: 0 });
 
@@ -302,10 +302,10 @@ export default function ScriptureLivePreview({
               height: `${height}px`,
               transform: `scale(${scale})`,
               background: activeBg.gradient,
-              paddingLeft: `${margins?.left || 40}px`,
-              paddingRight: `${margins?.right || 40}px`,
-              paddingTop: `${margins?.top || 30}px`,
-              paddingBottom: `${margins?.bottom || 30}px`,
+              paddingLeft: `${margins?.left !== undefined ? margins.left : 40}px`,
+              paddingRight: `${margins?.right !== undefined ? margins.right : 40}px`,
+              paddingTop: `${margins?.top !== undefined ? margins.top : 30}px`,
+              paddingBottom: `${margins?.bottom !== undefined ? margins.bottom : 30}px`,
             }}
           >
             <div 
@@ -394,27 +394,36 @@ export default function ScriptureLivePreview({
                       textDecoration: scriptureThemeStyles.textDecoration || (scriptureOptions?.scriptureFont?.underline ? 'underline' : 'none'),
                     }}
                   >
-                    {selectedPassage.verses.map((v, idx) => (
-                      <span key={v.verse} className="inline">
-                        {showVerseNumbers && (
-                          <span 
-                            className="inline-block mr-3 select-none transition-colors"
-                            style={{ 
-                              color: verseColor,
-                              fontFamily: scriptureOptions?.verseFont?.family || scriptureOptions?.scriptureFont?.family || 'Tahoma, sans-serif',
-                              fontSize: verseThemeStyles?.fontSize ? `${verseThemeStyles.fontSize}px` : `${Math.max(14, autoFitSize * 0.85)}px`,
-                              fontWeight: verseThemeStyles?.fontWeight || (scriptureOptions?.verseFont?.bold ? '700' : '400'),
-                              fontStyle: verseThemeStyles?.fontStyle || (scriptureOptions?.verseFont?.italic ? 'italic' : 'normal'),
-                              textDecoration: verseThemeStyles?.textDecoration || (scriptureOptions?.verseFont?.underline ? 'underline' : 'none'),
-                            }}
-                          >
-                            {formatVerseNumber(v.verse, verseNumberStyle)}
-                          </span>
-                        )}
-                        <span>{v.text}</span>
-                        {idx < selectedPassage.verses.length - 1 && ' '}
-                      </span>
-                    ))}
+                    {selectedPassage.verses.map((v, idx) => {
+                      const isSuper = verseNumberStyle === 'superscript';
+                      return (
+                        <span key={v.verse} className="inline">
+                          {showVerseNumbers && (
+                            <span 
+                              className={`inline-block select-none transition-colors ${isSuper ? 'mr-1.5 align-super' : 'mr-2.5'}`}
+                              style={{ 
+                                color: verseColor,
+                                fontFamily: scriptureOptions?.verseFont?.family || scriptureOptions?.scriptureFont?.family || 'Tahoma, sans-serif',
+                                fontSize: verseThemeStyles?.fontSize 
+                                  ? `${verseThemeStyles.fontSize}px` 
+                                  : isSuper 
+                                    ? `${Math.max(12, Math.round(autoFitSize * 0.72))}px` 
+                                    : `${Math.max(14, Math.round(autoFitSize * 0.85))}px`,
+                                fontWeight: verseThemeStyles?.fontWeight || (scriptureOptions?.verseFont?.bold ? '700' : '400'),
+                                fontStyle: verseThemeStyles?.fontStyle || (scriptureOptions?.verseFont?.italic ? 'italic' : 'normal'),
+                                textDecoration: verseThemeStyles?.textDecoration || (scriptureOptions?.verseFont?.underline ? 'underline' : 'none'),
+                                verticalAlign: isSuper ? 'super' : 'baseline',
+                                lineHeight: 1,
+                              }}
+                            >
+                              {formatVerseNumber(v.verse, verseNumberStyle)}
+                            </span>
+                          )}
+                          <span>{v.text}</span>
+                          {idx < selectedPassage.verses.length - 1 && ' '}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               );

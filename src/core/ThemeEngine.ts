@@ -524,18 +524,39 @@ export class ThemeEngine {
     if (styles.textAlign === 'left') alignItems = 'flex-start';
     if (styles.textAlign === 'right') alignItems = 'flex-end';
 
-    const padH = styles.paddingHorizontal ?? (customMargins?.left ? customMargins.left / 18 : 6);
-    const padV = styles.paddingVertical ?? (customMargins?.top ? customMargins.top / 18 : 5);
+    const hasCustomMargins = customMargins && (
+      customMargins.left !== undefined ||
+      customMargins.top !== undefined ||
+      customMargins.right !== undefined ||
+      customMargins.bottom !== undefined
+    );
+
+    const padLeft = hasCustomMargins && customMargins.left !== undefined
+      ? `${customMargins.left}px`
+      : (styles.paddingHorizontal !== undefined ? `${styles.paddingHorizontal}%` : '6%');
+
+    const padRight = hasCustomMargins && customMargins.right !== undefined
+      ? `${customMargins.right}px`
+      : (styles.paddingHorizontal !== undefined ? `${styles.paddingHorizontal}%` : '6%');
+
+    const padTop = hasCustomMargins && customMargins.top !== undefined
+      ? `${customMargins.top}px`
+      : (styles.paddingVertical !== undefined ? `${styles.paddingVertical}%` : '5%');
+
+    const padBottom = hasCustomMargins && customMargins.bottom !== undefined
+      ? `${customMargins.bottom}px`
+      : (styles.paddingVertical !== undefined ? `${styles.paddingVertical}%` : '5%');
 
     return {
       display: 'flex',
       flexDirection: 'column',
       justifyContent,
       alignItems,
-      paddingLeft: `${padH}%`,
-      paddingRight: `${padH}%`,
-      paddingTop: `${padV}%`,
-      paddingBottom: `${padV}%`,
+      paddingLeft: padLeft,
+      paddingRight: padRight,
+      paddingTop: padTop,
+      paddingBottom: padBottom,
+      boxSizing: 'border-box',
     };
   }
 

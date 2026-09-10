@@ -57,6 +57,8 @@ export interface SystemOptions {
       defaultFont: FontStyleOptions;
       disableLogoOnLive: boolean;
       defaultLogoUrl?: string;
+      logoUrl?: string;
+      alphaKeyingMode?: 'none' | 'key' | 'ndi' | 'transparent';
     };
     song: {
       songFont: FontStyleOptions;
@@ -76,6 +78,11 @@ export interface SystemOptions {
       lineSpacing?: number;
       margins?: { left: number; top: number; right: number; bottom: number };
       autoAdjust?: boolean;
+      breakOnNewVerse?: boolean;
+      automaticallyFlow?: boolean;
+      maxLinesPerSlide?: number;
+      splitLongSections?: boolean;
+      splitLabelStyle?: 'part' | 'alpha' | 'numeric' | 'same';
     };
     scripture: {
       enableScriptureSupport: boolean;

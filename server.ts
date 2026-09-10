@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import os from 'os';
 import { createServer as createViteServer } from 'vite';
 
 // Server-side in-memory store for sync and fallback caching
@@ -80,6 +81,9 @@ async function startServer() {
 
   // 2. System Status & Diagnostics
   app.get('/api/system/status', (req, res) => {
+    const cpus = os.cpus() || [];
+    const totalMem = Math.round(os.totalmem() / (1024 * 1024));
+    const freeMem = Math.round(os.freemem() / (1024 * 1024));
     res.json({
       status: 'healthy',
       engine: 'SimpleWorship Presentation Engine',
@@ -89,6 +93,14 @@ async function startServer() {
       lastStateUpdate: currentServerState.lastUpdated,
       serverLogs: serverLogs.slice(0, 30),
       pendingCommandsCount: pendingCommands.length,
+      hardware: {
+        platform: os.platform(),
+        arch: os.arch(),
+        cpuModel: cpus[0]?.model || 'Host CPU',
+        cpuCores: cpus.length || 4,
+        totalRamMb: totalMem,
+        freeRamMb: freeMem
+      },
       capabilities: {
         broadcastChannel: true,
         indexedDbBridge: true,

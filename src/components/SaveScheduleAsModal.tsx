@@ -15,7 +15,7 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
   const { activeSchedule, setActiveSchedule, systemOptions, outputGroups } = store;
   
   const [scheduleName, setScheduleName] = useState(
-    activeSchedule?.name || 'Sunday Morning Worship'
+    activeSchedule?.name || 'Sunday Morning Service'
   );
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);

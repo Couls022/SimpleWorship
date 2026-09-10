@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { PresentationCore } from '../../core/PresentationCore';
 import { ThemeEngine } from '../../core/ThemeEngine';
 import { Clock, Eye, AlertCircle } from 'lucide-react';
+import { StageCountdownTimer } from './StageCountdownTimer';
 
 const StageClock = React.memo(() => {
   const [time, setTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -60,10 +61,11 @@ export default function StageMonitorContent() {
         <div className="flex items-center gap-3">
           {clockEnabled && <StageClock />}
           {countdownEnabled && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 text-xs font-mono">
-              <span className="font-semibold text-gray-300">{countdownLabel}:</span>
-              <span className="font-bold text-cyan-400">{countdownTimeStr}</span>
-            </div>
+            <StageCountdownTimer
+              initialTimeStr={countdownTimeStr}
+              label={countdownLabel}
+              enabled={countdownEnabled}
+            />
           )}
         </div>
         <div className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-700/50">

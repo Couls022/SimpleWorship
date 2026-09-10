@@ -55,6 +55,11 @@ export const defaultSystemOptions: SystemOptions = {
       lineSpacing: 1.35,
       margins: { left: 0, top: 0, right: 0, bottom: 0 },
       autoAdjust: true,
+      breakOnNewVerse: true,
+      automaticallyFlow: true,
+      maxLinesPerSlide: 4,
+      splitLongSections: true,
+      splitLabelStyle: 'part',
     },
     scripture: {
       enableScriptureSupport: true,

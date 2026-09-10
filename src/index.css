@@ -397,10 +397,19 @@ html.light .keep-dark {
 }
 html.light .keep-dark,
 html.light .keep-dark * {
-  color: #f1f5f9;
+  color: #f1f5f9 !important;
 }
-html.light .keep-dark .text-gray-400 {
+html.light .keep-dark .text-gray-400,
+html.light .keep-dark .text-gray-400 * {
   color: #9ca3af !important;
+}
+html.light .keep-dark [class*="border-[#"] {
+  border-color: #374151 !important;
+}
+html.light .keep-dark [class*="bg-[#1"],
+html.light .keep-dark [class*="bg-[#2"],
+html.light .keep-dark [class*="bg-[#3"] {
+  background-color: #1a1c23 !important;
 }
 
 /* 2. ACCENT COLOR SCHEMES */

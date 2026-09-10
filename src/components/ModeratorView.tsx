@@ -35,7 +35,7 @@ import WebBrowserModal from './WebBrowserModal';
 import RemoteControlModal from './RemoteControlModal';
 import { Song, PresentationItem, Asset } from '../types';
 import { PresentationEditorModal } from './PresentationEditorModal';
-import { matchesShortcut } from '../utils/keyboardShortcuts';
+import { matchesShortcut, DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
 
 export default function ModeratorView() {
   const store = useStore();
@@ -171,11 +171,19 @@ export default function ModeratorView() {
   // Global Keyboard Shortcuts (Dynamic based on shortcutSettings)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isInputActive = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName);
-      const mappings = shortcutSettings?.keyMappings;
+      // If Center Shortcuts Settings modal is open, let modal handle its own keys (tester, recording)
+      if (isShortcutsOpen) {
+        if (e.key === 'Escape') {
+          setIsShortcutsOpen(false);
+        }
+        return;
+      }
 
-      // F1 or Ctrl+/ opens Center Shortcuts settings dialog from anywhere
-      if (e.key === 'F1' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
+      const isInputActive = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName);
+      const mappings = shortcutSettings?.keyMappings || DEFAULT_SIMPLEWORSHIP_MAPPINGS;
+
+      // F1 or Ctrl+/ opens Center Shortcuts settings dialog from anywhere (unless F1 is mapped to clearOutput)
+      if (((e.key === 'F1' && mappings?.clearOutput !== 'F1') || ((e.ctrlKey || e.metaKey) && e.key === '/'))) {
         e.preventDefault();
         setIsShortcutsOpen((prev) => !prev);
         return;
@@ -192,8 +200,9 @@ export default function ModeratorView() {
       // 1. GO LIVE controls
       if (
         matchesShortcut(e, mappings?.goLive) ||
-        e.key === 'F5' || 
-        (e.key === 'Enter' && (e.ctrlKey || e.metaKey || shortcutSettings?.enterGoesLive))
+        (mappings?.goLive === 'F5' && e.key === 'F5') ||
+        (shortcutSettings?.enterGoesLive && (e.key === 'Enter' || e.key === 'F5')) ||
+        (e.key === 'Enter' && (e.ctrlKey || e.metaKey))
       ) {
         e.preventDefault();
         store.goLive();
@@ -203,11 +212,12 @@ export default function ModeratorView() {
       // 2. Clear Output controls
       if (
         matchesShortcut(e, mappings?.clearOutput) ||
-        e.key === 'F7' || 
+        (mappings?.clearOutput === 'F7' && e.key === 'F7') ||
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'c' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "");
+        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
+        store.toggleClear(targetId);
         return;
       }
 
@@ -215,8 +225,8 @@ export default function ModeratorView() {
       if (
         matchesShortcut(e, mappings?.nextSlide) ||
         (shortcutSettings?.arrowControlsLive && e.key === 'ArrowDown') ||
-        e.key === 'PageDown' ||
-        (shortcutSettings?.spacebarAdvancesLive && e.key === ' ')
+        (shortcutSettings?.spacebarAdvancesLive && (e.key === ' ' || e.key === 'Space')) ||
+        e.key === 'PageDown'
       ) {
         e.preventDefault();
         store.goLiveNext();
@@ -237,7 +247,7 @@ export default function ModeratorView() {
       // 5. Schedule Navigation (Next / Previous Item)
       if (
         matchesShortcut(e, mappings?.nextItem) ||
-        (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n')
+        (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === 'n' || e.key === 'ArrowRight'))
       ) {
         e.preventDefault();
         store.goNextScheduleItem();
@@ -245,7 +255,7 @@ export default function ModeratorView() {
       }
       if (
         matchesShortcut(e, mappings?.previousItem) ||
-        (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'p')
+        (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === 'p' || e.key === 'ArrowLeft'))
       ) {
         e.preventDefault();
         store.goPrevScheduleItem();
@@ -255,23 +265,24 @@ export default function ModeratorView() {
       // 6. Screen Mute Controls (Blackout / Logo)
       if (
         matchesShortcut(e, mappings?.blackout) ||
-        e.key === 'F6' || 
+        (mappings?.blackout === 'F6' && e.key === 'F6') ||
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'b' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "");
+        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
+        store.toggleBlack(targetId);
         return;
       }
       if (
         matchesShortcut(e, mappings?.logo) ||
-        e.key === 'F8' || 
+        (mappings?.logo === 'F8' && e.key === 'F8') ||
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'l' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "");
+        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
+        store.toggleLogo(targetId);
         return;
       }
-
 
       // Slide Annotation Shortcuts
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
@@ -304,13 +315,15 @@ export default function ModeratorView() {
         setIsQuickSearchOpen(true);
         return;
       }
-      // 6. Escape Key (Restore normal presentation or close popups)
+
+      // Escape Key (Restore normal presentation or close popups)
       if (e.key === 'Escape') {
         const activeGroup = store.activeControlGroupId ? store.groupStates[store.activeControlGroupId] : null;
         if (activeGroup && (activeGroup.isBlack || activeGroup.isClear || activeGroup.showLogo)) {
-          if (activeGroup.isBlack) store.toggleBlack(store.activeControlGroupId || store.outputGroups[0]?.id || "");
-          if (activeGroup.isClear) store.toggleClear(store.activeControlGroupId || store.outputGroups[0]?.id || "");
-          if (activeGroup.showLogo) store.toggleLogo(store.activeControlGroupId || store.outputGroups[0]?.id || "");
+          const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
+          if (activeGroup.isBlack) store.toggleBlack(targetId);
+          if (activeGroup.isClear) store.toggleClear(targetId);
+          if (activeGroup.showLogo) store.toggleLogo(targetId);
         }
         setIsShortcutsOpen(false);
         setIsQuickSearchOpen(false);
@@ -320,13 +333,12 @@ export default function ModeratorView() {
       }
 
       // 7. Numeric Direct Verse Jump (1-9)
-      if (shortcutSettings?.numericQuickJump && ['1','2','3','4','5','6','7','8','9'].includes(e.key)) {
+      if (shortcutSettings?.numericQuickJump && ['1','2','3','4','5','6','7','8','9'].includes(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const num = parseInt(e.key, 10);
-        if (store.activeControlGroupId) {
-          e.preventDefault();
-          store.setStagedGroupState(store.activeControlGroupId, { activeSlideIndex: num - 1 });
-          window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Jumped to Slide #${num}` }));
-        }
+        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
+        e.preventDefault();
+        store.goLiveSlide(num - 1, targetId);
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Jumped directly to Slide / Verse #${num}` }));
         return;
       }
 
@@ -355,7 +367,7 @@ export default function ModeratorView() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store, shortcutSettings]);
+  }, [store, shortcutSettings, isShortcutsOpen]);
 
   return (
     <div className="enterprise-workspace bg-[#141519] text-gray-200 overflow-hidden font-sans select-none relative">

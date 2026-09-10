@@ -129,9 +129,9 @@ export function buildRenderFrame(
   const isSongContent = activeItem.type === 'song';
   const isBibleContent = activeItem.type === 'bible';
 
-  const effectiveMargins = isSongContent && songOpts?.margins && (songOpts.margins.left || songOpts.margins.top || songOpts.margins.right || songOpts.margins.bottom)
+  const effectiveMargins = isSongContent && songOpts?.margins
     ? songOpts.margins
-    : isBibleContent && scriptureOpts?.margins && (scriptureOpts.margins.left || scriptureOpts.margins.top || scriptureOpts.margins.right || scriptureOpts.margins.bottom)
+    : isBibleContent && scriptureOpts?.margins
     ? scriptureOpts.margins
     : res.margins;
   
@@ -168,8 +168,8 @@ export function buildRenderFrame(
     : (activeItem.type === 'bible' && scriptureOpts?.scriptureFont?.casing === 'uppercase');
 
   const spacing = activeItem.type === 'song'
-    ? (songOpts?.songFont?.lineSpacing || songOpts?.lineSpacing || 1.35)
-    : (activeItem.type === 'bible' ? (scriptureOpts?.scriptureFont?.lineSpacing || scriptureOpts?.lineSpacing || 1.35) : 1.35);
+    ? (songOpts?.songFont?.lineSpacing ?? songOpts?.lineSpacing ?? 1.35)
+    : (activeItem.type === 'bible' ? (scriptureOpts?.scriptureFont?.lineSpacing ?? scriptureOpts?.lineSpacing ?? 1.35) : 1.35);
 
   const baseSize = ThemeEngine.normalizeFontSize(resolvedStyles.fontSize);
 
@@ -187,7 +187,7 @@ export function buildRenderFrame(
         hasHeader,
         hasFooter,
         scale: 1,
-        minFontSize: activeItem.type === 'song' ? (songOpts?.minFontSize || 32) : (activeItem.type === 'bible' ? (scriptureOpts?.minFontSize || 32) : 24),
+        minFontSize: activeItem.type === 'song' ? (songOpts?.minFontSize ?? 24) : (activeItem.type === 'bible' ? (scriptureOpts?.minFontSize ?? 24) : 24),
         maxFontSize: baseSize,
         containerWidth: res.width,
         containerHeight: res.height,

@@ -144,9 +144,12 @@ class GpuDiagnosticsEngine {
           isSoftwareRendering = true;
         }
 
-        // 2. Canvas 2D Acceleration Check
+        // 2. Canvas 2D Acceleration Check (using an independent 2D canvas to avoid WebGL context collision)
         try {
-          const ctx2d = canvas.getContext('2d');
+          const canvas2d = document.createElement('canvas');
+          canvas2d.width = 16;
+          canvas2d.height = 16;
+          const ctx2d = canvas2d.getContext('2d', { willReadFrequently: false });
           if (ctx2d && !isSoftwareRendering && webglStatus !== 'Disabled / Unsupported') {
             canvasAccelerationStatus = 'GPU Accelerated';
           } else {

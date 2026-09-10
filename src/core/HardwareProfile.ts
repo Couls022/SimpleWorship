@@ -102,7 +102,7 @@ class HardwareProfileManager {
       console.warn('[HardwareProfile] GPU Diagnostics engine error:', e);
     }
 
-    // 3. Device Memory & JS Heap Detection (Browser & Electron fallback)
+    // 3. Device Memory & JS Heap Detection (Browser, Backend Bridge & Electron fallback)
     if ((navigator as any)?.deviceMemory) {
       const devMemGb = (navigator as any).deviceMemory;
       if (totalRamMb === 8192) {
@@ -111,6 +111,29 @@ class HardwareProfileManager {
         usedRamMb = Math.round(totalRamMb * 0.5);
       }
     }
+
+    // Attempt to query real host server hardware specs if running in browser
+    try {
+      if (typeof fetch !== 'undefined') {
+        const sysRes = await fetch('/api/system/status', { cache: 'no-cache' }).catch(() => null);
+        if (sysRes && sysRes.ok) {
+          const sysData = await sysRes.json();
+          if (sysData?.hardware) {
+            if (sysData.hardware.totalRamMb && totalRamMb <= 8192) {
+              totalRamMb = sysData.hardware.totalRamMb;
+              freeRamMb = sysData.hardware.freeRamMb || Math.round(totalRamMb * 0.4);
+              usedRamMb = totalRamMb - freeRamMb;
+            }
+            if (sysData.hardware.cpuModel && (cpuModel === 'Standard CPU' || !cpuModel)) {
+              cpuModel = sysData.hardware.cpuModel;
+            }
+            if (sysData.hardware.cpuCores && cpuCores <= 4) {
+              cpuCores = sysData.hardware.cpuCores;
+            }
+          }
+        }
+      }
+    } catch {}
 
     if (typeof performance !== 'undefined' && (performance as any).memory) {
       const mem = (performance as any).memory;
@@ -121,15 +144,23 @@ class HardwareProfileManager {
 
     // 4. Calculate Hardware Tier based on CPU, RAM, & GPU capability
     let tier: HardwareTier = 'high';
-    const isSwiftShader = gpuRenderer.toLowerCase().includes('swiftshader') || gpuRenderer.toLowerCase().includes('software');
+    const isSwiftShader = gpuRenderer.toLowerCase().includes('swiftshader') || gpuRenderer.toLowerCase().includes('software') || gpuRenderer.toLowerCase().includes('llvmpipe');
     const isIntelIntegrated = gpuRenderer.toLowerCase().includes('intel') && !gpuRenderer.toLowerCase().includes('arc');
+    const hasDedicatedGpu = /nvidia|geforce|radeon|rtx|gtx|quadro|amd|apple|m1|m2|m3|m4|arc/i.test(gpuRenderer);
 
-    if (totalRamMb < 4500 || cpuCores <= 2 || isSwiftShader) {
+    // Adjust total RAM estimate if browser clamped deviceMemory for privacy
+    if ((hasDedicatedGpu || cpuCores >= 8) && totalRamMb < 8192) {
+      totalRamMb = 8192;
+      freeRamMb = Math.round(totalRamMb * 0.55);
+      usedRamMb = totalRamMb - freeRamMb;
+    }
+
+    if (isSwiftShader || (cpuCores <= 2 && totalRamMb < 3000 && !hasDedicatedGpu)) {
       tier = 'eco'; // Low-spec laptop or software-only rasterization
-    } else if (totalRamMb < 12000 || cpuCores <= 4 || isIntelIntegrated) {
-      tier = 'medium'; // Standard office/church laptop with integrated graphics
+    } else if (hasDedicatedGpu || cpuCores >= 8 || (totalRamMb >= 8000 && !isIntelIntegrated)) {
+      tier = 'high'; // Dedicated NVIDIA/AMD GPU or high-performance 8+ thread multi-core CPU
     } else {
-      tier = 'high'; // High-performance desktop or laptop with dedicated NVIDIA/AMD GPU
+      tier = 'medium'; // Standard office/church laptop with integrated graphics
     }
 
     // 5. Automatically tune system components and GPU acceleration according to detected hardware

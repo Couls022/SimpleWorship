@@ -66,7 +66,22 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  // Dynamically match user-configured slide label from Options -> Slide Labels
+  const matchedSlideLabel = React.useMemo(() => {
+    if (!isSong || !systemOptions?.slideLabels?.length) return null;
+    const titleUpper = (slide.title || liveItem?.name || '').toUpperCase().trim();
+    for (const label of systemOptions.slideLabels) {
+      const nameUpper = (label.name || '').toUpperCase().trim();
+      if (!nameUpper || nameUpper === '<EMPTY>' || nameUpper === '<OTHER>') continue;
+      if (titleUpper === nameUpper || titleUpper.startsWith(nameUpper) || titleUpper.includes(nameUpper)) {
+        return label;
+      }
+    }
+    return null;
+  }, [isSong, slide.title, liveItem?.name, systemOptions?.slideLabels]);
+
   const getHeaderColor = () => {
+    if (matchedSlideLabel) return '';
     if (isScripture) return 'bg-[#5f171d] text-rose-100 border-rose-900/60';
     if (isAudio) return 'bg-[#2a1b42] text-purple-200 border-purple-800/60';
     if (isVideo) return 'bg-[#14263e] text-cyan-200 border-cyan-800/60';
@@ -124,9 +139,12 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
       {/* Main Slide Card Area */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Card Header Bar */}
-        <div className={`${
-          viewMode === 'large' ? 'px-2.5 py-1 text-xs' : viewMode === 'small' || viewMode === 'summary' ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'
-        } font-bold truncate border-b flex items-center justify-between gap-1.5 ${getHeaderColor()}`}>
+        <div 
+          style={matchedSlideLabel ? { backgroundColor: matchedSlideLabel.bgColor, color: matchedSlideLabel.textColor, borderColor: 'rgba(0,0,0,0.3)' } : undefined}
+          className={`${
+            viewMode === 'large' ? 'px-2.5 py-1 text-xs' : viewMode === 'small' || viewMode === 'summary' ? 'px-2 py-0.5 text-[10px]' : 'px-2 py-1 text-[11px]'
+          } font-bold truncate border-b flex items-center justify-between gap-1.5 ${getHeaderColor()}`}
+        >
           <div className="flex items-center gap-1.5 truncate min-w-0">
             {viewMode === 'summary' && (
               <span className="text-gray-400 font-mono shrink-0">{idx + 1}.</span>
@@ -137,6 +155,11 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                 : (slide.title || liveItem?.name || `Slide ${idx + 1}`)
               }
             </span>
+            {matchedSlideLabel?.shortcut && (
+              <span className="opacity-75 font-mono text-[9px] px-1 py-0.2 rounded bg-black/30 shrink-0">
+                {matchedSlideLabel.shortcut}
+              </span>
+            )}
           </div>
 
           {/* Slide Transition Badge */}
@@ -168,7 +191,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
 
         {/* Card Body */}
         {viewMode !== 'summary' && (
-          <div className="bg-[#17191f] relative overflow-hidden flex-1">
+          <div className="bg-[#17191f] relative overflow-hidden flex-1 keep-dark">
             {/* Visual Media Layouts */}
             {isImage ? (
               <div className="w-full aspect-video min-h-[100px] max-h-56 bg-black/90 relative flex items-center justify-center overflow-hidden">
@@ -278,7 +301,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
               <div 
                 className={`${
                   viewMode === 'large' ? 'p-3 text-sm min-h-[64px]' : viewMode === 'small' ? 'p-1.5 text-[10px] min-h-[32px]' : 'p-2 text-[11px] min-h-[48px]'
-                } leading-relaxed font-sans whitespace-pre-line bg-[#1c1e24] relative overflow-hidden`}
+                } leading-relaxed font-sans whitespace-pre-line bg-[#1c1e24] relative overflow-hidden keep-dark`}
               >
                 {/* Background image or video preview overlay */}
                 {resolvedStyles.backgroundType === 'video' && (resolvedStyles.backgroundVideoUrl || slide.backgroundUrl || liveItem?.customBackgroundUrl) ? (

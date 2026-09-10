@@ -111,28 +111,41 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
           }}
         >
           {isBible && activeSlide.verses && activeSlide.verses.length > 0 ? (
-            activeSlide.verses.map((v, idx) => (
-              <span key={v.verse} className="inline">
-                {(scriptureOpts?.showVerseNumbers ?? true) && (
-                  <span 
-                    className="inline-block mr-3 select-none transition-colors"
-                    style={{ 
-                      ...verseCss,
-                      color: scriptureOpts?.verseLabelColor || verseThemeStyles?.fontColor || scriptureOpts?.verseFont?.color || scriptureOpts?.verseColor || '#F6E05E',
-                      fontFamily: verseThemeStyles?.fontFamily || scriptureOpts?.verseFont?.family || scriptureOpts?.scriptureFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
-                      fontSize: verseThemeStyles?.fontSize ? `${verseThemeStyles.fontSize}px` : `${Math.max(14, autoFitFontSize * 0.85)}px`,
-                      fontWeight: verseThemeStyles?.fontWeight || (scriptureOpts?.verseFont?.bold ? '700' : '400'),
-                      fontStyle: verseThemeStyles?.fontStyle || (scriptureOpts?.verseFont?.italic ? 'italic' : 'normal'),
-                      textDecoration: verseThemeStyles?.textDecoration || (scriptureOpts?.verseFont?.underline ? 'underline' : 'none'),
-                    }}
-                  >
-                    {formatVerseNumber(v.verse, scriptureOpts?.verseNumberStyle)}
-                  </span>
-                )}
-                <span>{v.text}</span>
-                {idx < activeSlide.verses!.length - 1 && '  '}
-              </span>
-            ))
+            activeSlide.verses.map((v, idx) => {
+              const verseNumStyle = scriptureOpts?.verseNumberStyle || 'superscript';
+              const isSuper = verseNumStyle === 'superscript';
+              const labelColor = scriptureOpts?.verseFont?.color || scriptureOpts?.verseLabelColor || scriptureOpts?.verseColor || verseThemeStyles?.fontColor || '#F6E05E';
+              const showNums = scriptureOpts?.showVerseNumbers ?? true;
+
+              return (
+                <span key={v.verse} className="inline">
+                  {showNums && (
+                    <span 
+                      className={`inline-block select-none transition-colors ${isSuper ? 'mr-1.5 align-super' : 'mr-2.5'}`}
+                      style={{ 
+                        ...verseCss,
+                        color: labelColor,
+                        fontFamily: verseThemeStyles?.fontFamily || scriptureOpts?.verseFont?.family || scriptureOpts?.scriptureFont?.family || resolvedStyles.fontFamily || 'Tahoma, sans-serif',
+                        fontSize: verseThemeStyles?.fontSize 
+                          ? `${verseThemeStyles.fontSize}px` 
+                          : isSuper 
+                            ? `${Math.max(12, Math.round(autoFitFontSize * 0.72))}px` 
+                            : `${Math.max(14, Math.round(autoFitFontSize * 0.85))}px`,
+                        fontWeight: verseThemeStyles?.fontWeight || (scriptureOpts?.verseFont?.bold ? '700' : '400'),
+                        fontStyle: verseThemeStyles?.fontStyle || (scriptureOpts?.verseFont?.italic ? 'italic' : 'normal'),
+                        textDecoration: verseThemeStyles?.textDecoration || (scriptureOpts?.verseFont?.underline ? 'underline' : 'none'),
+                        verticalAlign: isSuper ? 'super' : 'baseline',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {formatVerseNumber(v.verse, verseNumStyle)}
+                    </span>
+                  )}
+                  <span>{v.text}</span>
+                  {idx < activeSlide.verses!.length - 1 && '  '}
+                </span>
+              );
+            })
           ) : (
             activeSlide.text
           )}

@@ -75,7 +75,16 @@ export async function forceSyncNow(): Promise<{ success: boolean; latency: numbe
   };
 }
 
-function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {
+// Global listener for all broadcast events sent across windows
+if (typeof window !== 'undefined') {
+  window.addEventListener('simpleworship:broadcast-sent', () => {
+    syncTelemetry.lastBroadcastTime = Date.now();
+    syncTelemetry.messageCount++;
+    window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
+  });
+}
+
+export function executeRemoteCommandLocally(cmd: { action: string; params?: any }) {
   const store = useStore.getState();
   syncTelemetry.lastCommandReceived = `${cmd.action} @ ${new Date().toLocaleTimeString()}`;
   
@@ -415,7 +424,16 @@ export function initSync(isProjector: boolean = false) {
       }
     };
 
+    activeRunPoll = runPoll;
     pollTimer = setTimeout(runPoll, 1500);
+  }
+}
+
+let activeRunPoll: (() => Promise<void>) | null = null;
+
+export async function triggerSyncPollNow() {
+  if (activeRunPoll) {
+    await activeRunPoll();
   }
 }
 

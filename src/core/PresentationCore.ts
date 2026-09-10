@@ -48,6 +48,159 @@ export class PresentationCore {
 
   private static slideCache = new Map<string, { cacheKey: string; slides: Slide[] }>();
 
+  public static getSlideCacheSize(): number {
+    return PresentationCore.slideCache.size;
+  }
+
+  public static clearSlideCache(): number {
+    const count = PresentationCore.slideCache.size;
+    PresentationCore.slideCache.clear();
+    return count;
+  }
+
+  /**
+   * Intelligently splits a song section (verse, chorus, bridge, etc.) into separate slides
+   * if it exceeds maxLinesPerSlide or character capacity, preventing text cramping/overflow ("hindi nag sasagat").
+   */
+  public static splitSongSection(
+    rawTitle: string,
+    rawText: string,
+    slideIdPrefix: string,
+    backgroundUrl: string | undefined,
+    songOpts?: SystemOptions['mainOutput']['song']
+  ): Slide[] {
+    const breakOnNewVerse = songOpts?.breakOnNewVerse ?? true;
+    const automaticallyFlow = songOpts?.automaticallyFlow ?? true;
+    const maxLines = Math.max(1, songOpts?.maxLinesPerSlide ?? 4);
+    const splitLongSections = songOpts?.splitLongSections ?? true;
+    const splitLabelStyle = songOpts?.splitLabelStyle ?? 'part';
+
+    // If breakOnNewVerse is true and the section has multiple stanzas separated by blank lines
+    // e.g. "Line 1\nLine 2\n\nLine 3\nLine 4"
+    const stanzas = breakOnNewVerse
+      ? (rawText || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
+      : [(rawText || '').trim()];
+
+    const resultSlides: Slide[] = [];
+
+    stanzas.forEach((stanzaText, stanzaIdx) => {
+      let stanzaTitle = rawTitle || 'Verse 1';
+      if (stanzas.length > 1) {
+        const numMatch = (rawTitle || '').match(/^(.*?)\s*(\d+)$/);
+        if (numMatch) {
+          const baseName = numMatch[1].trim();
+          const startNum = parseInt(numMatch[2], 10);
+          stanzaTitle = `${baseName} ${startNum + stanzaIdx}`;
+        } else {
+          stanzaTitle = `${rawTitle || 'Verse'} ${stanzaIdx + 1}`;
+        }
+      }
+
+      if (!automaticallyFlow) {
+        // No auto-flow: keep whole stanza on one slide
+        resultSlides.push({
+          id: `${slideIdPrefix}-${resultSlides.length}`,
+          title: stanzaTitle,
+          text: stanzaText,
+          backgroundUrl,
+        });
+        return;
+      }
+
+      // Split stanza into lines
+      const rawLines = stanzaText.split('\n').map(l => l.trim()).filter(Boolean);
+      
+      // If stanza has very few lines but any line is exceptionally long (> 120 chars), wrap them
+      const lines: string[] = [];
+      for (const line of rawLines) {
+        if (line.length > 120) {
+          const half = Math.floor(line.length / 2);
+          const spaceIdx = line.indexOf(' ', half);
+          if (spaceIdx !== -1 && spaceIdx < line.length - 20) {
+            lines.push(line.slice(0, spaceIdx).trim());
+            lines.push(line.slice(spaceIdx).trim());
+          } else {
+            lines.push(line);
+          }
+        } else {
+          lines.push(line);
+        }
+      }
+
+      // If line count <= maxLines and text is not overly dense (< 280 chars), keep as single slide
+      if (lines.length <= maxLines && stanzaText.length < 280) {
+        resultSlides.push({
+          id: `${slideIdPrefix}-${resultSlides.length}`,
+          title: stanzaTitle,
+          text: lines.join('\n'),
+          backgroundUrl,
+        });
+        return;
+      }
+
+      // Chunk lines with maxLines limit
+      const lineChunks: string[][] = [];
+      let currentChunk: string[] = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        currentChunk.push(lines[i]);
+        if (currentChunk.length >= maxLines) {
+          lineChunks.push(currentChunk);
+          currentChunk = [];
+        }
+      }
+      if (currentChunk.length > 0) {
+        lineChunks.push(currentChunk);
+      }
+
+      // Orphan line prevention: If last chunk has only 1 line and previous chunk has >= 3 lines,
+      // balance them (e.g. 4 + 1 -> 3 + 2, or 6 + 1 -> 4 + 3)
+      if (lineChunks.length >= 2) {
+        const lastIdx = lineChunks.length - 1;
+        if (lineChunks[lastIdx].length === 1 && lineChunks[lastIdx - 1].length >= 3) {
+          const popped = lineChunks[lastIdx - 1].pop();
+          if (popped) {
+            lineChunks[lastIdx].unshift(popped);
+          }
+        }
+      }
+
+      // Generate slides from chunks
+      lineChunks.forEach((chunk, chunkIdx) => {
+        let slideTitle = stanzaTitle;
+        if (splitLongSections && lineChunks.length > 1) {
+          if (splitLabelStyle === 'alpha') {
+            const letter = String.fromCharCode(97 + chunkIdx); // a, b, c...
+            slideTitle = `${stanzaTitle}${letter}`;
+          } else if (splitLabelStyle === 'numeric') {
+            slideTitle = `${stanzaTitle}.${chunkIdx + 1}`;
+          } else if (splitLabelStyle === 'same') {
+            slideTitle = stanzaTitle;
+          } else {
+            // 'part' default
+            slideTitle = `${stanzaTitle} (Part ${chunkIdx + 1})`;
+          }
+        }
+
+        resultSlides.push({
+          id: `${slideIdPrefix}-${resultSlides.length}`,
+          title: slideTitle,
+          text: chunk.join('\n'),
+          backgroundUrl,
+        });
+      });
+    });
+
+    return resultSlides.length > 0
+      ? resultSlides
+      : [{
+          id: `${slideIdPrefix}-0`,
+          title: rawTitle || 'Verse 1',
+          text: rawText,
+          backgroundUrl,
+        }];
+  }
+
   // Generates slides for a presentation item
   static generateSlides(
     item: PresentationItem, 
@@ -67,53 +220,63 @@ export class PresentationCore {
     let generated: Slide[] = [];
 
     if (item.type === 'song') {
+      const songOpts = systemOptions?.mainOutput?.song;
       // Check if inline data exists
       if (item.data && item.data.sections && item.data.sections.length > 0) {
-        generated = item.data.sections.map((sec: any, idx: number) => ({
-          id: sec.id || `slide-${idx}`,
-          title: sec.name,
-          text: sec.text,
-          backgroundUrl: item.customBackgroundUrl,
-        }));
+        generated = item.data.sections.flatMap((sec: any, idx: number) =>
+          PresentationCore.splitSongSection(
+            sec.name || sec.title || `Verse ${idx + 1}`,
+            sec.text || sec.lyrics || sec.content || '',
+            sec.id || `slide-${idx}`,
+            item.customBackgroundUrl,
+            songOpts
+          )
+        );
       } else {
         // Check if we can find song in library
         const matchedSong = availableSongs.find(s => s.id === item.contentId || s.title.toLowerCase() === item.name.toLowerCase());
         if (matchedSong) {
           if (matchedSong.sections && matchedSong.sections.length > 0) {
-            generated = matchedSong.sections.map((sec, idx) => ({
-              id: sec.id || `s-${idx}`,
-              title: sec.name,
-              text: sec.text,
-              backgroundUrl: item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
-            }));
+            generated = matchedSong.sections.flatMap((sec: any, idx) =>
+              PresentationCore.splitSongSection(
+                sec.name || sec.title || `Verse ${idx + 1}`,
+                sec.text || sec.lyrics || sec.content || '',
+                sec.id || `s-${idx}`,
+                item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+                songOpts
+              )
+            );
           } else if (matchedSong.lyrics) {
             const blocks = matchedSong.lyrics.split(/\n\s*\n/).filter(b => b.trim().length > 0);
-            generated = blocks.map((block, idx) => {
+            generated = blocks.flatMap((block, idx) => {
               const match = block.match(/^\[(.*?)\]\n?([\s\S]*)$/);
-              if (match) {
-                return {
-                  id: `s-${idx}`,
-                  title: match[1],
-                  text: match[2].trim(),
-                  backgroundUrl: item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
-                };
-              }
-              return {
-                id: `s-${idx}`,
-                title: `Verse ${idx + 1}`,
-                text: block.trim(),
-                backgroundUrl: item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
-              };
+              const title = match ? match[1] : `Verse ${idx + 1}`;
+              const text = match ? match[2].trim() : block.trim();
+              return PresentationCore.splitSongSection(
+                title,
+                text,
+                `s-${idx}`,
+                item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+                songOpts
+              );
             });
           } else {
-            generated = [
-              { id: 's1', title: 'Verse 1', text: item.name, backgroundUrl: item.customBackgroundUrl }
-            ];
+            generated = PresentationCore.splitSongSection(
+              'Verse 1',
+              item.name,
+              's1',
+              item.customBackgroundUrl,
+              songOpts
+            );
           }
         } else {
-          generated = [
-            { id: 's1', title: 'Verse 1', text: item.name, backgroundUrl: item.customBackgroundUrl }
-          ];
+          generated = PresentationCore.splitSongSection(
+            'Verse 1',
+            item.name,
+            's1',
+            item.customBackgroundUrl,
+            songOpts
+          );
         }
       }
     } else if (item.type === 'bible') {

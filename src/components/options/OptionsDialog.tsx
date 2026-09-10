@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { dbApi } from '../../db';
+import { defaultSystemOptions } from '../../db/defaultOptions';
 import { SystemOptions, FontStyleOptions, SlideLabelConfig } from '../../types';
 import { applyAppearanceSettings } from '../../utils/themeManager';
 import { useScreens } from '../../hooks/useScreens';
@@ -436,7 +437,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-3 animate-in fade-in duration-150">
-      <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[620px] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100">
+      <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[620px] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100 keep-dark">
         
         {/* Title Bar */}
         <div className="h-9 bg-[#1c1e24] border-b border-[#303440] flex items-center justify-between px-3 shrink-0">
@@ -476,11 +477,10 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
           {/* Right Configuration Panel */}
           <div className="flex-1 flex flex-col bg-[#20222a] overflow-hidden">
             
-            {/* Top Tabs (if Main Output, Alternate Output, or Foldback) */}
-            {(activeCategory === 'Main Output' || activeCategory === 'Alternate Output' || activeCategory === 'Foldback') && (
+            {/* Contextual Top Tabs or Category Sub-header */}
+            {activeCategory === 'Main Output' ? (
               <div className="h-8 bg-[#181a20] border-b border-[#303440] flex items-center px-2 shrink-0 space-x-1">
                 {outputTabs.map((tab) => {
-                  if (activeCategory === 'Foldback' && tab === 'Transitions') return null;
                   const label = tab === 'Song' ? 'Songs' : tab === 'Scripture' ? 'Scriptures' : tab;
                   return (
                     <button
@@ -496,6 +496,25 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     </button>
                   );
                 })}
+              </div>
+            ) : (
+              <div className="h-8 bg-[#181a20] border-b border-[#303440] flex items-center justify-between px-3 shrink-0">
+                <span className="font-semibold text-xs text-gray-200">
+                  {activeCategory === 'Alternate Output' && 'Alternate Output Configuration (Foyer, Overflow & Stream)'}
+                  {activeCategory === 'Foldback' && 'Foldback Stage Display Configuration (Confidence Monitor)'}
+                  {activeCategory === 'Service Intervals' && 'Service Interval Timers & Stage Countdowns'}
+                  {activeCategory === 'Slide Labels' && 'Slide Label Badges & Navigation Shortcuts'}
+                  {activeCategory === 'Appearance' && 'UI Theme, Accent Color & Display Scaling'}
+                  {activeCategory === 'Advanced' && 'Advanced System Settings & Database Maintenance'}
+                </span>
+                <span className="text-[10px] text-gray-400 font-mono">
+                  {activeCategory === 'Alternate Output' && 'Independent Feed'}
+                  {activeCategory === 'Foldback' && 'Stage Feed'}
+                  {activeCategory === 'Service Intervals' && 'Clock & Countdown'}
+                  {activeCategory === 'Slide Labels' && 'Tag Routing'}
+                  {activeCategory === 'Appearance' && 'Customization'}
+                  {activeCategory === 'Advanced' && 'Engine'}
+                </span>
               </div>
             )}
 
@@ -780,6 +799,132 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Church / Ministry Logo Configuration */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-1.5">
+                      <span className="text-gray-300 font-bold">Church / Ministry Logo Watermark</span>
+                      <span className="text-[10px] text-gray-400">Used during Logo mode and standby screens</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {/* Logo Preview */}
+                      <div className="w-16 h-16 rounded bg-black/60 border border-[#3b404d] flex items-center justify-center overflow-hidden shrink-0">
+                        {localOptions.mainOutput.general.logoUrl ? (
+                          <img
+                            src={localOptions.mainOutput.general.logoUrl}
+                            alt="Logo preview"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-gray-500 font-mono text-center px-1">No Logo</span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 space-y-2 text-[11px]">
+                        <div>
+                          <label className="text-gray-400 block mb-1">Logo Image URL / Preset:</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={localOptions.mainOutput.general.logoUrl || ''}
+                              onChange={(e) => updateMainGeneral({ logoUrl: e.target.value })}
+                              placeholder="https://... or choose preset"
+                              className="flex-1 bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white outline-none focus:border-cyan-500"
+                            />
+                            <label className="px-2.5 py-1 bg-[#252833] hover:bg-[#323746] text-gray-200 rounded border border-[#3e4456] cursor-pointer shrink-0">
+                              <span>Upload File</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => {
+                                      if (ev.target?.result) {
+                                        updateMainGeneral({ logoUrl: ev.target.result as string });
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400">Presets:</span>
+                          <button
+                            type="button"
+                            onClick={() => updateMainGeneral({ logoUrl: 'https://images.unsplash.com/photo-1544427920-c49ccfb85579?auto=format&fit=crop&w=400&q=80' })}
+                            className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
+                          >
+                            Cross
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateMainGeneral({ logoUrl: 'https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=400&q=80' })}
+                            className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
+                          >
+                            Dove
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateMainGeneral({ logoUrl: '' })}
+                            className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-rose-300 border border-[#383c4b]"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-300 pt-1 text-[11px]">
+                      <input
+                        type="checkbox"
+                        checked={localOptions.mainOutput.general.disableLogoOnLive ?? true}
+                        onChange={(e) => updateMainGeneral({ disableLogoOnLive: e.target.checked })}
+                        className="rounded accent-blue-500"
+                      />
+                      <span>Automatically hide logo watermark when live slide is presenting</span>
+                    </label>
+                  </div>
+
+                  {/* Broadcast & Video Switcher Alpha Keying Mode */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-1.5">
+                      <span className="text-gray-300 font-bold">Video Switcher & Alpha Keying Mode</span>
+                      <span className="text-[10px] text-cyan-400 font-mono">ATEM / vMix / OBS Feed</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                      <div>
+                        <label className="text-gray-400 block mb-1">Keying Method:</label>
+                        <select
+                          value={localOptions.mainOutput.general.alphaKeyingMode || 'none'}
+                          onChange={(e) => updateMainGeneral({ alphaKeyingMode: e.target.value as any })}
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-white"
+                        >
+                          <option value="none">None (Standard Solid Presentation)</option>
+                          <option value="key">Luma Key (Black Background for Downstream Keyer)</option>
+                          <option value="ndi">NDI Alpha Channel (Direct Broadcast Overlay)</option>
+                          <option value="transparent">Transparent Canvas (OBS / Browser Source)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center text-[11px] text-gray-400 bg-black/40 p-2 rounded border border-[#2b2e38]">
+                        <span>
+                          {localOptions.mainOutput.general.alphaKeyingMode === 'key' && 'Luma Key: Background is forced to pure black (#000000) for hardware switchers.'}
+                          {localOptions.mainOutput.general.alphaKeyingMode === 'ndi' && 'NDI Alpha: Output retains 32-bit RGBA transparency for direct network streaming.'}
+                          {localOptions.mainOutput.general.alphaKeyingMode === 'transparent' && 'Transparent: No solid background is rendered; overlays clean text on camera feeds.'}
+                          {(!localOptions.mainOutput.general.alphaKeyingMode || localOptions.mainOutput.general.alphaKeyingMode === 'none') && 'Standard: Renders slides with full backgrounds, media textures, and colors.'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -831,14 +976,23 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <div className="flex items-center gap-1.5">
                         <span className="text-gray-400">Line Height:</span>
                         <select
-                          value={localOptions.mainOutput.song.lineSpacing || 1.25}
-                          onChange={(e) => updateMainSong({ lineSpacing: parseFloat(e.target.value) })}
+                          value={localOptions.mainOutput.song.lineSpacing || 1.15}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            updateMainSong({
+                              lineSpacing: val,
+                              songFont: {
+                                ...localOptions.mainOutput.song.songFont,
+                                lineSpacing: val
+                              }
+                            });
+                          }}
                           className="bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-gray-200 text-xs focus:border-blue-500 outline-none"
                         >
                           <option value="1.0">1.0 (Tight)</option>
                           <option value="1.15">1.15 (Compact)</option>
                           <option value="1.25">1.25 (Standard)</option>
-                          <option value="1.4">1.4 (Spacious)</option>
+                          <option value="1.35">1.35 (Worship Slide Standard)</option>
                           <option value="1.5">1.5 (Relaxed)</option>
                         </select>
                       </div>
@@ -850,8 +1004,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           type="number"
                           min="16"
                           max="90"
-                          value={localOptions.mainOutput.song.minFontSize || 32}
-                          onChange={(e) => updateMainSong({ minFontSize: parseInt(e.target.value) || 32 })}
+                          value={localOptions.mainOutput.song.minFontSize ?? 24}
+                          onChange={(e) => updateMainSong({ minFontSize: parseInt(e.target.value) || 24 })}
                           className="w-16 bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-gray-200 text-xs focus:border-blue-500 outline-none text-center"
                         />
                         <span className="text-gray-500">pt</span>
@@ -1128,8 +1282,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                               type="number"
                               min="16"
                               max="90"
-                              value={localOptions.mainOutput.song.minFontSize || 32}
-                              onChange={(e) => updateMainSong({ minFontSize: parseInt(e.target.value) || 32 })}
+                              value={localOptions.mainOutput.song.minFontSize ?? 24}
+                              onChange={(e) => updateMainSong({ minFontSize: parseInt(e.target.value) || 24 })}
                               className="w-20 bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center focus:border-blue-500 outline-none"
                             />
                             <span className="text-gray-400">pt</span>
@@ -1139,8 +1293,17 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         <div>
                           <label className="text-gray-400 block mb-1">Line Spacing / Height:</label>
                           <select
-                            value={localOptions.mainOutput.song.lineSpacing || 1.35}
-                            onChange={(e) => updateMainSong({ lineSpacing: parseFloat(e.target.value) })}
+                            value={localOptions.mainOutput.song.lineSpacing || 1.15}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              updateMainSong({
+                                lineSpacing: val,
+                                songFont: {
+                                  ...localOptions.mainOutput.song.songFont,
+                                  lineSpacing: val
+                                }
+                              });
+                            }}
                             className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white focus:border-blue-500 outline-none"
                           >
                             <option value="1.0">1.0 (Tight)</option>
@@ -1149,6 +1312,65 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             <option value="1.35">1.35 (Worship Slide Standard)</option>
                             <option value="1.5">1.5 (Spacious)</option>
                           </select>
+                        </div>
+                      </div>
+
+                      {/* Verse & Chorus Auto-Break / Flow to Separate Slides */}
+                      <div className="space-y-2 pt-2 border-t border-[#252833]">
+                        <label className="flex items-center gap-2 cursor-pointer text-gray-200 hover:text-white text-xs">
+                          <input
+                            type="checkbox"
+                            checked={localOptions.mainOutput.song.breakOnNewVerse ?? true}
+                            onChange={(e) => updateMainSong({ breakOnNewVerse: e.target.checked })}
+                            className="rounded accent-blue-500 w-4 h-4 cursor-pointer"
+                          />
+                          <span className="font-medium">Break on new stanza (create a separate slide for each verse and chorus)</span>
+                        </label>
+
+                        <label className="flex items-center gap-2 cursor-pointer text-gray-200 hover:text-white text-xs">
+                          <input
+                            type="checkbox"
+                            checked={localOptions.mainOutput.song.automaticallyFlow ?? true}
+                            onChange={(e) => updateMainSong({ automaticallyFlow: e.target.checked })}
+                            className="rounded accent-blue-500 w-4 h-4 cursor-pointer"
+                          />
+                          <span className="font-medium">Automatically flow long verses/chorus to new slide (prevent text cramping)</span>
+                        </label>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6 pt-1 text-[11px]">
+                          <div>
+                            <label className="text-gray-400 block mb-1">Max lines per slide before auto-break:</label>
+                            <select
+                              value={localOptions.mainOutput.song.maxLinesPerSlide ?? 4}
+                              onChange={(e) => updateMainSong({ maxLinesPerSlide: parseInt(e.target.value) || 4 })}
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white focus:border-blue-500 outline-none"
+                            >
+                              <option value="2">2 Lines (Minimal / Broadcast Lower-Third)</option>
+                              <option value="3">3 Lines (Clean & Spacious)</option>
+                              <option value="4">4 Lines (Standard Worship Slide)</option>
+                              <option value="5">5 Lines (Comfortable)</option>
+                              <option value="6">6 Lines (Dense)</option>
+                              <option value="8">8 Lines (Maximum Capacity)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-gray-400 block mb-1">Split Verse/Chorus Label Format:</label>
+                            <select
+                              value={localOptions.mainOutput.song.splitLabelStyle || 'part'}
+                              onChange={(e) => updateMainSong({ splitLabelStyle: e.target.value as any, splitLongSections: true })}
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white focus:border-blue-500 outline-none"
+                            >
+                              <option value="part">Verse 1 (Part 1), Verse 1 (Part 2)</option>
+                              <option value="alpha">Verse 1a, Verse 1b</option>
+                              <option value="numeric">Verse 1.1, Verse 1.2</option>
+                              <option value="same">Keep Same Section Title (Verse 1)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="pl-6 text-[10px] text-cyan-400/90 leading-tight">
+                          Auto-break partitions long song verses or choruses into multiple balanced slides so projector text stays large and legible without bottoming out or overflowing.
                         </div>
                       </div>
                     </div>
@@ -1359,10 +1581,12 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           <div className="flex items-center gap-2">
                             <input
                               type="color"
-                              value={localOptions.mainOutput.scripture.verseFont?.color || '#F6E05E'}
+                              value={localOptions.mainOutput.scripture.verseFont?.color || localOptions.mainOutput.scripture.verseLabelColor || '#F6E05E'}
                               onChange={(e) => {
                                 const newColor = e.target.value;
                                 updateMainScripture({
+                                  verseLabelColor: newColor,
+                                  verseColor: newColor,
                                   verseFont: {
                                     ...localOptions.mainOutput.scripture.verseFont,
                                     color: newColor
@@ -1372,7 +1596,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                               className="w-8 h-7 rounded border border-[#3b404d] bg-transparent cursor-pointer"
                             />
                             <span className="font-mono text-xs text-yellow-300">
-                              {localOptions.mainOutput.scripture.verseFont?.color || '#F6E05E'}
+                              {localOptions.mainOutput.scripture.verseFont?.color || localOptions.mainOutput.scripture.verseLabelColor || '#F6E05E'}
                             </span>
                           </div>
                         </div>
@@ -1476,8 +1700,10 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           <label className="text-gray-400 block mb-1">Min Font Size (Auto-flow scale floor):</label>
                           <input
                             type="number"
-                            value={localOptions.mainOutput.scripture.minFontSize || 40}
-                            onChange={(e) => updateMainScripture({ minFontSize: Number(e.target.value) })}
+                            min="14"
+                            max="90"
+                            value={localOptions.mainOutput.scripture.minFontSize ?? 24}
+                            onChange={(e) => updateMainScripture({ minFontSize: Number(e.target.value) || 24 })}
                             className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-center"
                           />
                         </div>
@@ -1673,25 +1899,45 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         </button>
                       </div>
 
-                      {/* Live Test Nursery Code */}
-                      <div className="bg-black/40 border border-[#2a2d38] p-2.5 rounded flex items-center justify-between">
-                        <div>
-                          <span className="text-gray-400 block text-[11px]">Active Nursery Code on Live Output:</span>
-                          <span className="font-mono text-amber-300 font-bold">{localOptions.mainOutput.alerts.nursery.currentCode || 'None'}</span>
+                      {/* Live Interactive Nursery Alert Sender */}
+                      <div className="bg-[#121317] border border-[#2a2d38] p-3 rounded-lg space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300 font-semibold text-xs">Live Nursery Alert Dispatcher</span>
+                          <span className="font-mono text-xs text-amber-400">
+                            Active: {localOptions.mainOutput.alerts.nursery.currentCode || 'None'}
+                          </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const code = prompt('Enter nursery alert numbers (e.g. 12, 5):', localOptions.mainOutput.alerts.nursery.currentCode || '12, 5');
-                            if (code !== null) {
-                              updateMainAlertsNursery({ currentCode: code });
-                              store.setAlert({ nurseryText: code, showNursery: !!code }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
-                            }
-                          }}
-                          className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded"
-                        >
-                          Update Code
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Enter nursery numbers e.g. 104, 218..."
+                            value={localOptions.mainOutput.alerts.nursery.currentCode || ''}
+                            onChange={(e) => updateMainAlertsNursery({ currentCode: e.target.value })}
+                            className="flex-1 bg-[#1a1c24] border border-[#3b404d] rounded px-2.5 py-1.5 text-white font-mono text-xs focus:border-amber-500 outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const code = localOptions.mainOutput.alerts.nursery.currentCode || '';
+                              if (code.trim()) {
+                                store.setAlert({ nurseryText: code.trim(), showNursery: true }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded text-xs transition-colors shrink-0 shadow"
+                          >
+                            Send Alert to Screen
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateMainAlertsNursery({ currentCode: '' });
+                              store.setAlert({ nurseryText: '', showNursery: false }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                            }}
+                            className="px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-300 rounded text-xs transition-colors shrink-0"
+                          >
+                            Clear
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1749,6 +1995,45 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         >
                           Message Font ▾
                         </button>
+                      </div>
+
+                      {/* Live Interactive Message Ticker Dispatcher */}
+                      <div className="bg-[#121317] border border-[#2a2d38] p-3 rounded-lg space-y-2.5 pt-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300 font-semibold text-xs">Live Ticker Broadcast Dispatcher</span>
+                          <span className="text-[10px] text-gray-400">Scrolls along {localOptions.mainOutput.alerts.message.location.toLowerCase()} edge</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Type announcement message to scroll on live screen..."
+                            value={localOptions.mainOutput.alerts.message.currentMessage || ''}
+                            onChange={(e) => updateMainAlertsMessage({ currentMessage: e.target.value })}
+                            className="flex-1 bg-[#1a1c24] border border-[#3b404d] rounded px-2.5 py-1.5 text-white text-xs focus:border-blue-500 outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const msg = localOptions.mainOutput.alerts.message.currentMessage || '';
+                              if (msg.trim()) {
+                                store.setAlert({ message: msg.trim(), active: true }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded text-xs transition-colors shrink-0 shadow"
+                          >
+                            Broadcast Ticker
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateMainAlertsMessage({ currentMessage: '' });
+                              store.setAlert({ message: '', active: false }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                            }}
+                            className="px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-300 rounded text-xs transition-colors shrink-0"
+                          >
+                            Clear
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2193,23 +2478,26 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
               {/* ================= SERVICE INTERVALS ================= */}
               {activeCategory === 'Service Intervals' && (
                 <div className="space-y-4">
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={localOptions.serviceIntervals.countdownEnabled}
-                        onChange={(e) => setLocalOptions((prev) => ({
-                          ...prev,
-                          serviceIntervals: { ...prev.serviceIntervals, countdownEnabled: e.target.checked }
-                        }))}
-                        className="rounded accent-blue-500"
-                      />
-                      <span>Enable Service Interval Countdowns</span>
-                    </label>
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={localOptions.serviceIntervals.countdownEnabled}
+                          onChange={(e) => setLocalOptions((prev) => ({
+                            ...prev,
+                            serviceIntervals: { ...prev.serviceIntervals, countdownEnabled: e.target.checked }
+                          }))}
+                          className="rounded accent-blue-500 w-4 h-4"
+                        />
+                        <span>Enable Service Interval Countdowns on Stage Display</span>
+                      </label>
+                      <span className="text-[11px] text-gray-400 font-mono">Foldback Monitor Sync</span>
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div>
-                        <label className="text-gray-400 block mb-1">Countdown Time (mm:ss)</label>
+                        <label className="text-gray-400 block mb-1 text-xs">Countdown Duration (mm:ss)</label>
                         <input
                           type="text"
                           value={localOptions.serviceIntervals.countdownTime}
@@ -2217,12 +2505,31 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             ...prev,
                             serviceIntervals: { ...prev.serviceIntervals, countdownTime: e.target.value }
                           }))}
-                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white font-mono"
+                          placeholder="05:00"
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white font-mono text-sm focus:border-blue-500 outline-none"
                         />
+                        
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <span className="text-[10px] text-gray-400">Presets:</span>
+                          {['03:00', '05:00', '10:00', '15:00', '30:00'].map((time) => (
+                            <button
+                              key={time}
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, countdownTime: time }
+                              }))}
+                              className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
+                            >
+                              {time}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       <div>
-                        <label className="text-gray-400 block mb-1">Interval Label</label>
+                        <label className="text-gray-400 block mb-1 text-xs">Interval Label / Header</label>
                         <input
                           type="text"
                           value={localOptions.serviceIntervals.intervalType}
@@ -2230,9 +2537,32 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             ...prev,
                             serviceIntervals: { ...prev.serviceIntervals, intervalType: e.target.value }
                           }))}
-                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1 text-white"
+                          placeholder="Pre-Service Countdown"
+                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white text-xs focus:border-blue-500 outline-none"
                         />
+
+                        {/* Label Presets */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <span className="text-[10px] text-gray-400">Quick Labels:</span>
+                          {['Pre-Service Countdown', 'Sermon Timer', 'Offering Interval', 'Worship Transition'].map((lbl) => (
+                            <button
+                              key={lbl}
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, intervalType: lbl }
+                              }))}
+                              className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
+                            >
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                    </div>
+
+                    <div className="bg-[#121317] border border-[#2b2e3a] p-2.5 rounded flex items-center justify-between text-xs text-gray-400 mt-2">
+                      <span>Preview: <strong className="text-white">{localOptions.serviceIntervals.intervalType}</strong> will count down from <strong className="text-amber-400 font-mono">{localOptions.serviceIntervals.countdownTime}</strong> on the stage confidence monitor.</span>
                     </div>
                   </div>
                 </div>
@@ -2242,52 +2572,87 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
               {activeCategory === 'Slide Labels' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-gray-200">Slide Labels Configuration</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newLabel: SlideLabelConfig = {
-                          id: `lbl-${Date.now()}`,
-                          name: 'NEW LABEL',
-                          bgColor: '#2E384D',
-                          textColor: '#FFFFFF',
-                          shortcut: 'N'
-                        };
-                        setLocalOptions((prev) => ({
-                          ...prev,
-                          slideLabels: [...prev.slideLabels, newLabel]
-                        }));
-                      }}
-                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1 font-semibold"
-                    >
-                      <Plus size={12} />
-                      <span>Add Label</span>
-                    </button>
+                    <div>
+                      <span className="font-bold text-gray-200 block text-sm">Slide Labels Configuration</span>
+                      <span className="text-[11px] text-gray-400">Labels style live slide headers and enable quick keyboard navigation</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalOptions((prev) => ({
+                            ...prev,
+                            slideLabels: defaultSystemOptions.slideLabels
+                          }));
+                        }}
+                        className="px-2.5 py-1 bg-[#282b35] hover:bg-[#343846] text-gray-300 text-xs rounded border border-[#3e4456] transition-colors"
+                      >
+                        Reset Defaults
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newLabel: SlideLabelConfig = {
+                            id: `lbl-${Date.now()}`,
+                            name: 'NEW LABEL',
+                            bgColor: '#2E384D',
+                            textColor: '#FFFFFF',
+                            shortcut: 'N'
+                          };
+                          setLocalOptions((prev) => ({
+                            ...prev,
+                            slideLabels: [...prev.slideLabels, newLabel]
+                          }));
+                        }}
+                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1 font-semibold text-xs transition-colors"
+                      >
+                        <Plus size={12} />
+                        <span>Add Label</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Slide Labels Table matching EasyWorship screenshot */}
                   <div className="border border-[#323642] rounded-md overflow-hidden bg-[#18191f]">
                     <div className="grid grid-cols-12 bg-[#252833] border-b border-[#303440] px-3 py-1.5 font-bold text-gray-400 text-[11px]">
                       <div className="col-span-4">Label Name</div>
-                      <div className="col-span-3">Background</div>
-                      <div className="col-span-3">Text Color</div>
-                      <div className="col-span-2 text-right">Action</div>
+                      <div className="col-span-2">Key</div>
+                      <div className="col-span-2">Background</div>
+                      <div className="col-span-2">Text Color</div>
+                      <div className="col-span-2 text-right">Badge & Action</div>
                     </div>
 
-                    <div className="max-h-72 overflow-y-auto divide-y divide-[#222530] custom-scrollbar">
+                    <div className="max-h-80 overflow-y-auto divide-y divide-[#222530] custom-scrollbar">
                       {localOptions.slideLabels.map((lbl, index) => (
-                        <div key={lbl.id} className="grid grid-cols-12 px-3 py-1.5 items-center hover:bg-[#1f2129]">
-                          <div className="col-span-4 flex items-center gap-2">
-                            <span
-                              className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-black/30"
-                              style={{ backgroundColor: lbl.bgColor, color: lbl.textColor }}
-                            >
-                              {lbl.name}
-                            </span>
-                            <span className="text-[10px] text-gray-400 font-mono">[{lbl.shortcut}]</span>
+                        <div key={lbl.id} className="grid grid-cols-12 px-3 py-1.5 items-center hover:bg-[#1f2129] gap-2">
+                          <div className="col-span-4">
+                            <input
+                              type="text"
+                              value={lbl.name}
+                              onChange={(e) => {
+                                const updated = [...localOptions.slideLabels];
+                                updated[index].name = e.target.value;
+                                setLocalOptions({ ...localOptions, slideLabels: updated });
+                              }}
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-xs font-semibold uppercase"
+                            />
                           </div>
 
-                          <div className="col-span-3 flex items-center gap-1.5">
+                          <div className="col-span-2">
+                            <input
+                              type="text"
+                              maxLength={3}
+                              value={lbl.shortcut}
+                              onChange={(e) => {
+                                const updated = [...localOptions.slideLabels];
+                                updated[index].shortcut = e.target.value.toUpperCase();
+                                setLocalOptions({ ...localOptions, slideLabels: updated });
+                              }}
+                              className="w-12 bg-[#121317] border border-[#3b404d] rounded px-1.5 py-1 text-white text-xs font-mono text-center uppercase"
+                            />
+                          </div>
+
+                          <div className="col-span-2 flex items-center gap-1.5">
                             <input
                               type="color"
                               value={lbl.bgColor}
@@ -2296,12 +2661,12 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 updated[index].bgColor = e.target.value;
                                 setLocalOptions({ ...localOptions, slideLabels: updated });
                               }}
-                              className="w-5 h-5 rounded border border-[#3b404d] bg-transparent cursor-pointer"
+                              className="w-6 h-6 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
                             />
-                            <span className="font-mono text-[10px] text-gray-300">{lbl.bgColor}</span>
+                            <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{lbl.bgColor}</span>
                           </div>
 
-                          <div className="col-span-3 flex items-center gap-1.5">
+                          <div className="col-span-2 flex items-center gap-1.5">
                             <input
                               type="color"
                               value={lbl.textColor}
@@ -2310,12 +2675,18 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 updated[index].textColor = e.target.value;
                                 setLocalOptions({ ...localOptions, slideLabels: updated });
                               }}
-                              className="w-5 h-5 rounded border border-[#3b404d] bg-transparent cursor-pointer"
+                              className="w-6 h-6 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
                             />
-                            <span className="font-mono text-[10px] text-gray-300">{lbl.textColor}</span>
+                            <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{lbl.textColor}</span>
                           </div>
 
-                          <div className="col-span-2 text-right">
+                          <div className="col-span-2 flex items-center justify-end gap-2">
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-black/30 truncate max-w-[70px]"
+                              style={{ backgroundColor: lbl.bgColor, color: lbl.textColor }}
+                            >
+                              {lbl.name}
+                            </span>
                             <button
                               type="button"
                               onClick={() => {
@@ -2517,7 +2888,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <button
                         type="button"
                         onClick={() => updateAppearance({ themeMode: 'dark' })}
-                        className={`p-3 rounded-md border text-left flex flex-col justify-between transition-all keep-dark ${
+                        className={`p-3 rounded-md border text-left flex flex-col justify-between transition-all ${
                           (localOptions.appearance?.themeMode || 'dark') === 'dark'
                             ? 'bg-[#1e2330] border-cyan-500 ring-1 ring-cyan-500'
                             : 'bg-[#131418] border-[#2d313e] hover:border-gray-500'
@@ -2541,19 +2912,19 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         onClick={() => updateAppearance({ themeMode: 'light' })}
                         className={`p-3 rounded-md border text-left flex flex-col justify-between transition-all ${
                           localOptions.appearance?.themeMode === 'light'
-                            ? 'bg-[#2a303c] border-amber-400 ring-1 ring-amber-400'
+                            ? 'bg-[#ffffff] border-amber-500 ring-1 ring-amber-500 text-gray-900 shadow-sm'
                             : 'bg-[#131418] border-[#2d313e] hover:border-gray-500'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <Sun size={18} className="text-amber-400" />
+                          <Sun size={18} className={localOptions.appearance?.themeMode === 'light' ? "text-amber-500" : "text-amber-400"} />
                           {localOptions.appearance?.themeMode === 'light' && (
                             <span className="bg-amber-400 text-black font-bold text-[9px] px-1.5 py-0.5 rounded">ACTIVE</span>
                           )}
                         </div>
                         <div>
-                          <div className="font-bold text-gray-100 text-xs">Light Mode (White)</div>
-                          <div className="text-[10px] text-gray-400 mt-0.5">Crisp light canvas. Best for day services & illuminated media booths.</div>
+                          <div className={`font-bold text-xs ${localOptions.appearance?.themeMode === 'light' ? 'text-gray-900' : 'text-gray-100'}`}>Light Mode (White)</div>
+                          <div className={`text-[10px] mt-0.5 ${localOptions.appearance?.themeMode === 'light' ? 'text-gray-600' : 'text-gray-400'}`}>Crisp light canvas. Best for day services & illuminated media booths.</div>
                         </div>
                       </button>
 

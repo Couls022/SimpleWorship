@@ -1097,9 +1097,9 @@ function SongEditorModal({
               {assetsList.map((asset) => (
                 <button
                   key={asset.id}
-                  onClick={() => setBackgroundUrl(asset.url)}
+                  onClick={() => setBackgroundUrl(asset.id)}
                   className={`shrink-0 w-24 h-14 rounded overflow-hidden relative border-2 transition-all group ${
-                    backgroundUrl === asset.url ? 'border-cyan-400 scale-105 shadow-md shadow-cyan-500/20' : 'border-transparent hover:border-gray-500'
+                    backgroundUrl === asset.url || backgroundUrl === asset.id ? 'border-cyan-400 scale-105 shadow-md shadow-cyan-500/20' : 'border-transparent hover:border-gray-500'
                   }`}
                 >
                   <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
@@ -1333,7 +1333,7 @@ function SongEditorModal({
                   aspectRatio === '16:9' ? 'aspect-video w-full max-w-4xl' : 'aspect-4/3 w-full max-w-3xl'
                 }`}
                 style={{
-                  backgroundImage: `url(${backgroundUrl})`,
+                  backgroundImage: `url(${assetsList.find(a => a.id === backgroundUrl || a.url === backgroundUrl)?.url || backgroundUrl})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center'
                 }}

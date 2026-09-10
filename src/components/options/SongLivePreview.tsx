@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Music, Monitor } from 'lucide-react';
 import { SystemOptions } from '../../types';
 import { ThemeEngine } from '../../core/ThemeEngine';
+import { PresentationCore } from '../../core/PresentationCore';
 
 interface SongLivePreviewProps {
   generalOptions: SystemOptions['mainOutput']['general'];
@@ -135,6 +136,36 @@ const SAMPLE_SONGS: SampleSong[] = [
         ]
       }
     ]
+  },
+  {
+    id: 'sapat-na-long-verse',
+    title: 'Sapat Na At Higit Pa (Extended 8-Line Verse Demo)',
+    author: 'Faith Music Manila',
+    ccliNumber: 'CCLI #7123456',
+    slides: [
+      {
+        label: 'Verse 1',
+        lines: [
+          "Ika'y higit pa sa lahat ng aking inaasahan,",
+          "Pag-ibig Mo'y walang hanggan at 'di nagbabago.",
+          "Sa gitna ng unos Ikaw ang aking kapayapaan,",
+          "Lakas ko at tanggulan sa bawat sandali.",
+          "Sa Iyo lamang natagpuan ang tunay na galak,",
+          "Buhay ko'y binago Mo nang Iyong mahawakan.",
+          "Walang ibang hinahangad kundi ang presensya Mo,",
+          "Sasambahin Kita habang ako ay may hininga."
+        ]
+      },
+      {
+        label: 'Koro',
+        lines: [
+          "Sapat na at higit pa ang Iyong biyaya,",
+          "Kaluwalhatian Mo'y nagliliwanag sa 'kin.",
+          "Hesus sa piling Mo'y may kaganapan,",
+          "Walang katulad ang dakilang ngalan Mo."
+        ]
+      }
+    ]
   }
 ];
 
@@ -228,14 +259,30 @@ export default function SongLivePreview({
   const selectedSong = SAMPLE_SONGS.find(s => s.id === selectedSongId) || SAMPLE_SONGS[0];
   const activeBg = PREVIEW_BACKGROUNDS[activeBgIndex] || PREVIEW_BACKGROUNDS[0];
 
-  const validSlideIndex = Math.min(activeSlideIndex, selectedSong.slides.length - 1);
-  const currentSlide = selectedSong.slides[validSlideIndex] || selectedSong.slides[0];
+  const displayedSlides = useMemo(() => {
+    return selectedSong.slides.flatMap((s, sIdx) => {
+      const split = PresentationCore.splitSongSection(
+        s.label,
+        s.lines.join('\n'),
+        `prev-${selectedSong.id}-${sIdx}`,
+        undefined,
+        songOptions
+      );
+      return split.map(sp => ({
+        label: sp.title || s.label,
+        lines: sp.text.split('\n')
+      }));
+    });
+  }, [selectedSong, songOptions]);
+
+  const validSlideIndex = Math.min(activeSlideIndex, Math.max(0, displayedSlides.length - 1));
+  const currentSlide = displayedSlides[validSlideIndex] || displayedSlides[0] || { label: 'Slide 1', lines: [''] };
 
   const songThemeStyles = ThemeEngine.fontStyleToThemeStyles(songOptions?.songFont);
   const labelThemeStyles = ThemeEngine.fontStyleToThemeStyles(songOptions?.labelFont);
   const copyrightThemeStyles = ThemeEngine.fontStyleToThemeStyles(songOptions?.copyrightFont);
 
-  const margins = (songOptions?.margins && (songOptions.margins.left || songOptions.margins.top || songOptions.margins.right || songOptions.margins.bottom))
+  const margins = songOptions?.margins
     ? songOptions.margins
     : (generalOptions?.margins || { left: 0, top: 0, right: 0, bottom: 0 });
 
@@ -266,7 +313,7 @@ export default function SongLivePreview({
   if (showFirstOnly && validSlideIndex !== 0) {
     isCopyrightVisible = false;
   }
-  if (showLastOnly && validSlideIndex !== selectedSong.slides.length - 1) {
+  if (showLastOnly && validSlideIndex !== displayedSlides.length - 1) {
     isCopyrightVisible = false;
   }
 
@@ -348,8 +395,8 @@ export default function SongLivePreview({
 
         <div className="flex items-center justify-center gap-1.5">
           <span className="text-gray-400 font-medium">Slide:</span>
-          <div className="flex items-center gap-1">
-            {selectedSong.slides.map((s, idx) => (
+          <div className="flex items-center gap-1 flex-wrap">
+            {displayedSlides.map((s, idx) => (
               <button
                 key={idx}
                 type="button"
@@ -418,10 +465,10 @@ export default function SongLivePreview({
               height: `${height}px`,
               transform: `scale(${scale})`,
               background: activeBg.gradient,
-              paddingLeft: `${margins?.left || 40}px`,
-              paddingRight: `${margins?.right || 40}px`,
-              paddingTop: `${margins?.top || 30}px`,
-              paddingBottom: `${margins?.bottom || 30}px`,
+              paddingLeft: `${margins?.left !== undefined ? margins.left : 40}px`,
+              paddingRight: `${margins?.right !== undefined ? margins.right : 40}px`,
+              paddingTop: `${margins?.top !== undefined ? margins.top : 30}px`,
+              paddingBottom: `${margins?.bottom !== undefined ? margins.bottom : 30}px`,
             }}
           >
             <div

@@ -24,6 +24,7 @@ import { defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defa
 import { defaultSystemOptions } from '../db/defaultOptions';
 import { DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
 import { ThemeEngine } from '../core/ThemeEngine';
+import { PresentationCore } from '../core/PresentationCore';
 import { v4 as uuidv4 } from 'uuid';
 
 import { broadcastStateChange, sanitizeForSync } from '../utils/broadcastSync';
@@ -446,6 +447,9 @@ export const useStore = create<AppState>((set, get) => ({
       });
 
       updatedThemes.forEach(t => dbApi.addTheme(t));
+
+      // Invalidate cached slides so slide breakdown changes (breakOnNewVerse, flow threshold) immediately reflect
+      PresentationCore.clearSlideCache();
 
       // Trigger timestamp update on all groupStates and stagedGroupStates so live displays and canvas re-render instantly with fresh system options
       const updatedGroupStates = { ...state.groupStates };
@@ -1254,6 +1258,11 @@ export const useStore = create<AppState>((set, get) => ({
     if (staged?.activeItemId) {
       // Commit what is already verified on the operator stage
       state.commitStagedState(targetGroupId);
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:notify', { 
+          detail: 'Pushed Staged Content Directly to Live Output (F5 / Enter)' 
+        })
+      );
       return;
     }
 
@@ -1279,9 +1288,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     const itemToRoute = state.activeSchedule?.items?.find(i => i.id === itemIdToUse);
     if (itemToRoute) {
-      state.setRoutingRequest({ item: itemToRoute, isNew: false, slideIndex: slideIdxToUse });
+      get().goLiveItem(itemToRoute.id, slideIdxToUse, targetGroupId, itemToRoute, routerIdToUse);
+      get().commitStagedState(targetGroupId);
     } else {
       get().goLiveItem(itemIdToUse, slideIdxToUse, targetGroupId, undefined, routerIdToUse);
+      get().commitStagedState(targetGroupId);
     }
   },
 
@@ -1359,23 +1370,21 @@ export const useStore = create<AppState>((set, get) => ({
 
   // LIVE Navigation & Controls
   goLiveNext: () => {
-    const { activeControlGroupId, stagedGroupStates, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups } = get();
+    const { activeControlGroupId, stagedGroupStates, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups, systemOptions } = get();
     const targetGroupId = activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
-    const currentItemId = currentState.activeItemId;
+    const currentItemId = currentState.activeItemId || activeSchedule?.items?.[0]?.id || songsList?.[0]?.id;
 
-    let totalSlides = 999;
+    let totalSlides = 1;
     if (currentItemId) {
-      const scheduleItem = activeSchedule?.items?.find(i => i.id === currentItemId);
-      if (scheduleItem?.data?.slides?.length) {
-        totalSlides = scheduleItem.data.slides.length;
-      } else {
-        const song = songsList.find(s => s.id === currentItemId);
-        if (song?.sections?.length) {
-          totalSlides = song.sections.length;
-        } else if (song?.lyrics) {
-          totalSlides = song.lyrics.split(/\n\s*\n/).length;
-        }
+      const liveItem = (
+        currentState.directLiveItem 
+        || activeSchedule?.items?.find(i => i.id === currentItemId)
+        || (songsList.find(s => s.id === currentItemId) ? { id: currentItemId, name: '', type: 'song', contentId: currentItemId } as any : null)
+      );
+      if (liveItem) {
+        const slides = PresentationCore.generateSlides(liveItem, songsList, systemOptions);
+        totalSlides = Math.max(1, slides.length);
       }
     }
 
@@ -1387,41 +1396,51 @@ export const useStore = create<AppState>((set, get) => ({
         nextIndex = Math.max(0, totalSlides - 1);
       }
     }
-    get().setStagedGroupState(targetGroupId, { activeSlideIndex: nextIndex });
+    get().setStagedGroupState(targetGroupId, { 
+      activeItemId: currentItemId,
+      activeSlideIndex: nextIndex 
+    });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Next Slide: #${nextIndex + 1}${totalSlides > 1 ? ` of ${totalSlides}` : ''}` 
+      })
+    );
   },
   
   goLivePrev: () => {
-    const { activeControlGroupId, stagedGroupStates, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups } = get();
+    const { activeControlGroupId, stagedGroupStates, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups, systemOptions } = get();
     const targetGroupId = activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
-    const currentItemId = currentState.activeItemId;
+    const currentItemId = currentState.activeItemId || activeSchedule?.items?.[0]?.id || songsList?.[0]?.id;
+
+    let totalSlides = 1;
+    if (currentItemId) {
+      const liveItem = (
+        currentState.directLiveItem 
+        || activeSchedule?.items?.find(i => i.id === currentItemId)
+        || (songsList.find(s => s.id === currentItemId) ? { id: currentItemId, name: '', type: 'song', contentId: currentItemId } as any : null)
+      );
+      if (liveItem) {
+        const slides = PresentationCore.generateSlides(liveItem, songsList, systemOptions);
+        totalSlides = Math.max(1, slides.length);
+      }
+    }
 
     let prevIndex = currentState.activeSlideIndex - 1;
     if (prevIndex < 0) {
       if (shortcutSettings.wrapAroundSlides) {
-        let totalSlides = 1;
-        if (currentItemId) {
-          const scheduleItem = activeSchedule?.items?.find(i => i.id === currentItemId);
-          if (scheduleItem?.data?.slides?.length) {
-            totalSlides = scheduleItem.data.slides.length;
-          } else {
-            const song = songsList.find(s => s.id === currentItemId);
-            if (song?.sections?.length) {
-              totalSlides = song.sections.length;
-            } else if (song?.lyrics) {
-              totalSlides = song.lyrics.split(/\n\s*\n/).length;
-            }
-          }
-        }
         prevIndex = Math.max(0, totalSlides - 1);
       } else {
         prevIndex = 0;
       }
     }
-    get().setStagedGroupState(targetGroupId, { activeSlideIndex: prevIndex });
+    get().setStagedGroupState(targetGroupId, { 
+      activeItemId: currentItemId,
+      activeSlideIndex: prevIndex 
+    });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
-        detail: `Previous Slide: #${prevIndex + 1}` 
+        detail: `Prev Slide: #${prevIndex + 1}${totalSlides > 1 ? ` of ${totalSlides}` : ''}` 
       })
     );
   },
@@ -1478,12 +1497,12 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   
-  toggleBlack: (groupId: string) => {
-    if (!groupId) return;
-    const { stagedGroupStates, groupStates } = get();
-    const currentState = stagedGroupStates[groupId] || groupStates[groupId] || defaultState;
+  toggleBlack: (groupId?: string) => {
+    const { stagedGroupStates, groupStates, outputGroups, activeControlGroupId } = get();
+    const targetGroupId = groupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
+    const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
     const nextBlack = !currentState.isBlack;
-    get().setStagedGroupState(groupId, { isBlack: nextBlack, showLogo: false });
+    get().setStagedGroupState(targetGroupId, { isBlack: nextBlack, showLogo: false });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextBlack ? 'Blackout Enabled (F6 / B)' : 'Blackout Disabled' 
@@ -1491,12 +1510,12 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
   
-  toggleClear: (groupId: string) => {
-    if (!groupId) return;
-    const { stagedGroupStates, groupStates } = get();
-    const currentState = stagedGroupStates[groupId] || groupStates[groupId] || defaultState;
+  toggleClear: (groupId?: string) => {
+    const { stagedGroupStates, groupStates, outputGroups, activeControlGroupId } = get();
+    const targetGroupId = groupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
+    const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
     const nextClear = !currentState.isClear;
-    get().setStagedGroupState(groupId, { isClear: nextClear });
+    get().setStagedGroupState(targetGroupId, { isClear: nextClear });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextClear ? 'Clear Text Enabled (F7 / C)' : 'Text Restored' 
@@ -1504,12 +1523,12 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
 
-  toggleLogo: (groupId: string) => {
-    if (!groupId) return;
-    const { stagedGroupStates, groupStates } = get();
-    const currentState = stagedGroupStates[groupId] || groupStates[groupId] || defaultState;
+  toggleLogo: (groupId?: string) => {
+    const { stagedGroupStates, groupStates, outputGroups, activeControlGroupId } = get();
+    const targetGroupId = groupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
+    const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
     const nextLogo = !currentState.showLogo;
-    get().setStagedGroupState(groupId, { showLogo: nextLogo, isBlack: false });
+    get().setStagedGroupState(targetGroupId, { showLogo: nextLogo, isBlack: false });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextLogo ? 'Logo Display Enabled (F8 / L)' : 'Logo Display Disabled' 
@@ -1969,6 +1988,9 @@ export const useStore = create<AppState>((set, get) => ({
       if (storedOptions.mainOutput?.general?.defaultLogoUrl) {
         storedOptions.mainOutput.general.defaultLogoUrl = mapUrl(storedOptions.mainOutput.general.defaultLogoUrl);
       }
+      if (storedOptions.mainOutput?.general?.logoUrl) {
+        storedOptions.mainOutput.general.logoUrl = mapUrl(storedOptions.mainOutput.general.logoUrl);
+      }
       set(state => ({
         systemOptions: {
           ...state.systemOptions,
@@ -1984,9 +2006,17 @@ export const useStore = create<AppState>((set, get) => ({
         const { defaultBackgroundUrl, ...rest } = s;
         return rest as Song;
       }
+      const mappedThemeOverride = s.themeOverride ? {
+        ...s.themeOverride,
+        backgroundImageUrl: mapUrl(s.themeOverride.backgroundImageUrl),
+        backgroundVideoUrl: mapUrl(s.themeOverride.backgroundVideoUrl),
+        logoUrl: mapUrl(s.themeOverride.logoUrl)
+      } : undefined;
+
       return {
         ...s,
         defaultBackgroundUrl: mapUrl(s.defaultBackgroundUrl),
+        themeOverride: mappedThemeOverride
       };
     });
     if (mergedSongs.length < defaultSongs.length) {
@@ -2141,7 +2171,8 @@ export const useStore = create<AppState>((set, get) => ({
       const isCurrentlyActiveDefault = targetAsset?.isDefaultScope?.[scope] === true;
       const isTogglingOff = isCurrentlyActiveDefault;
 
-      const finalAssetUrl = isTogglingOff ? '' : assetUrl;
+      const finalAssetId = isTogglingOff ? undefined : (targetAsset?.id || assetUrl);
+      const finalAssetBlobUrl = isTogglingOff ? undefined : (targetAsset?.url || assetUrl);
 
       // 1. Update assetsList so ONLY target asset is marked default for this scope (automatic replacement)
       const updatedAssetsList = state.assetsList.map(a => {
@@ -2170,24 +2201,33 @@ export const useStore = create<AppState>((set, get) => ({
       // 2. Persist in SystemOptions if scope is 'logo'
       let nextSystemOptions = state.systemOptions;
       if (scope === 'logo') {
-        nextSystemOptions = {
+        const sysOptsForDb = {
           ...state.systemOptions,
           mainOutput: {
             ...state.systemOptions?.mainOutput,
             general: {
               ...(state.systemOptions?.mainOutput?.general || {}),
-              defaultLogoUrl: finalAssetUrl,
+              defaultLogoUrl: finalAssetId,
+              logoUrl: finalAssetId,
             } as any
           },
           general: {
             ...((state.systemOptions as any)?.general || {}),
-            defaultLogoUrl: finalAssetUrl,
+            defaultLogoUrl: finalAssetId,
           } as any
         };
+        nextSystemOptions = {
+          ...sysOptsForDb,
+          mainOutput: {
+            ...sysOptsForDb.mainOutput,
+            general: { ...sysOptsForDb.mainOutput.general, defaultLogoUrl: finalAssetBlobUrl, logoUrl: finalAssetBlobUrl } as any
+          },
+          general: { ...sysOptsForDb.general, defaultLogoUrl: finalAssetBlobUrl } as any
+        };
         try {
-          localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextSystemOptions));
+          localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
         } catch (e) {}
-        dbApi.saveSystemOptions(nextSystemOptions).catch(() => {});
+        dbApi.saveSystemOptions(sysOptsForDb).catch(() => {});
       }
 
       // 3. Update Theme in themesList
@@ -2204,14 +2244,25 @@ export const useStore = create<AppState>((set, get) => ({
 
         if (isMatch) {
           themeFound = true;
-          return {
+          const updatedForDb: Theme = {
             ...t,
             styles: {
               ...t.styles,
               backgroundType: isTogglingOff ? ('color' as const) : (isVideo ? 'video' : 'image'),
-              backgroundImageUrl: (!isTogglingOff && !isVideo) ? finalAssetUrl : undefined,
-              backgroundVideoUrl: (!isTogglingOff && isVideo) ? finalAssetUrl : undefined,
-              logoUrl: scope === 'logo' ? finalAssetUrl : t.styles?.logoUrl,
+              backgroundImageUrl: (!isTogglingOff && !isVideo) ? finalAssetId : undefined,
+              backgroundVideoUrl: (!isTogglingOff && isVideo) ? finalAssetId : undefined,
+              logoUrl: scope === 'logo' ? finalAssetId : t.styles?.logoUrl,
+            }
+          };
+          dbApi.addTheme(updatedForDb).catch(() => {});
+          
+          return {
+            ...updatedForDb,
+            styles: {
+              ...updatedForDb.styles,
+              backgroundImageUrl: (!isTogglingOff && !isVideo) ? finalAssetBlobUrl : undefined,
+              backgroundVideoUrl: (!isTogglingOff && isVideo) ? finalAssetBlobUrl : undefined,
+              logoUrl: scope === 'logo' ? finalAssetBlobUrl : updatedForDb.styles?.logoUrl,
             }
           };
         }
@@ -2219,23 +2270,31 @@ export const useStore = create<AppState>((set, get) => ({
       });
 
       if (!themeFound && !isTogglingOff) {
-        const newTheme: Theme = {
+        const newThemeForDb: Theme = {
           id: scope === 'logo' ? 'theme-logo' : (scope === 'scriptures' ? 'theme-scripture' : (scope === 'songs' ? 'theme-song' : (scope === 'presentations' ? 'theme-presentation' : `theme-${targetType}`))),
           name: `Default ${scope.charAt(0).toUpperCase() + scope.slice(1)} Theme`,
           type: targetType as any,
           styles: {
             backgroundType: isVideo ? 'video' : 'image',
-            backgroundImageUrl: !isVideo ? finalAssetUrl : undefined,
-            backgroundVideoUrl: isVideo ? finalAssetUrl : undefined,
-            logoUrl: scope === 'logo' && !isVideo ? finalAssetUrl : undefined,
+            backgroundImageUrl: !isVideo ? finalAssetId : undefined,
+            backgroundVideoUrl: isVideo ? finalAssetId : undefined,
+            logoUrl: scope === 'logo' && !isVideo ? finalAssetId : undefined,
             showLogo: scope === 'logo',
           }
         };
-        updatedThemes.push(newTheme);
+        dbApi.addTheme(newThemeForDb).catch(() => {});
+        
+        const newThemeForState: Theme = {
+          ...newThemeForDb,
+          styles: {
+            ...newThemeForDb.styles,
+            backgroundImageUrl: !isVideo ? finalAssetBlobUrl : undefined,
+            backgroundVideoUrl: isVideo ? finalAssetBlobUrl : undefined,
+            logoUrl: scope === 'logo' && !isVideo ? finalAssetBlobUrl : undefined,
+          }
+        };
+        updatedThemes.push(newThemeForState);
       }
-
-      // Persist updated themes to DB
-      updatedThemes.forEach(t => dbApi.addTheme(t).catch(() => {}));
 
       // Broadcast to external projector displays and stage views
       broadcastStateChange({
