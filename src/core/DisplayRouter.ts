@@ -174,7 +174,9 @@ export function resolveDisplayAssignments(
     } else if (liveGroupIds.length > 0) {
       winningGroupId = liveGroupIds[0];
     } else {
-      winningGroupId = null;
+      // FALLBACK TO STANDBY: When LIVE OFF, still assign to the display so the projector window stays OPEN 
+      // and can act as a "Mirror Display" for the Live Display Canvas (Standby), matching the architecture chart.
+      winningGroupId = candidateGroupIds[0];
     }
 
     // Build the ordered layer list for multi-layer presentation stacking:

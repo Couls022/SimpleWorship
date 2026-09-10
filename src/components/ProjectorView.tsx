@@ -176,7 +176,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId }: Pr
     if (orderedLiveGroupIds.length === 0) return false;
     const winningGroupId = orderedLiveGroupIds[orderedLiveGroupIds.length - 1];
     const winState = groupStates[winningGroupId];
-    if (winState && (winState.isBlack || !winState.isLiveEnabled)) {
+    if (winState && winState.isBlack) {
       return true;
     }
     return false;

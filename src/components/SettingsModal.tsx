@@ -65,6 +65,8 @@ function SettingsModal({ onClose }: SettingsModalProps) {
 
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupRole, setNewGroupRole] = useState<'primary' | 'confidence' | 'broadcast' | 'lobby'>('confidence');
+  const [newGroupAspectRatio, setNewGroupAspectRatio] = useState('16:9');
+  const [newGroupDisplayId, setNewGroupDisplayId] = useState('');
   const [newGroupThemeId, setNewGroupThemeId] = useState(themesList[0]?.id || 'theme-stage');
   const [screens, setScreens] = useState<any[]>([]);
 
@@ -109,7 +111,8 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       name: newGroupName.trim(),
       role: newGroupRole,
       themeId: newGroupThemeId,
-      aspectRatio: '16:9',
+      aspectRatio: newGroupAspectRatio as any,
+      targetDisplayId: newGroupDisplayId || undefined,
     };
     addOutputGroup(newGroup);
     setNewGroupName('');
@@ -177,7 +180,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                     <div key={group.id} className="bg-[#242833] p-4 rounded-lg border border-[#2d313d] flex items-center justify-between">
                       <div>
                         <div className="font-bold text-gray-200 text-sm">{group.name}</div>
-                        <div className="text-gray-400 mt-1">Role: <span className="uppercase text-xs">{group.role}</span> | Aspect Ratio: {group.aspectRatio}</div>
+                        <div className="text-gray-400 mt-1">Role: <span className="uppercase text-xs">{group.role}</span> | Aspect Ratio: {group.aspectRatio} | Target: {group.targetDisplayId || 'Windowed'}</div>
                       </div>
                       <button onClick={() => removeOutputGroup(group.id)} className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded">
                         <Trash2 size={14} />
@@ -187,6 +190,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                 </div>
 
                 <div className="bg-[#242833] p-4 rounded-lg border border-[#2d313d]">
+                  
                   <h4 className="font-bold text-gray-200 mb-3">Add New Output Router</h4>
                   <form onSubmit={handleAddGroup} className="grid grid-cols-2 gap-4 items-end">
                     <div className="flex flex-col gap-1">
@@ -202,12 +206,33 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                         <option value="lobby">Lobby Display</option>
                       </select>
                     </div>
-                    <div className="col-span-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-gray-400">Aspect Ratio</label>
+                      <select value={newGroupAspectRatio} onChange={e => setNewGroupAspectRatio(e.target.value as any)} className="bg-[#1c1f26] border border-[#2d313d] rounded p-2 text-white outline-none">
+                        <option value="16:9">16:9 Widescreen</option>
+                        <option value="4:3">4:3 Standard</option>
+                        <option value="16:10">16:10 Computer</option>
+                        <option value="21:9">21:9 Ultrawide</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-gray-400">Target Display</label>
+                      <select value={newGroupDisplayId} onChange={e => setNewGroupDisplayId(e.target.value)} className="bg-[#1c1f26] border border-[#2d313d] rounded p-2 text-white outline-none">
+                        <option value="">(None / Windowed)</option>
+                        {screens.map(s => (
+                          <option key={s.id || s.label || s.name} value={s.id || s.label || s.name}>
+                            {s.label || s.name || 'Display'} ({s.width}x{s.height})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2 mt-2">
                       <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded p-2 font-bold flex justify-center items-center gap-2">
                         <Plus size={16} /> Add Router
                       </button>
                     </div>
                   </form>
+
                 </div>
               </div>
             )}
