@@ -1,18 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useStore } from '../../store/useStore';
 
 interface StageCountdownTimerProps {
-  initialTimeStr?: string;
   label?: string;
   enabled?: boolean;
+  initialTimeStr?: string;
 }
 
 export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
-  initialTimeStr = '05:00',
-  label = 'Pre-Service Countdown',
+  label: _propLabel,
   enabled = true,
 }) => {
-  // Parse mm:ss into seconds
+  const store = useStore();
+  const opts = store.systemOptions?.serviceIntervals;
+
+  const label = opts?.intervalType || _propLabel || 'Pre-Service Countdown';
+  const isRunning = opts?.isRunning ?? false;
+  const targetTimestamp = opts?.targetTimestamp || null;
+  const initialTimeStr = opts?.countdownTime || '05:00';
+
   const parseSeconds = (timeStr: string): number => {
     if (!timeStr) return 300;
     const parts = timeStr.trim().split(':');
@@ -25,47 +31,37 @@ export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
     return isNaN(num) ? 300 : num * 60;
   };
 
-  const [totalSeconds, setTotalSeconds] = useState<number>(() => parseSeconds(initialTimeStr));
-  const [isRunning, setIsRunning] = useState<boolean>(true);
-  const prevTimeRef = useRef<string>(initialTimeStr);
+  const calculateRemaining = () => {
+    if (!targetTimestamp) return parseSeconds(initialTimeStr);
+    const diff = targetTimestamp - Date.now();
+    return diff > 0 ? Math.ceil(diff / 1000) : 0;
+  };
 
-  // Sync when initialTimeStr changes from options
-  useEffect(() => {
-    if (initialTimeStr !== prevTimeRef.current) {
-      prevTimeRef.current = initialTimeStr;
-      setTotalSeconds(parseSeconds(initialTimeStr));
-      setIsRunning(true);
-    }
-  }, [initialTimeStr]);
+  const [remainingSecs, setRemainingSecs] = useState<number>(calculateRemaining());
 
-  // Countdown timer loop
   useEffect(() => {
-    if (!enabled || !isRunning || totalSeconds <= 0) return;
+    setRemainingSecs(calculateRemaining());
+    if (!enabled || !isRunning || !targetTimestamp) return;
 
     const timer = setInterval(() => {
-      setTotalSeconds((prev) => {
-        if (prev <= 1) {
+      setRemainingSecs((prev) => {
+        const current = calculateRemaining();
+        if (current <= 0) {
           clearInterval(timer);
           return 0;
         }
-        return prev - 1;
+        return current;
       });
-    }, 1000);
-
+    }, 500); // 500ms to keep it snappy visually
     return () => clearInterval(timer);
-  }, [enabled, isRunning, totalSeconds]);
+  }, [enabled, isRunning, targetTimestamp, initialTimeStr]);
 
   if (!enabled) return null;
 
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
+  const mins = Math.floor(remainingSecs / 60);
+  const secs = remainingSecs % 60;
   const formattedTime = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  const isExpired = totalSeconds === 0;
-
-  const handleReset = () => {
-    setTotalSeconds(parseSeconds(initialTimeStr));
-    setIsRunning(true);
-  };
+  const isExpired = remainingSecs === 0 && targetTimestamp !== null;
 
   return (
     <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-700/50 text-xs font-mono select-none">
@@ -74,31 +70,13 @@ export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
         className={`font-bold transition-colors ${
           isExpired
             ? 'text-rose-400 animate-pulse'
-            : totalSeconds < 60
+            : remainingSecs < 60 && isRunning
             ? 'text-amber-400'
             : 'text-cyan-400'
         }`}
       >
         {isExpired ? '00:00 (LIVE)' : formattedTime}
       </span>
-      <div className="flex items-center gap-0.5 ml-1 border-l border-cyan-800/60 pl-1">
-        <button
-          type="button"
-          onClick={() => setIsRunning((r) => !r)}
-          className="p-0.5 hover:text-white text-cyan-300 rounded transition-colors"
-          title={isRunning ? 'Pause countdown' : 'Resume countdown'}
-        >
-          {isRunning ? <Pause size={10} /> : <Play size={10} />}
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="p-0.5 hover:text-white text-cyan-300 rounded transition-colors"
-          title="Reset countdown"
-        >
-          <RotateCcw size={10} />
-        </button>
-      </div>
     </div>
   );
 };

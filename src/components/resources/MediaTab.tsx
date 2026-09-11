@@ -54,7 +54,7 @@ export default function MediaTab() {
     }
   };
 
-  const isDefaultBgFor = (asset: Asset, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo') => {
+  const isDefaultBgFor = (asset: Asset, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers') => {
     if (!asset) return false;
     if (asset.isDefaultScope?.[scope] === true) return true;
     const url = asset.url;
@@ -80,6 +80,11 @@ export default function MediaTab() {
       const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
       return sysLogo === url || sysLogo === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id || t?.styles?.logoUrl === id));
     }
+    if (scope === 'timers') {
+      const sysTimer = store.systemOptions?.serviceIntervals?.backgroundAssetId || (store.systemOptions?.serviceIntervals as any)?.backgroundAssetUrl;
+      const t = store.themesList.find(th => th.type === 'timer' || th.id === 'theme-timer');
+      return sysTimer === url || sysTimer === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
+    }
     return false;
   };
 
@@ -88,6 +93,7 @@ export default function MediaTab() {
     if (isDefaultBgFor(asset, 'logo')) badges.push({ scope: 'logo', label: 'LOGO', color: 'bg-emerald-500/90 text-white border-emerald-400/50' });
     if (isDefaultBgFor(asset, 'songs')) badges.push({ scope: 'songs', label: 'SONGS', color: 'bg-cyan-500/90 text-white border-cyan-400/50' });
     if (isDefaultBgFor(asset, 'scriptures')) badges.push({ scope: 'scriptures', label: 'BIBLE', color: 'bg-amber-500/90 text-white border-amber-400/50' });
+    if (isDefaultBgFor(asset, 'timers')) badges.push({ scope: 'timers', label: 'TIMER', color: 'bg-emerald-600/90 text-white border-emerald-400/50' });
     if (isDefaultBgFor(asset, 'presentations')) badges.push({ scope: 'presentations', label: 'PPT', color: 'bg-purple-500/90 text-white border-purple-400/50' });
     if (isDefaultBgFor(asset, 'announcements')) badges.push({ scope: 'announcements', label: 'NOTICE', color: 'bg-rose-500/90 text-white border-rose-400/50' });
     return badges;
@@ -208,6 +214,12 @@ export default function MediaTab() {
     const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
     setDefaultBackground(asset.url, 'logo', isVideo);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default for Logo!` }));
+  };
+
+  const handleApplyToTimers = (asset: Asset) => {
+    const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
+    setDefaultBackground(asset.url, 'timers', isVideo);
+    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Timers!` }));
   };
 
   const handleAddToSchedule = (asset: Asset) => {
@@ -714,7 +726,25 @@ export default function MediaTab() {
               <span>For Logo</span>
             </span>
             {isDefaultBgFor(contextMenu.asset, 'logo') && (
-              <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+               <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
+              handleApplyToTimers(contextMenu.asset);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center justify-between text-teal-300 font-semibold"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles size={12} className="text-teal-400" />
+              <span>For Timers</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset, 'timers') && (
+              <span className="flex items-center gap-1 text-[10px] text-teal-400 font-semibold bg-teal-950/60 px-1.5 py-0.5 rounded border border-teal-500/30">
                 <Check size={10} /> Active
               </span>
             )}

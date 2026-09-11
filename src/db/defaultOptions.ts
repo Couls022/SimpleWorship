@@ -143,6 +143,8 @@ export const defaultSystemOptions: SystemOptions = {
     countdownEnabled: true,
     countdownTime: '05:00',
     intervalType: 'Pre-Service Countdown',
+    showOnMainDisplay: false,
+    backgroundAssetId: '',
   },
   slideLabels: [
     { id: '1', name: 'CHORUS', bgColor: '#58243A', textColor: '#FFFFFF', shortcut: 'C' },

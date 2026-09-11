@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { ThemeStyles, Theme, ContentType, SystemOptions, FontStyleOptions } from '../types';
+import { resolveAssetUrl } from '../db';
 
 export const DEFAULT_PRESENTATION_FONT_SIZE = 90;
 
@@ -75,7 +76,10 @@ export class ThemeEngine {
     itemTheme?: ThemeStyles,
     elementOverride?: ThemeStyles
   ): ThemeStyles {
-    const layers = [globalTheme, groupTheme, typeTheme, systemFontOverride, itemTheme, elementOverride];
+    // If itemTheme is just global or group theme, ignore it to prevent wiping typeTheme defaults
+    const effectiveItemTheme = (itemTheme && itemTheme !== globalTheme && itemTheme !== groupTheme) ? itemTheme : undefined;
+
+    const layers = [globalTheme, groupTheme, typeTheme, systemFontOverride, effectiveItemTheme, elementOverride];
     const resolved: ThemeStyles = {};
 
     const legacyFonts = [
@@ -107,11 +111,33 @@ export class ThemeEngine {
       }
     }
 
+    // Preserve type-level background if item/element override didn't explicitly specify one
+    if (typeTheme && (typeTheme.backgroundImageUrl || typeTheme.backgroundVideoUrl)) {
+      const itemHasExplicitBg = Boolean(
+        effectiveItemTheme?.backgroundImageUrl ||
+        effectiveItemTheme?.backgroundVideoUrl ||
+        elementOverride?.backgroundImageUrl ||
+        elementOverride?.backgroundVideoUrl
+      );
+
+      if (!itemHasExplicitBg) {
+        if (typeTheme.backgroundType === 'video' || typeTheme.backgroundVideoUrl) {
+          resolved.backgroundType = 'video';
+          resolved.backgroundVideoUrl = typeTheme.backgroundVideoUrl;
+          resolved.backgroundImageUrl = undefined;
+        } else if (typeTheme.backgroundType === 'image' || typeTheme.backgroundImageUrl) {
+          resolved.backgroundType = 'image';
+          resolved.backgroundImageUrl = typeTheme.backgroundImageUrl;
+          resolved.backgroundVideoUrl = undefined;
+        }
+      }
+    }
+
     if (systemFontOverride && systemFontOverride.fontFamily) {
-      const itemFont = itemTheme?.fontFamily;
+      const itemFont = effectiveItemTheme?.fontFamily;
       const elemFont = elementOverride?.fontFamily;
 
-      const itemHasExplicit = itemTheme?.isExplicitFont || (itemFont && !isLegacyFont(itemFont));
+      const itemHasExplicit = effectiveItemTheme?.isExplicitFont || (itemFont && !isLegacyFont(itemFont));
       const elemHasExplicit = elementOverride?.isExplicitFont || (elemFont && !isLegacyFont(elemFont));
 
       if (!elemHasExplicit && !itemHasExplicit) {
@@ -120,7 +146,48 @@ export class ThemeEngine {
     }
 
     resolved.fontSize = normalizeFontSize(resolved.fontSize);
+
+    // Ensure asset URLs are fully resolved
+    if (resolved.backgroundImageUrl) {
+      resolved.backgroundImageUrl = resolveAssetUrl(resolved.backgroundImageUrl);
+    }
+    if (resolved.backgroundVideoUrl) {
+      resolved.backgroundVideoUrl = resolveAssetUrl(resolved.backgroundVideoUrl);
+    }
+    if (resolved.logoUrl) {
+      resolved.logoUrl = resolveAssetUrl(resolved.logoUrl);
+    }
+
+    // Mutual exclusivity for background media types to prevent ghost video/image conflicts
+    if (resolved.backgroundType === 'image' && resolved.backgroundImageUrl) {
+      resolved.backgroundVideoUrl = undefined;
+    } else if (resolved.backgroundType === 'video' && resolved.backgroundVideoUrl) {
+      resolved.backgroundImageUrl = undefined;
+    } else if (resolved.backgroundImageUrl && !resolved.backgroundVideoUrl) {
+      resolved.backgroundType = 'image';
+    } else if (resolved.backgroundVideoUrl && !resolved.backgroundImageUrl) {
+      resolved.backgroundType = 'video';
+    } else if (resolved.backgroundType === 'color') {
+      resolved.backgroundImageUrl = undefined;
+      resolved.backgroundVideoUrl = undefined;
+    }
+
     return resolved;
+  }
+
+  static findTypeTheme(themesList: Theme[], rawContentType?: string): Theme | undefined {
+    if (!rawContentType || !themesList) return undefined;
+    const normalized = rawContentType === 'scripture' ? 'bible' : (rawContentType === 'ppt' ? 'presentation' : rawContentType);
+    return themesList.find(t => 
+      t.type === normalized || 
+      t.type === rawContentType ||
+      (normalized === 'bible' && (t.id === 'theme-scripture' || t.id === 'theme-bible')) ||
+      (normalized === 'song' && t.id === 'theme-song') ||
+      (normalized === 'presentation' && t.id === 'theme-presentation') ||
+      (normalized === 'announcement' && t.id === 'theme-announcement') ||
+      (normalized === 'timer' && t.id === 'theme-timer') ||
+      (normalized === 'logo' && t.id === 'theme-logo')
+    );
   }
 
   static getDefaultGlobalTheme(): ThemeStyles {

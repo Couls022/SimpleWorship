@@ -6,9 +6,20 @@ import { runDatabaseSeeder } from '../utils/seedDatabase';
 const objectUrlCache = new Map<string, string>();
 const assetUrlMap = new Map<string, string>();
 
+export function registerAsset(asset: Asset) {
+  if (!asset) return;
+  if (asset.id && asset.url) {
+    objectUrlCache.set(asset.id, asset.url);
+    assetUrlMap.set(asset.id, asset.url);
+    assetUrlMap.set(asset.url, asset.url);
+  }
+}
+
 export function resolveAssetUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
-  return assetUrlMap.get(url) || url;
+  if (objectUrlCache.has(url)) return objectUrlCache.get(url);
+  if (assetUrlMap.has(url)) return assetUrlMap.get(url);
+  return url;
 }
 
 export function unresolveAssetUrl(url: string | undefined): string | undefined {
@@ -131,8 +142,8 @@ export const dbApi = {
   },
   // Assets
   async addAsset(asset: Asset) {
-    if (asset.url && asset.url.startsWith('blob:')) {
-      objectUrlCache.set(asset.id, asset.url);
+    if (asset.url) {
+      registerAsset(asset);
     }
     const db = await getDB();
     
@@ -149,14 +160,17 @@ export const dbApi = {
   async getAsset(id: string) {
     const db = await getDB();
     const asset = await db.get('assets', id);
-    if (asset && asset.blob && asset.url && asset.url.startsWith('blob:')) {
-      if (!objectUrlCache.has(asset.id)) {
-        objectUrlCache.set(asset.id, URL.createObjectURL(asset.blob));
+    if (asset) {
+      if (asset.blob && asset.url && asset.url.startsWith('blob:')) {
+        if (!objectUrlCache.has(asset.id)) {
+          objectUrlCache.set(asset.id, URL.createObjectURL(asset.blob));
+        }
+        asset.url = objectUrlCache.get(asset.id)!;
+        if (asset.thumbnailUrl && asset.thumbnailUrl.startsWith('blob:')) {
+          asset.thumbnailUrl = asset.url;
+        }
       }
-      asset.url = objectUrlCache.get(asset.id)!;
-      if (asset.thumbnailUrl && asset.thumbnailUrl.startsWith('blob:')) {
-        asset.thumbnailUrl = asset.url;
-      }
+      registerAsset(asset);
     }
     return asset;
   },
@@ -176,9 +190,12 @@ export const dbApi = {
         a.url = objectUrlCache.get(a.id)!;
         assetUrlMap.set((a as any)._oldUrl, a.url);
         assetUrlMap.set(a.id, a.url);
+        assetUrlMap.set(a.url, a.url);
         if (a.thumbnailUrl && a.thumbnailUrl.startsWith('blob:')) {
           a.thumbnailUrl = a.url;
         }
+      } else if (a.url) {
+        registerAsset(a);
       }
       // Strip blob to prevent JS heap exhaustion and GC lags
       const { blob, ...assetWithoutBlob } = a;
@@ -190,6 +207,7 @@ export const dbApi = {
       URL.revokeObjectURL(objectUrlCache.get(id)!);
       objectUrlCache.delete(id);
     }
+    assetUrlMap.delete(id);
     const db = await getDB();
     await db.delete('assets', id);
   },
@@ -207,7 +225,13 @@ export const dbApi = {
   },
   async getTheme(id: string) {
     const db = await getDB();
-    return db.get('themes', id);
+    const theme = await db.get('themes', id);
+    if (theme?.styles) {
+      theme.styles.backgroundImageUrl = resolveAssetUrl(theme.styles.backgroundImageUrl);
+      theme.styles.backgroundVideoUrl = resolveAssetUrl(theme.styles.backgroundVideoUrl);
+      theme.styles.logoUrl = resolveAssetUrl(theme.styles.logoUrl);
+    }
+    return theme;
   },
   async deleteTheme(id: string) {
     const db = await getDB();
@@ -216,7 +240,15 @@ export const dbApi = {
 
   async getAllThemes() {
     const db = await getDB();
-    return db.getAll('themes');
+    const themes = await db.getAll('themes');
+    return themes.map(t => {
+      if (t.styles) {
+        t.styles.backgroundImageUrl = resolveAssetUrl(t.styles.backgroundImageUrl);
+        t.styles.backgroundVideoUrl = resolveAssetUrl(t.styles.backgroundVideoUrl);
+        t.styles.logoUrl = resolveAssetUrl(t.styles.logoUrl);
+      }
+      return t;
+    });
   },
 
   // Songs
@@ -233,11 +265,29 @@ export const dbApi = {
   },
   async getSong(id: string) {
     const db = await getDB();
-    return db.get('songs', id);
+    const song = await db.get('songs', id);
+    if (song) {
+      song.defaultBackgroundUrl = resolveAssetUrl(song.defaultBackgroundUrl);
+      if (song.themeOverride) {
+        song.themeOverride.backgroundImageUrl = resolveAssetUrl(song.themeOverride.backgroundImageUrl);
+        song.themeOverride.backgroundVideoUrl = resolveAssetUrl(song.themeOverride.backgroundVideoUrl);
+        song.themeOverride.logoUrl = resolveAssetUrl(song.themeOverride.logoUrl);
+      }
+    }
+    return song;
   },
   async getAllSongs() {
     const db = await getDB();
-    return db.getAll('songs');
+    const songs = await db.getAll('songs');
+    return songs.map(s => {
+      s.defaultBackgroundUrl = resolveAssetUrl(s.defaultBackgroundUrl);
+      if (s.themeOverride) {
+        s.themeOverride.backgroundImageUrl = resolveAssetUrl(s.themeOverride.backgroundImageUrl);
+        s.themeOverride.backgroundVideoUrl = resolveAssetUrl(s.themeOverride.backgroundVideoUrl);
+        s.themeOverride.logoUrl = resolveAssetUrl(s.themeOverride.logoUrl);
+      }
+      return s;
+    });
   },
   async deleteSong(id: string) {
     const db = await getDB();

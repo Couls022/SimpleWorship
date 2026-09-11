@@ -104,8 +104,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     : (activeGroup?.targetDisplayId ? [activeGroup.targetDisplayId] : []);
 
   const handleMakeActiveOverlay = () => {
+    const targetRouter = routerId || store.activeRouterId || 'router-1';
+    store.setActiveRouterId(targetRouter);
     store.setActiveControlGroupId(groupId);
-    store.setActiveRouterId(routerId || 'router-1');
     DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, groupId);
   };
 
@@ -135,7 +136,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const itemContentType = (liveItem?.type as any) === 'ppt' ? 'presentation' : ((liveItem?.type as any) === 'scripture' ? 'bible' : liveItem?.type);
   const typeTheme = themesList.find(t => t.type === itemContentType || t.type === liveItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement'));
   
-  const baseSong = liveItem?.type === 'song' ? songsList.find(s => s.id === liveItem.contentId) : null;
+  const baseSong = liveItem?.type === 'song' 
+    ? songsList.find(s => s.id === liveItem.contentId || s.id === liveItem.data?.songId || s.title?.toLowerCase() === liveItem.name?.toLowerCase()) 
+    : null;
   const itemTheme = themesList.find(t => t.id === (liveItem?.themeId || baseSong?.themeId));
   
   // Schedule item's override takes precedence over the base song's override

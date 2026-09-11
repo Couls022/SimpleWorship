@@ -1,3 +1,4 @@
+import { useStore } from "../store/useStore";
 import React from 'react';
 import { 
   Music, 
@@ -16,6 +17,7 @@ import { PresentationSlideView } from './PresentationSlideView';
 import { PptxSlideThumbnail } from './PptxSlideThumbnail';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
+import { resolveAssetUrl } from '../db';
 
 export interface LiveSlideCardProps {
   slide: Slide;
@@ -304,20 +306,47 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                 } leading-relaxed font-sans whitespace-pre-line bg-[#1c1e24] relative overflow-hidden keep-dark`}
               >
                 {/* Background image or video preview overlay */}
-                {resolvedStyles.backgroundType === 'video' && (resolvedStyles.backgroundVideoUrl || slide.backgroundUrl || liveItem?.customBackgroundUrl) ? (
-                  <div className="absolute inset-0 w-full h-full opacity-30 pointer-events-none z-0 overflow-hidden bg-black">
-                    <LazyVideoThumbnail
-                      src={(slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundVideoUrl) as string}
-                      autoPlayOnHover={false}
-                    />
-                  </div>
-                ) : (slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundImageUrl) ? (
-                  <img
-                    src={slide.backgroundUrl || liveItem?.customBackgroundUrl || resolvedStyles.backgroundImageUrl}
-                    alt="background"
-                    className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none z-0"
-                  />
-                ) : null}
+                {(() => {
+                  const rawBg = slide.backgroundUrl || liveItem?.customBackgroundUrl || (resolvedStyles.backgroundType === 'video' ? resolvedStyles.backgroundVideoUrl : resolvedStyles.backgroundImageUrl);
+                  let resolvedBg = '';
+                  let isVideoBg = false;
+
+                  if (rawBg) {
+                    const currentAssets = useStore.getState().assetsList || [];
+                    const matchedAsset = currentAssets.find(a => a.url === rawBg || a.id === rawBg);
+                    resolvedBg = matchedAsset ? matchedAsset.url : rawBg;
+                    
+                    isVideoBg = resolvedStyles.backgroundType === 'video' || 
+                      (matchedAsset && (matchedAsset.type === 'video' || matchedAsset.type === 'motion')) ||
+                      (Boolean(resolvedBg) && (resolvedStyles.backgroundVideoUrl === rawBg || slide.isVideo || /\.(mp4|webm|mov)(\?.*)?$/i.test(resolvedBg || '')));
+                  }
+
+                  if (isVideoBg && resolvedBg) {
+                    return (
+                      <div className="absolute inset-0 w-full h-full opacity-30 pointer-events-none z-0 overflow-hidden bg-black">
+                        <LazyVideoThumbnail
+                          src={resolvedBg}
+                          autoPlayOnHover={false}
+                        />
+                      </div>
+                    );
+                  }
+
+                  if (resolvedBg) {
+                    return (
+                      <img
+                        src={resolvedBg}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none z-0"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    );
+                  }
+
+                  return null;
+                })()}
 
                 <div 
                   className="relative z-10"

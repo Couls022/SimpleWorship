@@ -24,9 +24,10 @@ import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 
 interface MediaLibraryModalProps {
   onClose: () => void;
+  onSelect?: (asset: Asset) => void;
 }
 
-export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
+export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryModalProps) {
   const store = useStore();
   const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem, themesList, systemOptions } = store;
 
@@ -36,11 +37,14 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
   // Check if an asset URL is the currently active default background for a given category
-  const isDefaultBgFor = (url: string, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo') => {
+  const isDefaultBgFor = (url: string, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers') => {
     if (!url) return false;
     const foundAsset = assetsList.find(a => a.url === url || a.id === url);
     if (foundAsset?.isDefaultScope?.[category] === true) return true;
     const assetId = foundAsset?.id;
+    if (category === 'timers') {
+      return Boolean(assetId) && systemOptions?.serviceIntervals?.backgroundAssetId === assetId;
+    }
     if (category === 'songs') {
       const t = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
       return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
@@ -72,6 +76,7 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
     if (isDefaultBgFor(asset.url, 'scriptures')) badges.push({ scope: 'scriptures', label: 'BIBLE', color: 'bg-amber-500/90 text-white border-amber-400/50' });
     if (isDefaultBgFor(asset.url, 'presentations')) badges.push({ scope: 'presentations', label: 'PPT', color: 'bg-purple-500/90 text-white border-purple-400/50' });
     if (isDefaultBgFor(asset.url, 'announcements')) badges.push({ scope: 'announcements', label: 'NOTICE', color: 'bg-rose-500/90 text-white border-rose-400/50' });
+    if (isDefaultBgFor(asset.url, 'timers')) badges.push({ scope: 'timers', label: 'TIMERS', color: 'bg-orange-500/90 text-white border-orange-400/50' });
     return badges;
   };
   
@@ -246,7 +251,7 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
     setContextMenu({ x: Math.max(10, x), y: Math.max(10, y), asset });
   };
 
-  const handleSetDefaultBg = (asset: Asset, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo', e?: React.MouseEvent) => {
+  const handleSetDefaultBg = (asset: Asset, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers', e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
     setDefaultBackground(asset.url, category, isVideo);
@@ -596,17 +601,33 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
             </span>
           </div>
 
-          <button
-            onClick={() => {
-              if (playingAudioId && audioRef.current) {
-                audioRef.current.pause();
-              }
-              onClose();
-            }}
-            className="px-4 py-1.5 bg-[#272b38] hover:bg-[#32384a] text-gray-200 hover:text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer border border-[#393e50]"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (playingAudioId && audioRef.current) {
+                  audioRef.current.pause();
+                }
+                onClose();
+              }}
+              className="px-4 py-1.5 bg-[#272b38] hover:bg-[#32384a] text-gray-200 hover:text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer border border-[#393e50]"
+            >
+              Close
+            </button>
+            {onSelect && selectedAssetId && (
+              <button
+                onClick={() => {
+                  const asset = assetsList.find((a) => a.id === selectedAssetId);
+                  if (asset) {
+                    if (playingAudioId && audioRef.current) audioRef.current.pause();
+                    onSelect(asset);
+                  }
+                }}
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer border border-emerald-500"
+              >
+                Select Selected Media
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -698,6 +719,21 @@ export default function MediaLibraryModal({ onClose }: MediaLibraryModalProps) {
             </span>
             {isDefaultBgFor(contextMenu.asset.url, 'logo') && (
               <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                <Check size={10} /> Active
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => handleSetDefaultBg(contextMenu.asset, 'timers')}
+            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-orange-300 cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles size={11} className="text-orange-400" />
+              <span>For Timers</span>
+            </span>
+            {isDefaultBgFor(contextMenu.asset.url, 'timers') && (
+              <span className="flex items-center gap-1 text-[10px] text-orange-400 font-semibold bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-500/30">
                 <Check size={10} /> Active
               </span>
             )}

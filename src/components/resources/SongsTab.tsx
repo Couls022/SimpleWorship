@@ -329,7 +329,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
       notes: song.author
         ? `Key of ${song.key || "G"} • By ${song.author}`
         : undefined,
-      customBackgroundUrl: song.defaultBackgroundUrl,
+      customBackgroundUrl: undefined,
       themeOverride: song.themeOverride,
       data: {
         songId: song.id,
@@ -360,7 +360,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         notes: song.author
           ? `Key of ${song.key || "G"} • By ${song.author}`
           : undefined,
-        customBackgroundUrl: song.defaultBackgroundUrl,
+        customBackgroundUrl: undefined,
         themeOverride: song.themeOverride,
         data: {
           songId: song.id,

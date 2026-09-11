@@ -19,7 +19,7 @@ import {
   AnnotationStroke,
   LaserPointerState
 } from '../types';
-import { dbApi } from '../db';
+import { dbApi, registerAsset } from '../db';
 import { defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultAssets, defaultScriptures } from '../db/seedData';
 import { defaultSystemOptions } from '../db/defaultOptions';
 import { DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
@@ -354,7 +354,7 @@ interface AppState {
   deleteTheme: (id: string) => Promise<void>;
   addAsset: (asset: Asset) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
-  setDefaultBackground: (assetUrl: string, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo', isVideo?: boolean) => void;
+  setDefaultBackground: (assetUrl: string, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers', isVideo?: boolean) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -1064,6 +1064,11 @@ export const useStore = create<AppState>((set, get) => ({
     });
     const { outputGroups, groupStates } = get();
     DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, id).catch(() => {});
+    
+    // Broadcast active control change so ProjectorView can mirror the active tab
+    import('../utils/broadcastSync').then(({ broadcastStateChange }) => {
+      broadcastStateChange({ type: 'SYNC_STATE', data: { activeControlGroupId: id } });
+    });
   },
 
   activeSchedule: defaultSchedule,
@@ -1321,7 +1326,7 @@ export const useStore = create<AppState>((set, get) => ({
           contentId: song.id,
           notes: song.author || '',
           isExpanded: false,
-          customBackgroundUrl: song.defaultBackgroundUrl
+          customBackgroundUrl: undefined
         };
       }
     }
@@ -1568,7 +1573,7 @@ export const useStore = create<AppState>((set, get) => ({
             contentId: s.id,
             notes: s.author || '',
             isExpanded: false,
-            customBackgroundUrl: s.defaultBackgroundUrl,
+            customBackgroundUrl: undefined,
           };
         }
       }
@@ -1957,10 +1962,13 @@ export const useStore = create<AppState>((set, get) => ({
   setAvailableCameras: (cameras) => set({ availableCameras: cameras }),
 
   loadAllData: async () => {
-    const [songs, themes, assets, outputGroups, schedules, scriptures, storedOptions] = await Promise.all([
+    // 1. Fetch and register assets first so assetUrlMap and objectUrlCache are fully ready
+    const assets = await dbApi.getAllAssets();
+    assets.forEach(a => registerAsset(a));
+
+    const [songs, themes, outputGroups, schedules, scriptures, storedOptions] = await Promise.all([
       dbApi.getAllSongs(),
       dbApi.getAllThemes(),
-      dbApi.getAllAssets(),
       dbApi.getOutputGroups(),
       dbApi.getAllSchedules(),
       dbApi.getAllScriptures(),
@@ -1974,6 +1982,7 @@ export const useStore = create<AppState>((set, get) => ({
         assetUrlMap.set((a as any)._oldUrl, a.url);
       }
       assetUrlMap.set(a.id, a.url);
+      assetUrlMap.set(a.url, a.url);
     });
 
     const mapUrl = (url: string | undefined) => {
@@ -1990,6 +1999,19 @@ export const useStore = create<AppState>((set, get) => ({
       }
       if (storedOptions.mainOutput?.general?.logoUrl) {
         storedOptions.mainOutput.general.logoUrl = mapUrl(storedOptions.mainOutput.general.logoUrl);
+      }
+      if (storedOptions.mainOutput?.song?.backdropAssetUrl) {
+        storedOptions.mainOutput.song.backdropAssetUrl = mapUrl(storedOptions.mainOutput.song.backdropAssetUrl);
+      }
+      if (storedOptions.mainOutput?.scripture?.backdropAssetUrl) {
+        storedOptions.mainOutput.scripture.backdropAssetUrl = mapUrl(storedOptions.mainOutput.scripture.backdropAssetUrl);
+      }
+      if ((storedOptions.serviceIntervals as any)?.backgroundAssetUrl) {
+        (storedOptions.serviceIntervals as any).backgroundAssetUrl = mapUrl((storedOptions.serviceIntervals as any).backgroundAssetUrl);
+      }
+      if (storedOptions.serviceIntervals?.backgroundAssetId) {
+        const mappedBg = mapUrl(storedOptions.serviceIntervals.backgroundAssetId);
+        (storedOptions.serviceIntervals as any).backgroundAssetUrl = mappedBg;
       }
       set(state => ({
         systemOptions: {
@@ -2063,10 +2085,11 @@ export const useStore = create<AppState>((set, get) => ({
     if (assets.length > 0) {
       // Cross-check default themes / systemOptions to populate isDefaultScope if not already set
       const logoUrl = storedOptions?.general?.defaultLogoUrl || storedOptions?.mainOutput?.general?.defaultLogoUrl || mergedThemes.find(t => t.type === 'logo' || t.id === 'theme-logo')?.styles?.logoUrl;
-      const songBgUrl = mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundVideoUrl;
-      const bibleBgUrl = mergedThemes.find(t => t.type === 'bible' || t.id === 'theme-scripture')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'bible' || t.id === 'theme-scripture')?.styles?.backgroundVideoUrl;
+      const songBgUrl = mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundVideoUrl || storedOptions?.mainOutput?.song?.backdropAssetUrl;
+      const bibleBgUrl = mergedThemes.find(t => t.type === 'bible' || t.id === 'theme-scripture')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'bible' || t.id === 'theme-scripture')?.styles?.backgroundVideoUrl || storedOptions?.mainOutput?.scripture?.backdropAssetUrl;
       const pptBgUrl = mergedThemes.find(t => t.type === 'presentation' || t.id === 'theme-presentation')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'presentation' || t.id === 'theme-presentation')?.styles?.backgroundVideoUrl;
       const annBgUrl = mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundVideoUrl;
+      const timerBgUrl = storedOptions?.serviceIntervals?.backgroundAssetId || (storedOptions?.serviceIntervals as any)?.backgroundAssetUrl || mergedThemes.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundVideoUrl;
 
       const hydratedAssets = assets.map(a => {
         const scopes = { ...(a.isDefaultScope || {}) };
@@ -2075,6 +2098,7 @@ export const useStore = create<AppState>((set, get) => ({
         if (bibleBgUrl && (a.url === bibleBgUrl || a.id === bibleBgUrl)) scopes.scriptures = true;
         if (pptBgUrl && (a.url === pptBgUrl || a.id === pptBgUrl)) scopes.presentations = true;
         if (annBgUrl && (a.url === annBgUrl || a.id === annBgUrl)) scopes.announcements = true;
+        if (timerBgUrl && (a.url === timerBgUrl || a.id === timerBgUrl)) scopes.timers = true;
         return { ...a, isDefaultScope: scopes };
       });
 
@@ -2165,7 +2189,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setDefaultBackground: (assetUrl, scope, isVideo = false) => {
     set((state) => {
-      const targetType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : (scope === 'announcements' ? 'announcement' : 'logo')));
+      const targetType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : (scope === 'announcements' ? 'announcement' : (scope === 'timers' ? 'timer' : 'logo'))));
 
       // Check if target asset is currently the active default for this scope to support toggle-off
       const targetAsset = state.assetsList.find(a => a.url === assetUrl || a.id === assetUrl);
@@ -2174,6 +2198,11 @@ export const useStore = create<AppState>((set, get) => ({
 
       const finalAssetId = isTogglingOff ? undefined : (targetAsset?.id || assetUrl);
       const finalAssetBlobUrl = isTogglingOff ? undefined : (targetAsset?.url || assetUrl);
+
+      // Register asset in memory cache
+      if (targetAsset) {
+        registerAsset(targetAsset);
+      }
 
       // 1. Update assetsList so ONLY target asset is marked default for this scope (automatic replacement)
       const updatedAssetsList = state.assetsList.map(a => {
@@ -2195,12 +2224,13 @@ export const useStore = create<AppState>((set, get) => ({
           isDefaultScope: nextScopes,
         };
 
+        registerAsset(updated);
         dbApi.addAsset(updated).catch(() => {});
         return updated;
       });
 
-      // 2. Persist in SystemOptions if scope is 'logo'
-      let nextSystemOptions = state.systemOptions;
+      // 2. Persist in SystemOptions depending on scope
+      let nextSystemOptions = { ...state.systemOptions };
       if (scope === 'logo') {
         const sysOptsForDb = {
           ...state.systemOptions,
@@ -2229,15 +2259,61 @@ export const useStore = create<AppState>((set, get) => ({
           localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
         } catch (e) {}
         dbApi.saveSystemOptions(sysOptsForDb).catch(() => {});
+      } else if (scope === 'timers') {
+        const sysOptsForDb: SystemOptions = {
+          ...state.systemOptions,
+          serviceIntervals: {
+            ...(state.systemOptions?.serviceIntervals || { countdownEnabled: false, countdownTime: '05:00', intervalType: 'Pre-Service Countdown', showOnMainDisplay: false }),
+            backgroundAssetId: finalAssetId,
+            backgroundAssetUrl: finalAssetBlobUrl,
+          }
+        } as SystemOptions;
+        nextSystemOptions = sysOptsForDb;
+        try {
+          localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
+        } catch (e) {}
+        dbApi.saveSystemOptions(sysOptsForDb).catch(() => {});
+      } else if (scope === 'songs') {
+        const sysOptsForDb: SystemOptions = {
+          ...state.systemOptions,
+          mainOutput: {
+            ...state.systemOptions?.mainOutput,
+            song: {
+              ...(state.systemOptions?.mainOutput?.song || {}),
+              backdropAssetUrl: finalAssetBlobUrl,
+            }
+          }
+        } as SystemOptions;
+        nextSystemOptions = sysOptsForDb;
+        try {
+          localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
+        } catch (e) {}
+        dbApi.saveSystemOptions(sysOptsForDb).catch(() => {});
+      } else if (scope === 'scriptures') {
+        const sysOptsForDb: SystemOptions = {
+          ...state.systemOptions,
+          mainOutput: {
+            ...state.systemOptions?.mainOutput,
+            scripture: {
+              ...(state.systemOptions?.mainOutput?.scripture || {}),
+              backdropAssetUrl: finalAssetBlobUrl,
+            }
+          }
+        } as SystemOptions;
+        nextSystemOptions = sysOptsForDb;
+        try {
+          localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
+        } catch (e) {}
+        dbApi.saveSystemOptions(sysOptsForDb).catch(() => {});
       }
 
       // 3. Update Theme in themesList
       let themeFound = false;
       const updatedThemes: Theme[] = state.themesList.map(t => {
         const isMatch = (
-          t.type === targetType ||
           (scope === 'logo' && (t.type === 'logo' || t.id === 'theme-logo')) ||
-          (scope === 'scriptures' && (t.type === 'bible' || t.id === 'theme-scripture')) ||
+          (scope === 'timers' && (t.type === 'timer' || t.id === 'theme-timer')) ||
+          (scope === 'scriptures' && (t.type === 'bible' || t.id === 'theme-scripture' || t.id === 'theme-bible')) ||
           (scope === 'songs' && (t.type === 'song' || t.id === 'theme-song')) ||
           (scope === 'presentations' && (t.type === 'presentation' || (t.type as any) === 'ppt' || t.id === 'theme-presentation')) ||
           (scope === 'announcements' && (t.type === 'announcement' || t.id === 'theme-announcement'))
@@ -2271,8 +2347,9 @@ export const useStore = create<AppState>((set, get) => ({
       });
 
       if (!themeFound && !isTogglingOff) {
+        const themeId = scope === 'logo' ? 'theme-logo' : (scope === 'timers' ? 'theme-timer' : (scope === 'scriptures' ? 'theme-scripture' : (scope === 'songs' ? 'theme-song' : (scope === 'presentations' ? 'theme-presentation' : `theme-${targetType}`))));
         const newThemeForDb: Theme = {
-          id: scope === 'logo' ? 'theme-logo' : (scope === 'scriptures' ? 'theme-scripture' : (scope === 'songs' ? 'theme-song' : (scope === 'presentations' ? 'theme-presentation' : `theme-${targetType}`))),
+          id: themeId,
           name: `Default ${scope.charAt(0).toUpperCase() + scope.slice(1)} Theme`,
           type: targetType as any,
           styles: {
@@ -2297,16 +2374,48 @@ export const useStore = create<AppState>((set, get) => ({
         updatedThemes.push(newThemeForState);
       }
 
+      // Clear slide cache so existing slides immediately resolve the new background
+      PresentationCore.clearSlideCache();
+
+      // Trigger timestamp refresh across all group states and staged group states so Live cards, monitors, and projector view re-render
+      const updatedGroupStates = { ...state.groupStates };
+      Object.keys(updatedGroupStates).forEach(groupId => {
+        if (updatedGroupStates[groupId]) {
+          updatedGroupStates[groupId] = {
+            ...updatedGroupStates[groupId],
+            renderFrame: undefined,
+            timestamp: Date.now(),
+          };
+        }
+      });
+
+      const updatedStagedGroupStates = { ...state.stagedGroupStates };
+      Object.keys(updatedStagedGroupStates).forEach(groupId => {
+        if (updatedStagedGroupStates[groupId]) {
+          updatedStagedGroupStates[groupId] = {
+            ...updatedStagedGroupStates[groupId],
+            renderFrame: undefined,
+            timestamp: Date.now(),
+          };
+        }
+      });
+
       // Broadcast to external projector displays and stage views
       broadcastStateChange({
         type: 'SYSTEM_UPDATE',
         data: { themesList: updatedThemes, systemOptions: nextSystemOptions },
+      });
+      broadcastStateChange({
+        type: 'GROUP_STATES_UPDATE',
+        data: { groupStates: updatedGroupStates },
       });
 
       return {
         assetsList: updatedAssetsList,
         systemOptions: nextSystemOptions,
         themesList: updatedThemes,
+        groupStates: updatedGroupStates,
+        stagedGroupStates: updatedStagedGroupStates,
       };
     });
   }

@@ -71,7 +71,7 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
       contentId: song.id,
       name: song.title,
       notes: song.author ? `Key of ${song.key || 'G'} • By ${song.author}` : undefined,
-      customBackgroundUrl: song.defaultBackgroundUrl
+      customBackgroundUrl: undefined
     });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
@@ -89,7 +89,7 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
       contentId: song.id,
       name: song.title,
       notes: song.author ? `Key of ${song.key || 'G'} • By ${song.author}` : undefined,
-      customBackgroundUrl: song.defaultBackgroundUrl
+      customBackgroundUrl: undefined
     };
     store.setRoutingRequest({ item, isNew: true, slideIndex: 0 });
     onClose();

@@ -103,6 +103,7 @@ export class PresentationCore {
           title: stanzaTitle,
           text: stanzaText,
           backgroundUrl,
+          isVideo: PresentationContentResolver.isVideoUrl(backgroundUrl) || undefined,
         });
         return;
       }
@@ -134,6 +135,7 @@ export class PresentationCore {
           title: stanzaTitle,
           text: lines.join('\n'),
           backgroundUrl,
+          isVideo: PresentationContentResolver.isVideoUrl(backgroundUrl) || undefined,
         });
         return;
       }
@@ -187,6 +189,7 @@ export class PresentationCore {
           title: slideTitle,
           text: chunk.join('\n'),
           backgroundUrl,
+          isVideo: PresentationContentResolver.isVideoUrl(backgroundUrl) || undefined,
         });
       });
     });
@@ -198,6 +201,7 @@ export class PresentationCore {
           title: rawTitle || 'Verse 1',
           text: rawText,
           backgroundUrl,
+          isVideo: PresentationContentResolver.isVideoUrl(backgroundUrl) || undefined,
         }];
   }
 
@@ -221,6 +225,9 @@ export class PresentationCore {
 
     if (item.type === 'song') {
       const songOpts = systemOptions?.mainOutput?.song;
+      const matchedSong = availableSongs.find(s => s.id === item.contentId || s.id === item.data?.songId || s.title?.toLowerCase() === item.name?.toLowerCase());
+      const effectiveSongBg = item.customBackgroundUrl || songOpts?.backdropAssetUrl || matchedSong?.defaultBackgroundUrl;
+
       // Check if inline data exists
       if (item.data && item.data.sections && item.data.sections.length > 0) {
         generated = item.data.sections.flatMap((sec: any, idx: number) =>
@@ -228,13 +235,12 @@ export class PresentationCore {
             sec.name || sec.title || `Verse ${idx + 1}`,
             sec.text || sec.lyrics || sec.content || '',
             sec.id || `slide-${idx}`,
-            item.customBackgroundUrl,
+            effectiveSongBg,
             songOpts
           )
         );
       } else {
         // Check if we can find song in library
-        const matchedSong = availableSongs.find(s => s.id === item.contentId || s.title.toLowerCase() === item.name.toLowerCase());
         if (matchedSong) {
           if (matchedSong.sections && matchedSong.sections.length > 0) {
             generated = matchedSong.sections.flatMap((sec: any, idx) =>
@@ -242,7 +248,7 @@ export class PresentationCore {
                 sec.name || sec.title || `Verse ${idx + 1}`,
                 sec.text || sec.lyrics || sec.content || '',
                 sec.id || `s-${idx}`,
-                item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+                effectiveSongBg,
                 songOpts
               )
             );
@@ -256,7 +262,7 @@ export class PresentationCore {
                 title,
                 text,
                 `s-${idx}`,
-                item.customBackgroundUrl || matchedSong.defaultBackgroundUrl,
+                effectiveSongBg,
                 songOpts
               );
             });
@@ -265,7 +271,7 @@ export class PresentationCore {
               'Verse 1',
               item.name,
               's1',
-              item.customBackgroundUrl,
+              effectiveSongBg,
               songOpts
             );
           }
@@ -274,7 +280,7 @@ export class PresentationCore {
             'Verse 1',
             item.name,
             's1',
-            item.customBackgroundUrl,
+            effectiveSongBg,
             songOpts
           );
         }
@@ -292,6 +298,7 @@ export class PresentationCore {
         });
 
         const breakOnNewVerse = scriptureOpts?.breakOnNewVerse ?? false;
+        const effectiveScriptureBg = item.customBackgroundUrl || scriptureOpts?.backdropAssetUrl;
         const slides: Slide[] = [];
 
         if (breakOnNewVerse) {
@@ -311,7 +318,8 @@ export class PresentationCore {
               id: `b-slide-${idx}`,
               title,
               text,
-              backgroundUrl: item.customBackgroundUrl,
+              backgroundUrl: effectiveScriptureBg,
+              isVideo: PresentationContentResolver.isVideoUrl(effectiveScriptureBg) || undefined,
               verses: [{ verse: v.verse, text: v.text }],
             });
           });
@@ -345,7 +353,8 @@ export class PresentationCore {
               id: `b-slide-${slides.length}`,
               title,
               text,
-              backgroundUrl: item.customBackgroundUrl,
+              backgroundUrl: effectiveScriptureBg,
+              isVideo: PresentationContentResolver.isVideoUrl(effectiveScriptureBg) || undefined,
               verses: currentGroup.map(v => ({ verse: v.verse, text: v.text })),
             });
 

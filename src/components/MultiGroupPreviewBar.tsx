@@ -35,6 +35,13 @@ export default function MultiGroupPreviewBar() {
     const targets = (group?.displayIds && group.displayIds.length > 0)
       ? group.displayIds
       : (group?.targetDisplayId ? [group.targetDisplayId] : []);
+    
+    if (targets.length === 0) {
+      const hash = `#/projector?groupId=${encodeURIComponent(groupId)}`;
+      window.open(hash, `projector_generic_${groupId}`, 'width=800,height=600');
+      return;
+    }
+
     for (const target of targets) {
       await DisplayManager.sendPresentationToTarget(groupId, target);
     }

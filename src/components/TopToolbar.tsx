@@ -35,7 +35,8 @@ import {
   BookOpen,
   Film,
   Trash2,
-  Plus
+  Plus,
+  Timer
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -63,6 +64,7 @@ interface TopToolbarProps {
   onOpenQuickSearch: () => void;
   onOpenDiagnostics?: () => void;
   onOpenNewSong?: () => void;
+  onOpenTimers?: () => void;
 }
 
 export default function TopToolbar({ 
@@ -76,7 +78,8 @@ export default function TopToolbar({
   onOpenRemoteControl,
   onOpenQuickSearch, 
   onOpenDiagnostics,
-  onOpenNewSong
+  onOpenNewSong,
+  onOpenTimers
 }: TopToolbarProps) {
   const store = useStore();
   const workspace = useWorkspace();
@@ -1273,8 +1276,29 @@ export default function TopToolbar({
         {/* Right Side: Presentation Master Controls (Go Live, Alerts, Logo, Black, Clear, Master Live) */}
         <div className="flex items-center space-x-1 shrink-0 flex-nowrap">
 
+          {/* TIMERS BUTTON */}
+          {onOpenTimers && (
+            <div className={`flex items-center rounded-md border transition-all ${
+              store.systemOptions?.serviceIntervals?.countdownEnabled
+                ? 'bg-amber-600/30 text-amber-300 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
+            }`}>
+              <button
+                onClick={onOpenTimers}
+                className="flex items-center gap-1.5 justify-center p-1.5"
+                title="Service Interval Timers & Stage Countdowns"
+              >
+                <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
+                  store.systemOptions?.serviceIntervals?.countdownEnabled ? 'bg-amber-500 text-black border-amber-300' : 'bg-transparent text-gray-400 border-transparent'
+                }`}>
+                  <Timer size={13} />
+                </div>
+                <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Timers</span>
+              </button>
+            </div>
+          )}
 
-          {/* ALERTS BUTTON WITH DROPDOWN */}
+          {/* ALERTS BUTTON */}
           <div className={`flex items-center rounded-md border transition-all ${
             alertState?.active
               ? 'bg-blue-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
@@ -1291,13 +1315,6 @@ export default function TopToolbar({
                 <Bell size={13} />
               </div>
               <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Alerts</span>
-            </button>
-            <button 
-              onClick={onOpenAlerts}
-              className="h-full px-1 py-2 text-gray-400 hover:text-white"
-              title="Alert Options"
-            >
-              <ChevronDown size={11} />
             </button>
           </div>
 

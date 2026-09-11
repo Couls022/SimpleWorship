@@ -16,6 +16,7 @@ import { isValidPptxBinary } from '../utils/pptxValidator';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { MediaStreamController } from '../core/MediaStreamController';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
+import { MainDisplayCountdownOverlay } from './workspace/MainDisplayCountdownOverlay';
 import { PresentationCanvas } from './presentation/PresentationCanvas';
 import { resolveGroupResolution, buildRenderFrame } from '../core/RenderFrameBuilder';
 
@@ -153,7 +154,9 @@ export default function MonitorPreviewCanvas({
   const itemContentType = (activeItem?.type as any) === 'ppt' ? 'presentation' : ((activeItem?.type as any) === 'scripture' ? 'bible' : activeItem?.type);
   const typeTheme = themesList.find(t => t.type === itemContentType || t.type === activeItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement'));
 
-  const baseSong = activeItem?.type === 'song' ? songsList.find(s => s.id === activeItem.contentId) : null;
+  const baseSong = activeItem?.type === 'song' 
+    ? songsList.find(s => s.id === activeItem.contentId || s.id === activeItem.data?.songId || s.title?.toLowerCase() === activeItem.name?.toLowerCase()) 
+    : null;
   const itemTheme = themesList.find(t => t.id === (activeItem?.themeId || baseSong?.themeId));
   const elementOverride = activeItem?.themeOverride || baseSong?.themeOverride;
 
@@ -215,7 +218,12 @@ export default function MonitorPreviewCanvas({
   const isVideoUrl = (url?: string) => {
     if (!url || typeof url !== 'string') return false;
     const lower = url.toLowerCase();
-    return lower.startsWith('data:video/') || lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov') || lower.endsWith('.m4v') || lower.endsWith('.avi') || lower.endsWith('.ogv');
+    if (lower.startsWith('data:video/') || lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov') || lower.endsWith('.m4v') || lower.endsWith('.avi') || lower.endsWith('.ogv')) {
+      return true;
+    }
+    const currentAssets = useStore.getState().assetsList || [];
+    const matched = currentAssets.find(a => a.url === url || a.id === url);
+    return matched ? (matched.type === 'video' || matched.type === 'motion') : false;
   };
 
   const isImageUrl = (url?: string) => {
@@ -281,7 +289,7 @@ export default function MonitorPreviewCanvas({
       audioSrc = activeItem?.data?.url || activeItem?.customBackgroundUrl || '';
       backgroundUrl = resolvedStyles.backgroundImageUrl || '';
     } else {
-      const effectiveBgUrl = slideBgUrl || activeItem?.customBackgroundUrl;
+      const effectiveBgUrl = slideBgUrl || activeItem?.customBackgroundUrl || baseSong?.defaultBackgroundUrl;
 
       if (effectiveBgUrl) {
         if (slideIsVideo === true || isExplicitVideoItem || isVideoUrl(effectiveBgUrl) || PresentationContentResolver.isVideoUrl(effectiveBgUrl)) {
@@ -292,7 +300,7 @@ export default function MonitorPreviewCanvas({
           backgroundUrl = effectiveBgUrl;
         }
       } else {
-        if (!isExplicitImageItem && (resolvedStyles.backgroundType === 'video' || Boolean(resolvedStyles.backgroundVideoUrl))) {
+        if (!isExplicitImageItem && (resolvedStyles.backgroundType === 'video' || (Boolean(resolvedStyles.backgroundVideoUrl) && resolvedStyles.backgroundType !== 'image'))) {
           isVideo = true;
           videoSrc = resolvedStyles.backgroundVideoUrl || '';
         } else {
@@ -342,13 +350,13 @@ export default function MonitorPreviewCanvas({
     };
 
     resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
-      if (isMounted && resolved) {
-        setLocalBackgroundUrl(resolved);
+      if (isMounted) {
+        setLocalBackgroundUrl(resolved || '');
       }
     });
     resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
-      if (isMounted && resolved) {
-        setLocalAudioSrc(resolved);
+      if (isMounted) {
+        setLocalAudioSrc(resolved || '');
       }
     });
 
@@ -639,7 +647,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Foreground Crisp Image Layer */}
-          {contentType === 'image' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && localBackgroundUrl && (
+          {contentType === 'image' && !presentationState.isClear && !presentationState.showLogo && localBackgroundUrl && (
             <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
               <img 
                 className="w-full h-full object-contain" 
@@ -651,7 +659,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Foreground Audio Presentation Layer */}
-          {contentType === 'audio' && !presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && (
+          {contentType === 'audio' && !presentationState.isClear && !presentationState.showLogo && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 select-none">
               <audio
                 ref={audioRef}
@@ -745,7 +753,7 @@ export default function MonitorPreviewCanvas({
 
           {/* Presentation (PowerPoint / Deck) Slide Layer */}
           <AnimatePresence>
-            {!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && !activeItem?.data?.isNativeRasterized && (
+            {!presentationState.isClear && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && !activeItem?.data?.isNativeRasterized && (
               <motion.div 
                 key={`preview-pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}`}
                 initial={motionConfig.initial}
@@ -775,7 +783,7 @@ export default function MonitorPreviewCanvas({
               themesList,
               DisplayManager.getCachedDisplays()
             );
-            if (!presentationState.isClear && !presentationState.isBlack && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame) {
+            if (!presentationState.isClear && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame) {
               return (
                 <PresentationCanvas 
                   frame={computedRenderFrame}
@@ -853,7 +861,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Master Logo Splash Mode or Theme Watermark */}
-          {!presentationState.isBlack && (
+          {true && (
             presentationState.showLogo ? (
               (!localBackgroundUrl && !videoSrc && !isGradient) ? (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8 pointer-events-none">
@@ -885,7 +893,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Slide Annotation Layer (Semi-transparent vector overlay that persists across transitions) */}
-          {!presentationState.isBlack && (
+          {true && (
             <SlideAnnotationLayer 
               groupId={groupId}
               interactive={true} 
@@ -896,7 +904,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Marquee Alert Banner */}
-          {currentAlert.active && !presentationState.isBlack && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || currentAlert.targetGroupIds.includes(groupId)) && (
+          {currentAlert.active && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || currentAlert.targetGroupIds.includes(groupId)) && (
             <div 
               className="absolute left-0 right-0 z-40 py-4 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
               style={{
@@ -933,7 +941,7 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Nursery Alert Badge Overlay */}
-          {currentAlert.showNursery && (currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && !presentationState.isBlack && (
+          {currentAlert.showNursery && (currentAlert.nurseryText || systemOptions?.mainOutput?.alerts?.nursery?.currentCode) && (
             <div 
               className={`absolute z-40 px-3 py-1.5 rounded-lg shadow-xl font-bold flex items-center gap-2 border border-white/20 animate-pulse ${
                 systemOptions?.mainOutput?.alerts?.nursery?.location === 'Top Left' ? 'top-4 left-4' :
@@ -953,6 +961,9 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Clear State - Text is already hidden above, keep clean display */}
+
+          {/* Service Interval Countdown Timer for Main Displays */}
+          <MainDisplayCountdownOverlay isBlack={presentationState.isBlack} />
 
           {/* Master Blackout Overlay (z-50) */}
           <AnimatePresence>

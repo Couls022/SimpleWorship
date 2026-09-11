@@ -24,6 +24,7 @@ import MediaLibraryPanel from './workspace/MediaLibraryPanel';
 import MediaLibraryModal from './MediaLibraryModal';
 import SongEditorModal from './SongEditorModal';
 import AlertModal from './AlertModal';
+import ServiceIntervalsModal from './ServiceIntervalsModal';
 import OptionsDialog from './options/OptionsDialog';
 import CenterShortcutSettingsModal from './CenterShortcutSettingsModal';
 import QuickSongSearchModal from './QuickSongSearchModal';
@@ -44,6 +45,7 @@ export default function ModeratorView() {
   const { resetLayout } = workspace;
 
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
+  const [isTimersOpen, setIsTimersOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
@@ -374,6 +376,7 @@ export default function ModeratorView() {
       {/* 1. Top Command & Menu Toolbar */}
       <TopToolbar
         onOpenAlerts={() => setIsAlertsOpen(true)}
+        onOpenTimers={() => setIsTimersOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenQuickSearch={() => setIsQuickSearchOpen(true)}
@@ -530,6 +533,10 @@ export default function ModeratorView() {
 
       {isAlertsOpen && (
         <AlertModal onClose={() => setIsAlertsOpen(false)} />
+      )}
+
+      {isTimersOpen && (
+        <ServiceIntervalsModal onClose={() => setIsTimersOpen(false)} />
       )}
 
       {isSettingsOpen && (

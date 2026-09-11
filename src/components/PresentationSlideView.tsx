@@ -1,5 +1,6 @@
 import React from 'react';
 import { Slide, SlideObject, ThemeStyles } from '../types';
+import { resolveAssetUrl } from '../db';
 
 interface PresentationSlideViewProps {
   slide: Slide;
@@ -44,9 +45,10 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
   // Background styling using slide background or active theme background
   const bgStyle: React.CSSProperties = React.useMemo(() => {
     // 1. Direct slide background URL (PPTX background or custom slide background)
-    if (slide.backgroundUrl) {
+    const resolvedSlideBg = resolveAssetUrl(slide.backgroundUrl);
+    if (resolvedSlideBg) {
       return {
-        backgroundImage: `url(${slide.backgroundUrl})`,
+        backgroundImage: `url(${resolvedSlideBg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -60,9 +62,10 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
       return { backgroundColor: slide.backgroundColor };
     }
     // 3. Fallback to active theme background image ONLY for native song/verse slides (not PPTX decks)
-    if (!isPptxOrDeck && themeStyles?.backgroundImageUrl) {
+    const resolvedThemeBg = resolveAssetUrl(themeStyles?.backgroundImageUrl);
+    if (!isPptxOrDeck && resolvedThemeBg) {
       return {
-        backgroundImage: `url(${themeStyles.backgroundImageUrl})`,
+        backgroundImage: `url(${resolvedThemeBg})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',

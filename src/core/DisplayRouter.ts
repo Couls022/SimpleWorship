@@ -193,7 +193,25 @@ export function resolveDisplayAssignments(
     const groupsForDisplay = outputGroups.filter((g) => {
       return routeTargetsDisplay(g, displayId);
     });
-    const candidateGroupIds = groupsForDisplay.map((g) => g.id);
+
+    // Prioritize explicit targets: if any group explicitly targets this display, remove groups that only matched via fallback.
+    const explicitGroups = groupsForDisplay.filter(g => {
+      const list = (g.displayIds && g.displayIds.length > 0) ? g.displayIds : (g.targetDisplayId ? [g.targetDisplayId] : []);
+      if (list.length === 0) return false;
+      const target = String(displayId).toLowerCase().trim();
+      const targetNorm = normalizeDisplayName(displayId);
+      return list.some(id => {
+        if (!id) return false;
+        const raw = String(id).toLowerCase().trim();
+        if (raw === target) return true;
+        const normId = normalizeDisplayName(id);
+        if (normId && targetNorm && (normId === targetNorm || normId.includes(targetNorm) || targetNorm.includes(normId))) return true;
+        return false;
+      });
+    });
+
+    const finalGroupsForDisplay = explicitGroups.length > 0 ? explicitGroups : groupsForDisplay;
+    const candidateGroupIds = finalGroupsForDisplay.map((g) => g.id);
     const liveGroupIds = candidateGroupIds.filter((gid) => isRouteLive(gid));
 
     // 2. Zero candidate routes targeting this display
@@ -208,34 +226,20 @@ export function resolveDisplayAssignments(
     }
 
     // 3. Resolve winning route for this physical display
-    // RULE: "Route Panel 1 merong target monitor 1 tapos route panel 2 merong target monitor 1 and 2
-    // kaya ang mangyayari ay ung monitor 1 makakatanggap ng 1 is to 1 galing sa route panel 1 and 2
-    // at kung sino ung active siya ung naka overlay na display"
+    // RULE: If multiple routes target this display, the ACTIVE route takes priority over others.
     let winningGroupId: string | null = null;
     if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId) && isRouteLive(activeControlGroupId)) {
-      // Active route takes priority and overlays on this monitor when LIVE!
       winningGroupId = activeControlGroupId;
     } else if (liveGroupIds.length > 0) {
       winningGroupId = liveGroupIds[0];
     } else {
-      // When LIVE is OFF for all groups targeting this display:
-      // Standby / Not casting to projector! Source output only flows to projector when LIVE ON switch is enabled.
       winningGroupId = null;
-    }
-
-    // Build the ordered layer list for multi-layer presentation stacking:
-    // All available live routes are included, with the WINNING/ACTIVE group placed LAST
-    // so it renders on the highest z-index / top overlay in the presentation DOM.
-    const orderedLiveGroupIds: string[] = [];
-    if (winningGroupId) {
-      const baseList = liveGroupIds.filter((id) => id !== winningGroupId);
-      orderedLiveGroupIds.push(...baseList, winningGroupId);
     }
 
     result.set(displayId, {
       displayId,
       assignedGroupId: winningGroupId,
-      liveGroupIds: orderedLiveGroupIds,
+      liveGroupIds: liveGroupIds,
       candidateGroupIds,
     });
   }

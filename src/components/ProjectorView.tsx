@@ -175,13 +175,33 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     };
   }, [displayId, outputGroups, groupStates, stagedGroupStates, activeControlGroupId, routedGroupId, currentRouteGroupId]);
 
-  // Master Gate: If LIVE switch is OFF or no group is assigned, project solid clean black screen (Standby Mode)
-  // This strictly ensures saving route configuration NEVER casts prematurely to the projector before Live switch is turned ON.
-  if (!isLiveActive || !winningGroupId) {
-    return (
+  // Determine what state to pass to the canvas
+  const winningState = winningGroupId ? (groupStates[winningGroupId] || stagedGroupStates[winningGroupId]) : undefined;
+  const winningGroup = winningGroupId ? (outputGroups.find(g => g.id === winningGroupId) || outputGroups[0]) : undefined;
+
+  return (
+    <div 
+      data-canvas-preview="true"
+      className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
+    >
+      {/* ALWAYS render the canvas to preserve DOM state, video playheads, and asset caches. 
+          Use opacity to hide it if Master Live is OFF or no group is assigned. */}
+      {winningGroupId && winningGroup && (
+        <div className="absolute inset-0 transition-opacity duration-500 ease-in-out" style={{ opacity: isLiveActive ? 1 : 0 }}>
+          <MonitorPreviewCanvas
+            groupId={winningGroupId}
+            customGroup={winningGroup}
+            customState={winningState}
+            isProjectorMode={true}
+            className="w-full h-full"
+          />
+        </div>
+      )}
+
+      {/* Master Gate Standby Overlay: Solid black if LIVE switch is OFF */}
       <div 
-        data-canvas-preview="true"
-        className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
+        className="absolute inset-0 z-[100] bg-black pointer-events-none transition-opacity duration-500 ease-in-out flex items-center justify-center"
+        style={{ opacity: (!isLiveActive || !winningGroupId) ? 1 : 0 }}
       >
         {/* Visual Identification Overlay for connected monitors */}
         <AnimatePresence>
@@ -202,34 +222,15 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
           )}
         </AnimatePresence>
       </div>
-    );
-  }
-
-  // When LIVE is ON: Render the EXACT same canvas as the operator's Live Display Canvas (100% Visual & State Parity)
-  const winningState = groupStates[winningGroupId] || stagedGroupStates[winningGroupId];
-  const winningGroup = outputGroups.find(g => g.id === winningGroupId) || outputGroups[0];
-
-  return (
-    <div 
-      data-canvas-preview="true"
-      className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
-    >
-      <MonitorPreviewCanvas
-        groupId={winningGroupId}
-        customGroup={winningGroup}
-        customState={winningState}
-        isProjectorMode={true}
-        className="w-full h-full"
-      />
-
-      {/* Visual Identification Overlay for connected monitors */}
+      
+      {/* If LIVE is active, the identify overlay should still be visible if triggered */}
       <AnimatePresence>
-        {identifyActive && (
+        {(identifyActive && isLiveActive) && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
+            className="absolute inset-0 z-[110] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
           >
             <div className="w-48 h-48 rounded-3xl bg-blue-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
               <span className="text-8xl font-black">{displayIndex}</span>

@@ -61,6 +61,7 @@ export interface SystemOptions {
       alphaKeyingMode?: 'none' | 'key' | 'ndi' | 'transparent';
     };
     song: {
+      backdropAssetUrl?: string;
       songFont: FontStyleOptions;
       showVerseChorusLabel: boolean;
       labelFont: FontStyleOptions;
@@ -85,6 +86,7 @@ export interface SystemOptions {
       splitLabelStyle?: 'part' | 'alpha' | 'numeric' | 'same';
     };
     scripture: {
+      backdropAssetUrl?: string;
       enableScriptureSupport: boolean;
       scriptureFont: FontStyleOptions;
       showVerseNumbers: boolean;
@@ -167,6 +169,12 @@ export interface SystemOptions {
     countdownEnabled: boolean;
     countdownTime: string;
     intervalType: string;
+    showOnMainDisplay?: boolean;
+    backgroundAssetId?: string;
+    isRunning?: boolean;
+    targetTimestamp?: number | null;
+    fontFamily?: string;
+    fontColor?: string;
   };
   slideLabels: SlideLabelConfig[];
   appearance?: {
@@ -205,6 +213,7 @@ export interface Asset {
     presentations?: boolean;
     announcements?: boolean;
     logo?: boolean;
+    timers?: boolean;
   };
   createdAt?: number;
 }
@@ -263,12 +272,12 @@ export interface ThemeStyles {
   labelTextColor?: string;
 }
 
-export type ThemeType = 'global' | 'song' | 'bible' | 'presentation' | 'announcement' | 'stage' | 'logo' | 'custom';
+export type ThemeType = 'global' | 'song' | 'bible' | 'presentation' | 'announcement' | 'stage' | 'logo' | 'timer' | 'custom';
 
 export interface Theme {
   id: string;
   name: string;
-  type: 'global' | 'song' | 'bible' | 'presentation' | 'announcement' | 'stage' | 'logo' | 'custom';
+  type: ThemeType;
   styles: ThemeStyles;
 }
 
