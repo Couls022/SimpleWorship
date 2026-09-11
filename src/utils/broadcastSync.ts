@@ -92,6 +92,17 @@ export const sanitizeForSync = (val: any, depth = 0): any => {
   return result;
 };
 
+const getCircularReplacer = () => {
+  const seen = new WeakSet();
+  return (key: string, value: any) => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) return;
+      seen.add(value);
+    }
+    return value;
+  };
+};
+
 export const broadcastStateChange = (payload: BroadcastPayload) => {
   if (typeof window === 'undefined') return;
   const now = Date.now();
@@ -110,7 +121,14 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
       try {
         const lightweight = sanitizeForSync(fullPayload);
         channel.postMessage(lightweight);
-      } catch (e2) {}
+      } catch (e2) {
+        // Ultimate fallback to guarantee delivery via BroadcastChannel:
+        // JSON stringification natively strips any lingering uncloneable objects (functions, DOM nodes, etc.)
+        try {
+          const ultraLight = JSON.parse(JSON.stringify(sanitizeForSync(fullPayload), getCircularReplacer()));
+          channel.postMessage(ultraLight);
+        } catch (e3) {}
+      }
     }
   }
 

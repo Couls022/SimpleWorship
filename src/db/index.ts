@@ -135,6 +135,15 @@ export const dbApi = {
       objectUrlCache.set(asset.id, asset.url);
     }
     const db = await getDB();
+    
+    // If saving an asset from state (which has blob stripped), preserve the existing blob in DB
+    if (!asset.blob) {
+      const existing = await db.get('assets', asset.id);
+      if (existing && existing.blob) {
+        asset.blob = existing.blob;
+      }
+    }
+    
     await db.put('assets', asset);
   },
   async getAsset(id: string) {
@@ -157,7 +166,6 @@ export const dbApi = {
   async getAllAssets() {
     const db = await getDB();
     // Getting all assets can be slow if there are massive blobs.
-    // However, IndexedDB mostly returns references.
     const assets = await db.getAll('assets');
     return assets.map(a => {
       if (a.blob && a.url && a.url.startsWith('blob:')) {
@@ -172,7 +180,9 @@ export const dbApi = {
           a.thumbnailUrl = a.url;
         }
       }
-      return a;
+      // Strip blob to prevent JS heap exhaustion and GC lags
+      const { blob, ...assetWithoutBlob } = a;
+      return assetWithoutBlob as Asset;
     });
   },
   async deleteAsset(id: string) {

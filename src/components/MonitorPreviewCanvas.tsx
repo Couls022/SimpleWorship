@@ -399,7 +399,8 @@ export default function MonitorPreviewCanvas({
     presentationState.isVideoMuted,
     presentationState.isVideoLooping,
     presentationState.videoVolume,
-    videoSrc
+    videoSrc,
+    managedVideoSrc
   ]);
 
   useEffect(() => {
@@ -410,6 +411,7 @@ export default function MonitorPreviewCanvas({
 
   const lastVideoTimeUpdateRef = useRef<number>(0);
   const handleTimeUpdate = () => {
+    if (isProjectorMode) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const now = Date.now();
@@ -425,6 +427,7 @@ export default function MonitorPreviewCanvas({
   };
 
   const handleLoadedMetadata = () => {
+    if (isProjectorMode) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
     if (store.setStagedGroupState) {
@@ -437,6 +440,7 @@ export default function MonitorPreviewCanvas({
 
   const lastAudioTimeUpdateRef = useRef<number>(0);
   const handleAudioTimeUpdate = () => {
+    if (isProjectorMode) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
     const now = Date.now();
@@ -452,6 +456,7 @@ export default function MonitorPreviewCanvas({
   };
 
   const handleAudioLoadedMetadata = () => {
+    if (isProjectorMode) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
     if (store.setStagedGroupState) {
@@ -540,7 +545,7 @@ export default function MonitorPreviewCanvas({
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={() => {
-                  if (!(presentationState.isVideoLooping ?? true)) {
+                  if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
                     store.setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                   }
                 }}
@@ -657,7 +662,7 @@ export default function MonitorPreviewCanvas({
                 onTimeUpdate={handleAudioTimeUpdate}
                 onLoadedMetadata={handleAudioLoadedMetadata}
                 onEnded={() => {
-                  if (!(presentationState.isVideoLooping ?? true)) {
+                  if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
                     store.setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                   }
                 }}

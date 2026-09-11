@@ -468,7 +468,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
                 {/* Restart Button */}
                 <button
                   type="button"
-                  onClick={() => setStagedGroupState(effectiveGroupId, { videoSeekTime: 0, videoCurrentTime: 0, isVideoPlaying: true })}
+                  onClick={() => setStagedGroupState(effectiveGroupId, { videoSeekTime: (stagedControlState?.videoSeekTime === 0 ? 0.000001 : 0), videoCurrentTime: 0, isVideoPlaying: true })}
                   className="px-2.5 py-1 rounded bg-[#252834] hover:bg-[#323646] text-gray-200 text-[11px] font-semibold flex items-center gap-1 border border-[#373b4d] transition-all cursor-pointer select-none active:scale-95"
                   title="Restart Media from 0:00"
                 >

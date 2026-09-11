@@ -2155,7 +2155,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   addAsset: async (asset) => {
     await dbApi.addAsset(asset);
-    set((state) => ({ assetsList: [...state.assetsList.filter(a => a.id !== asset.id), asset] }));
+    const { blob, ...assetWithoutBlob } = asset;
+    set((state) => ({ assetsList: [...state.assetsList.filter(a => a.id !== asset.id), assetWithoutBlob as any] }));
   },
 
   deleteAsset: async (id) => {

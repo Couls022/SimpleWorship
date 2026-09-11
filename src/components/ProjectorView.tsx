@@ -30,6 +30,9 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   // Initialize broadcast synchronization and aggressive state retrieval
   useEffect(() => {
     initSync(true);
+    
+    // Projector must load its own assets and songs from DB so local background URLs resolve correctly
+    useStore.getState().loadAllData().catch(e => console.warn('Projector failed to load DB data:', e));
 
     // Immediately request state from master window
     broadcastStateChange({ type: 'REQUEST_STATE', data: null });
