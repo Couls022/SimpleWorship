@@ -707,8 +707,8 @@ function AlertModal({ onClose }: AlertModalProps) {
               })}
 
               {alertPresets.length === 0 && (
-                <div className="py-4 text-center text-gray-500 text-xs">
-                  No presets saved. Click "Save Current as Preset" above or "Restore Defaults".
+                <div className="py-5 px-4 text-center text-gray-500 text-xs border border-dashed border-[#282c37] rounded-lg bg-[#14161d]/50">
+                  Walang naka-save na preset. Mag-type ng message sa ibaba at i-click ang <span className="text-amber-400 font-semibold">"+ Save Current as Preset"</span> upang mag-add manually.
                 </div>
               )}
             </div>

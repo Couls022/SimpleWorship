@@ -104,86 +104,23 @@ const getStoredOptions = (): SystemOptions => {
   return defaultSystemOptions;
 };
 
-export const DEFAULT_ALERT_PRESETS: AlertPreset[] = [
-  {
-    id: 'preset-nursery-304',
-    title: 'Nursery Room #304',
-    message: 'Nursery #304 is requested in the Toddler Room',
-    position: 'bottom',
-    backgroundColor: '#0F172A',
-    textColor: '#FACC15',
-    showNursery: true,
-    nurseryText: '#304',
-    autoDismissSecs: 0,
-    targetGroup: 'all',
-    isDefault: true,
-  },
-  {
-    id: 'preset-nursery-102',
-    title: 'Nursery Parents Notice',
-    message: 'Nursery #102: Parents please report to the nursery',
-    position: 'bottom',
-    backgroundColor: '#0F172A',
-    textColor: '#FACC15',
-    showNursery: true,
-    nurseryText: '#102',
-    autoDismissSecs: 0,
-    targetGroup: 'all',
-    isDefault: true,
-  },
-  {
-    id: 'preset-vehicle-move',
-    title: 'Vehicle Parking Notice',
-    message: 'Driver of White SUV (Plate # ABC-1234), please move your vehicle',
-    position: 'bottom',
-    backgroundColor: '#7F1D1D',
-    textColor: '#FEF08A',
-    showNursery: false,
-    autoDismissSecs: 60,
-    targetGroup: 'all',
-    isDefault: true,
-  },
-  {
-    id: 'preset-sunday-school',
-    title: 'Sunday School Class Dismissal',
-    message: 'Children are dismissed to Sunday School Class',
-    position: 'bottom',
-    backgroundColor: '#1E3A8A',
-    textColor: '#93C5FD',
-    showNursery: false,
-    autoDismissSecs: 30,
-    targetGroup: 'all',
-    isDefault: true,
-  },
-  {
-    id: 'preset-fellowship-lunch',
-    title: 'Fellowship Lunch Announcement',
-    message: 'Special Announcement: Fellowship Lunch right after the service',
-    position: 'top',
-    backgroundColor: '#064E3B',
-    textColor: '#6EE7B7',
-    showNursery: false,
-    autoDismissSecs: 0,
-    targetGroup: 'all',
-    isDefault: true,
-  }
-];
+export const DEFAULT_ALERT_PRESETS: AlertPreset[] = [];
 
-const ALERT_PRESETS_STORAGE_KEY = 'simpleworship_alert_presets_v1';
+const ALERT_PRESETS_STORAGE_KEY = 'simpleworship_alert_presets_v2';
 
 const getStoredAlertPresets = (): AlertPreset[] => {
   try {
     const saved = localStorage.getItem(ALERT_PRESETS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch (e) {
     console.error('Error loading stored alert presets', e);
   }
-  return DEFAULT_ALERT_PRESETS;
+  return [];
 };
 
 const saveStoredAlertPresets = (presets: AlertPreset[]) => {

@@ -725,13 +725,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 Quick Alert Presets (Tap to send)
               </span>
               <div className="space-y-1.5">
-                {(store.alertPresets && store.alertPresets.length > 0 ? store.alertPresets : [
-                  { id: '1', title: 'Nursery #304', message: 'Nursery #304 is requested in the Toddler Room', backgroundColor: '#0F172A', textColor: '#FACC15' },
-                  { id: '2', title: 'Nursery #102', message: 'Nursery #102: Parents please report to the nursery', backgroundColor: '#0F172A', textColor: '#FACC15' },
-                  { id: '3', title: 'Vehicle Notice', message: 'Driver of White SUV (Plate # ABC-1234), please move your vehicle', backgroundColor: '#7F1D1D', textColor: '#FEF08A' },
-                  { id: '4', title: 'Sunday School', message: 'Children are dismissed to Sunday School Class', backgroundColor: '#1E3A8A', textColor: '#93C5FD' },
-                  { id: '5', title: 'Fellowship Lunch', message: 'Special Announcement: Fellowship Lunch right after the service', backgroundColor: '#064E3B', textColor: '#6EE7B7' }
-                ]).map((preset: any) => (
+                {(store.alertPresets || []).map((preset: any) => (
                   <button
                     key={preset.id || preset.message}
                     type="button"
@@ -757,6 +751,11 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                     <ChevronRight size={13} className="text-gray-500 group-hover:text-amber-400 shrink-0" />
                   </button>
                 ))}
+                {(store.alertPresets || []).length === 0 && (
+                  <div className="py-2.5 text-center text-gray-500 text-[11px] bg-[#12141c] border border-[#202430] rounded-lg">
+                    No presets saved.
+                  </div>
+                )}
               </div>
             </div>
           </div>

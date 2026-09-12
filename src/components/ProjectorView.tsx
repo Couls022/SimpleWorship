@@ -80,10 +80,22 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       });
     }
 
+    // In-browser custom event listener for route changed
+    const handleRouteChanged = (e: any) => {
+      const targetDisplay = e?.detail?.displayId;
+      if (!displayId || !targetDisplay || targetDisplay === displayId) {
+        if (e?.detail?.groupId) {
+          setCurrentRouteGroupId(e.detail.groupId);
+        }
+      }
+    };
+    window.addEventListener('simpleworship:projector-route-changed', handleRouteChanged);
+
     return () => {
       clearTimeout(timer1);
       clearTimeout(timer2);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('simpleworship:projector-route-changed', handleRouteChanged);
     };
   }, []);
 
