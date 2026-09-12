@@ -370,7 +370,6 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         ccliNumber: song.ccliNumber,
       },
     };
-    store.addScheduleItem(item);
     store.setPreviewItem(item.id, 0);
     store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
   };

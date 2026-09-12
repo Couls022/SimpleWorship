@@ -101,7 +101,6 @@ export default function PresentationsTab() {
       data: pres.data,
       isExpanded: false
     };
-    addScheduleItem(item);
     const { setPreviewItem } = useStore.getState();
     setPreviewItem(item.id, 0);
     goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);

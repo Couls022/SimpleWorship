@@ -63,7 +63,6 @@ export default function CamerasTab() {
         deviceLabel: camera.label
       }
     };
-    addScheduleItem(item);
     setPreviewItem(item.id, 0);
     goLiveItem(item.id, 0, activeControlGroupId || undefined, item);
   };

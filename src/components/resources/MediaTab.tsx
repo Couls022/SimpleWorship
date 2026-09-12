@@ -251,7 +251,6 @@ export default function MediaTab() {
         isAudio: asset.type === 'audio',
       }
     };
-    addScheduleItem(item);
     const { setPreviewItem } = useStore.getState();
     setPreviewItem(item.id, 0);
     goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);
@@ -286,7 +285,6 @@ export default function MediaTab() {
       isExpanded: true
     };
 
-    addScheduleItem(slideshowItem);
     const { setPreviewItem } = useStore.getState();
     setPreviewItem(slideshowItem.id, 0);
     goLiveItem(slideshowItem.id, 0, useStore.getState().activeControlGroupId || undefined, slideshowItem);

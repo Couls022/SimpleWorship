@@ -335,7 +335,6 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
 
   const handleGoLiveNow = (verses: ScriptureVerse[]) => {
     const item = createPresentationItem(verses);
-    addScheduleItem(item);
     setPreviewItem(item.id, 0);
     goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
   };

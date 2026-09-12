@@ -247,11 +247,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         return;
       }
       if (dropResult.items && dropResult.items.length > 0) {
-        // Ingest all dropped items into Schedule
-        for (const item of dropResult.items) {
-          useStore.getState().addScheduleItem(item);
-        }
-        // Go live with the first dropped item immediately on this output panel
+        // Go live with the first dropped item immediately on this output panel without polluting schedule
         const targetLiveItem = dropResult.items[0];
         useStore.getState().goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem, routerId);
         useStore.getState().setStagedGroupState(groupId, {
@@ -307,10 +303,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
               newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
             }
           }
-          if (payload.source !== 'schedule') {
-            useStore.getState().addScheduleItem(newItem);
-          }
-          useStore.getState().goLiveItem(itemId, 0, groupId, undefined, routerId); 
+          useStore.getState().goLiveItem(itemId, 0, groupId, newItem, routerId); 
           useStore.getState().setStagedGroupState(groupId, {
             activeItemId: itemId,
             activeSlideIndex: 0,

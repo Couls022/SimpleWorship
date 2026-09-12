@@ -91,7 +91,6 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
       notes: song.author ? `Key of ${song.key || 'G'} • By ${song.author}` : undefined,
       customBackgroundUrl: undefined
     };
-    store.addScheduleItem(item);
     store.setPreviewItem(item.id, 0);
     store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Broadcasting "${song.title}" directly to Live Output!` }));

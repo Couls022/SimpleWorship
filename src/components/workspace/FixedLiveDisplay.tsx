@@ -277,9 +277,6 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               return;
             }
             if (dropResult.items && dropResult.items.length > 0) {
-              for (const item of dropResult.items) {
-                useStore.getState().addScheduleItem(item);
-              }
               const targetItem = dropResult.items[0];
               useStore.getState().goLiveItem(targetItem.id, 0, effectiveGroupId, targetItem);
               useStore.getState().setStagedGroupState(effectiveGroupId, {
@@ -304,9 +301,6 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               const payload = JSON.parse(rawJson);
               if (payload && payload.item) {
                 const item = payload.item;
-                if (payload.source !== 'schedule') {
-                  useStore.getState().addScheduleItem(item);
-                }
                 useStore.getState().goLiveItem(item.id, 0, effectiveGroupId, item);
                 useStore.getState().setStagedGroupState(effectiveGroupId, {
                   activeItemId: item.id,

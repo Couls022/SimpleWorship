@@ -231,7 +231,6 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
         type: asset.type
       }
     };
-    store.addScheduleItem(item);
     store.setPreviewItem(item.id, 0);
     store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
     onClose();
