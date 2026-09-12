@@ -13,9 +13,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 export default function CamerasTab() {
   const store = useStore();
-  const { availableCameras, setAvailableCameras, goLiveItem, activeControlGroupId } = store;
+  const { availableCameras, setAvailableCameras, goLiveItem, activeControlGroupId, setPreviewItem, addScheduleItem } = store;
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
 
   const refreshCameras = async () => {
     setIsRefreshing(true);
@@ -62,6 +63,8 @@ export default function CamerasTab() {
         deviceLabel: camera.label
       }
     };
+    addScheduleItem(item);
+    setPreviewItem(item.id, 0);
     goLiveItem(item.id, 0, activeControlGroupId || undefined, item);
   };
 
@@ -104,13 +107,20 @@ export default function CamerasTab() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {availableCameras.map((cam: CameraDeviceInfo) => {
               const isPreviewing = activePreviewId === cam.deviceId;
+              const isSelected = selectedCameraId === cam.deviceId;
 
               return (
                 <div
                   key={cam.deviceId}
                   draggable
                   onDragStart={(e) => handleDragStart(e, cam)}
-                  className="bg-[#1c1e26] border border-[#2a2d39] rounded overflow-hidden flex flex-col hover:border-[#3c4252] transition-colors cursor-grab active:cursor-grabbing group"
+                  onClick={() => setSelectedCameraId(cam.deviceId)}
+                  onDoubleClick={() => fireLive(cam)}
+                  className={`bg-[#1c1e26] border rounded overflow-hidden flex flex-col transition-all cursor-grab active:cursor-grabbing group ${
+                    isSelected
+                      ? 'border-pink-500 ring-2 ring-pink-500/40 shadow-md'
+                      : 'border-[#2a2d39] hover:border-[#3c4252]'
+                  }`}
                 >
                   {/* Aspect Ratio Container for Camera Feed */}
                   <div className="w-full aspect-video bg-black relative">

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Plus,
+  Play,
   Search,
   Music,
   Edit3,
@@ -19,7 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useStore } from "../../store/useStore";
-import { Song } from "../../types";
+import { Song, PresentationItem } from "../../types";
 import { handleRangeSelection } from "../../utils/selectionUtils";
 import { BAPTIST_HYMNAL_SONGS } from "../../data/baptistHymnal";
 import { HYMNS_OF_PRAISES } from "../../data/hymnsOfPraises";
@@ -346,6 +347,32 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         detail: `Added "${song.title}" to schedule!`,
       }),
     );
+  };
+
+  const handleGoLive = (song: Song) => {
+    const item: PresentationItem = {
+      id: `song-${song.id}-${Date.now()}`,
+      type: "song",
+      contentId: song.id,
+      name: song.title,
+      notes: song.author
+        ? `Key of ${song.key || "G"} • By ${song.author}`
+        : undefined,
+      customBackgroundUrl: undefined,
+      themeOverride: song.themeOverride,
+      data: {
+        songId: song.id,
+        title: song.title,
+        author: song.author,
+        key: song.key,
+        lyrics: song.lyrics,
+        sections: song.sections,
+        ccliNumber: song.ccliNumber,
+      },
+    };
+    store.addScheduleItem(item);
+    store.setPreviewItem(item.id, 0);
+    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
   };
 
   // Drag-and-drop start handler with full metadata
@@ -777,7 +804,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                     draggable={true}
                     onDragStart={(e) => handleDragStart(e, song)}
                     onClick={(e) => handleSongClick(e, song)}
-                    onDoubleClick={() => handleAddToSchedule(song)}
+                    onDoubleClick={() => handleGoLive(song)}
                     onContextMenu={(e) => handleContextMenu(e, song)}
                     className={`flex h-9 text-xs transition-colors items-center cursor-grab active:cursor-grabbing border-b border-[#1b1d24] group ${
                       isSelected
@@ -856,6 +883,17 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
           <div className="px-3 py-1 font-bold text-cyan-300 border-b border-[#2a2e3d] text-[11px] truncate">
             {contextMenu.song.title}
           </div>
+
+          <button
+            onClick={() => {
+              handleGoLive(contextMenu.song);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left hover:bg-emerald-600 hover:text-white flex items-center gap-2 text-emerald-300 font-semibold"
+          >
+            <Play size={12} className="text-emerald-400 fill-emerald-400" />
+            <span>Go Live</span>
+          </button>
 
           <button
             onClick={() => {

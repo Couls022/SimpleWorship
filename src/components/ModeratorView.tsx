@@ -28,7 +28,6 @@ import ServiceIntervalsModal from './ServiceIntervalsModal';
 import OptionsDialog from './options/OptionsDialog';
 import CenterShortcutSettingsModal from './CenterShortcutSettingsModal';
 import QuickSongSearchModal from './QuickSongSearchModal';
-import TargetSelectionModal from './TargetSelectionModal';
 import SystemDiagnosticsModal from './SystemDiagnosticsModal';
 import NewScheduleModal from './NewScheduleModal';
 import OpenScheduleModal from './OpenScheduleModal';
@@ -586,8 +585,6 @@ export default function ModeratorView() {
           }}
         />
       )}
-
-      <TargetSelectionModal />
 
       {/* 5. System Architecture Diagnostics Modal */}
       {isDiagnosticsOpen && (

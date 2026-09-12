@@ -231,11 +231,13 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
         type: asset.type
       }
     };
-    store.setRoutingRequest({ item, isNew: true, slideIndex: 0 });
+    store.addScheduleItem(item);
+    store.setPreviewItem(item.id, 0);
+    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
     onClose();
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
-        detail: `Sent "${asset.name}" to Live Output!` 
+        detail: `Broadcasting "${asset.name}" directly to Live Output!` 
       })
     );
   };

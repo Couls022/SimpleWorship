@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, CheckCircle2, Play } from 'lucide-react';
+import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useScreens } from '../hooks/useScreens';
 import { DisplayManager } from '../core/DisplayManager';
@@ -63,22 +63,6 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
     const h = dispObj.height || dispObj.bounds?.height;
     if (w && h) {
       setAspectRatio(`${w}x${h}`);
-    }
-  };
-
-  const handleTestPresentation = async () => {
-    try {
-      store.setActiveControlGroupId(groupId);
-      for (const disp of selectedDisplayIds) {
-        await DisplayManager.sendPresentationToTarget(groupId, disp);
-      }
-      window.dispatchEvent(
-        new CustomEvent('simpleworship:notify', { 
-          detail: `1:1 Presentation sent to ${selectedDisplayIds.join(', ')} (Active overlay: ${name})` 
-        })
-      );
-    } catch (err: any) {
-      console.error('Failed to send presentation test:', err);
     }
   };
 
@@ -283,22 +267,6 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
                   </div>
                 );
               })}
-            </div>
-
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#2d313d]/60 text-[11px] text-gray-400">
-              <span className="text-gray-400 flex items-center gap-1">
-                <CheckCircle2 size={12} className="text-emerald-400 shrink-0" />
-                1:1 Presentation: Shared monitors overlay the active route panel cleanly.
-              </span>
-              <button
-                type="button"
-                onClick={handleTestPresentation}
-                className="flex items-center gap-1 text-sky-400 hover:text-sky-300 font-medium cursor-pointer shrink-0"
-                title="Immediately test sending presentation to target monitor(s)"
-              >
-                <Play size={11} className="text-sky-400" />
-                Send Test
-              </button>
             </div>
           </div>
         </div>

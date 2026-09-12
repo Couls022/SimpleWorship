@@ -35,6 +35,8 @@ interface FixedLiveDisplayProps {
 export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProps) {
   const outputGroups = useStore(state => state.outputGroups);
   const groupStates = useStore(state => state.groupStates);
+  const routerPanels = useStore(state => state.routerPanels);
+  const activeRouterId = useStore(state => state.activeRouterId);
   const activeSchedule = useStore(state => state.activeSchedule);
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
   const systemOptions = useStore(state => state.systemOptions);
@@ -195,8 +197,17 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
     >
       {/* Top Header Bar for Fixed Live Output Display */}
       <div className="h-9 flex items-center justify-between px-3 shrink-0 bg-[#151720] border-b border-[#222634] z-40">
-        {/* Left: Master Live Switch (Main Source of Truth) */}
+        {/* Left: Master Live Switch / Router Authority Status */}
         <div className="flex items-center gap-2 min-w-0">
+          {(() => {
+            const currentRouterIndex = routerPanels.findIndex(p => p.routerId === activeRouterId);
+            const routerBadge = currentRouterIndex !== -1 ? `R${currentRouterIndex + 1}` : 'R1';
+            return (
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-500/40 shrink-0 shadow-xs">
+                {routerBadge}
+              </span>
+            );
+          })()}
           <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 hidden min-[480px]:inline ${
             isBlack ? 'text-rose-400' : isClear ? 'text-amber-400' : isLogo ? 'text-indigo-400' : isLive ? 'text-emerald-400' : 'text-gray-400'
           }`}>

@@ -210,7 +210,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     setPreviewItem(item.id, slideIndex);
     setSelectedScheduleItemIds([item.id]);
     setAnchorScheduleItemId(item.id);
-    store.setRoutingRequest({ item, isNew: false, slideIndex });
+    goLiveItem(item.id, slideIndex, activeControlGroupId || undefined, item);
   };
 
   const handleGoLiveMultiple = (itemIds: string[]) => {
@@ -254,10 +254,11 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
       isExpanded: true
     };
 
-    store.setRoutingRequest({ item: combinedItem, isNew: true, slideIndex: 0 });
+    setPreviewItem(combinedItem.id, 0);
+    goLiveItem(combinedItem.id, 0, activeControlGroupId || undefined, combinedItem);
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
-        detail: `Sent ${selectedItems.length} items (${slides.length} slides) live!` 
+        detail: `Sent ${selectedItems.length} items (${slides.length} slides) live to Active Router!` 
       })
     );
   };

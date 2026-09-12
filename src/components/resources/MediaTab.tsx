@@ -251,7 +251,11 @@ export default function MediaTab() {
         isAudio: asset.type === 'audio',
       }
     };
-    store.setRoutingRequest({ item, isNew: true, slideIndex: 0 });
+    addScheduleItem(item);
+    const { setPreviewItem } = useStore.getState();
+    setPreviewItem(item.id, 0);
+    goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);
+    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Broadcasting "${asset.name}" directly to Live Output!` }));
   };
 
   const handleSendMultipleToLive = (assets: Asset[]) => {
@@ -282,7 +286,10 @@ export default function MediaTab() {
       isExpanded: true
     };
 
-    store.setRoutingRequest({ item: slideshowItem, isNew: true, slideIndex: 0 });
+    addScheduleItem(slideshowItem);
+    const { setPreviewItem } = useStore.getState();
+    setPreviewItem(slideshowItem.id, 0);
+    goLiveItem(slideshowItem.id, 0, useStore.getState().activeControlGroupId || undefined, slideshowItem);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
       detail: `Sent ${assets.length} images as slideshow to Live Output!` 
     }));

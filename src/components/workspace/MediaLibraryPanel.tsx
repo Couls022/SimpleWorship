@@ -152,7 +152,8 @@ export default function MediaLibraryPanel() {
         isAudio: asset.type === 'audio',
       },
     };
-    useStore.getState().setRoutingRequest({ item, isNew: true, slideIndex: 0 });
+    store.setPreviewItem(item.id, 0);
+    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
   };
 
   const handleSendMultipleToLive = (assets: Asset[]) => {
@@ -184,9 +185,10 @@ export default function MediaLibraryPanel() {
       isExpanded: true
     };
 
-    useStore.getState().setRoutingRequest({ item: slideshowItem, isNew: true, slideIndex: 0 });
+    store.setPreviewItem(slideshowItem.id, 0);
+    store.goLiveItem(slideshowItem.id, 0, store.activeControlGroupId || undefined, slideshowItem);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
-      detail: `Sent ${assets.length} images as slideshow to Live Output!` 
+      detail: `Sent ${assets.length} images as slideshow directly to Active Live Output!` 
     }));
   };
 

@@ -282,10 +282,6 @@ interface AppState {
   updateScheduleItem: (itemId: string, updates: Partial<PresentationItem>) => void;
   reorderSchedule: (items: PresentationItem[]) => void;
   toggleScheduleItemExpand: (itemId: string) => void;
-  
-  // Routing Request for Double Clicks
-  routingRequest: { item: Partial<PresentationItem>; isNew: boolean; slideIndex?: number } | null;
-  setRoutingRequest: (req: { item: Partial<PresentationItem>; isNew: boolean; slideIndex?: number } | null) => void;
 
   // PREVIEW State (Independent from Live, matching EasyWorship design)
   previewItemId: string | null;
@@ -900,7 +896,7 @@ export const useStore = create<AppState>((set, get) => ({
         // Initialize dynamic panel's reactive state
         newGroupStates[id] = {
           ...defaultState,
-          isLiveEnabled: true,
+          isLiveEnabled: false,
           timestamp: Date.now()
         };
       }
@@ -1047,15 +1043,12 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Synchronize canonical presentation state to both stagedGroupStates (Live Display Canvas)
       // and groupStates (Target Monitor / Projector).
-      // Check if Master Live is active or if explicit isLiveEnabled is specified:
+      // Crucial: do NOT automatically force isLiveEnabled to true when updating content/staged state.
+      // Retain whatever the user's explicit Live Switch state is (Live On or Live Off).
       const publicState = state.groupStates[groupId] || defaultState;
-      const isMasterLiveActive = Boolean(
-        state.groupStates['group-congregation']?.isLiveEnabled || 
-        (state.activeControlGroupId && state.groupStates[state.activeControlGroupId]?.isLiveEnabled)
-      );
       const isCurrentlyLive = newState.isLiveEnabled !== undefined 
         ? newState.isLiveEnabled 
-        : (Boolean(publicState?.isLiveEnabled) || (isMasterLiveActive && groupId === state.activeControlGroupId));
+        : Boolean(publicState?.isLiveEnabled);
 
       combinedState.isLiveEnabled = isCurrentlyLive;
 
@@ -1290,9 +1283,6 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  routingRequest: null,
-  setRoutingRequest: (req) => set({ routingRequest: req }),
-
   // PREVIEW
   previewItemId: 'item-gen-1', // Default preview item (Genesis 1:1) matching screenshot
   previewSlideIndex: 0,
@@ -1465,7 +1455,6 @@ export const useStore = create<AppState>((set, get) => ({
         directLiveItem: liveItem || null,
         isBlack: false,
         isClear: false,
-        isLiveEnabled: true,
       });
       if (routerIdToUse !== activeRouterId || groupToUpdate !== activeControlGroupId) {
         set({ activeControlGroupId: groupToUpdate, activeRouterId: routerIdToUse });
@@ -1478,7 +1467,6 @@ export const useStore = create<AppState>((set, get) => ({
           directLiveItem: liveItem || null,
           isBlack: false,
           isClear: false,
-          isLiveEnabled: true,
         });
       });
     }

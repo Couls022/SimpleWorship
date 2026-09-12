@@ -101,7 +101,10 @@ export default function PresentationsTab() {
       data: pres.data,
       isExpanded: false
     };
-    useStore.getState().setRoutingRequest({ item, isNew: true, slideIndex: 0 });
+    addScheduleItem(item);
+    const { setPreviewItem } = useStore.getState();
+    setPreviewItem(item.id, 0);
+    goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);
   };
 
   const handleDragStart = (e: React.DragEvent, pres: Asset) => {
@@ -286,7 +289,7 @@ export default function PresentationsTab() {
                   draggable={true}
                   onDragStart={(e) => handleDragStart(e, pres)}
                   onClick={(e) => handlePresClick(e, pres)}
-                  onDoubleClick={() => handleEditPresentation(pres)}
+                  onDoubleClick={() => handleSendToLive(pres)}
                   onContextMenu={(e) => handleContextMenu(e, pres)}
                   className={`border rounded-lg flex items-center p-2 transition-all cursor-grab active:cursor-grabbing group shadow-xs ${
                     isSelected
@@ -344,7 +347,7 @@ export default function PresentationsTab() {
                 draggable={true}
                 onDragStart={(e) => handleDragStart(e, pres)}
                 onClick={(e) => handlePresClick(e, pres)}
-                onDoubleClick={() => handleEditPresentation(pres)}
+                onDoubleClick={() => handleSendToLive(pres)}
                 onContextMenu={(e) => handleContextMenu(e, pres)}
                 className={`border rounded-xl p-3 flex flex-col justify-between transition-all cursor-grab active:cursor-grabbing group shadow ${
                   isSelected

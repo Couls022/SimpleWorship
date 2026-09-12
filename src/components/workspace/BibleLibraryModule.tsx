@@ -336,7 +336,8 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
   const handleGoLiveNow = (verses: ScriptureVerse[]) => {
     const item = createPresentationItem(verses);
     addScheduleItem(item);
-    store.setRoutingRequest({ item, isNew: false, slideIndex: 0 });
+    setPreviewItem(item.id, 0);
+    goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
   };
 
   const handleCopy = (verse: ScriptureVerse) => {
@@ -762,19 +763,6 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
                                   title="Add to Presentation Schedule"
                                 >
                                   {selectedVerseIds.includes(verse.id) && selectedVerses.length > 1 ? `+ Schedule (${selectedVerses.length})` : '+ Schedule'}
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const target = (selectedVerseIds.includes(verse.id) && selectedVerses.length > 1)
-                                      ? selectedVerses
-                                      : [verse];
-                                    handleSendToPreview(target);
-                                  }}
-                                  className="p-1 hover:bg-[#343b4c] rounded text-cyan-300 hover:text-cyan-200"
-                                  title="Load into Preview"
-                                >
-                                  <Tv size={10} />
                                 </button>
                               </div>
                             </div>
