@@ -22,9 +22,9 @@ import {
 import { useStore } from "../../store/useStore";
 import { Song, PresentationItem } from "../../types";
 import { handleRangeSelection } from "../../utils/selectionUtils";
-import { BAPTIST_HYMNAL_SONGS } from "../../data/baptistHymnal";
+import { BAPTIST_HYMNAL } from "../../data/baptistHymnal";
 import { HYMNS_OF_PRAISES } from "../../data/hymnsOfPraises";
-import { BAPTIST_SPECIAL_NUMBERS } from "../../data/specialNumbers";
+import { SPECIAL_NUMBERS } from "../../data/specialNumbers";
 import { OfflineSearchEngine } from "../../core/OfflineSearchEngine";
 import { PortalDropdown } from "../common/PortalDropdown";
 
@@ -246,7 +246,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
   const handleRestoreDefaultHymnal = async () => {
     try {
       let restored = 0;
-      const allBuiltInSongs = [...BAPTIST_HYMNAL_SONGS, ...HYMNS_OF_PRAISES, ...BAPTIST_SPECIAL_NUMBERS];
+      const allBuiltInSongs = [...BAPTIST_HYMNAL, ...HYMNS_OF_PRAISES, ...SPECIAL_NUMBERS];
       for (const hymn of allBuiltInSongs) {
         if (
           !songsList.some(

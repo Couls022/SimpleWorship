@@ -285,6 +285,21 @@ export class PresentationCore {
           );
         }
       }
+
+      // Add a title slide automatically if it doesn't exist
+      const hasTitleSlide = generated.length > 0 && generated[0].title === 'Title';
+      if (!hasTitleSlide) {
+        const songTitle = matchedSong?.title || item.name || 'Song';
+        const songAuthor = matchedSong?.author ? `\n\n${matchedSong.author}` : '';
+        const titleSlide = PresentationCore.splitSongSection(
+          'Title',
+          `${songTitle}${songAuthor}`,
+          'title-slide',
+          effectiveSongBg,
+          songOpts
+        )[0];
+        generated = [titleSlide, ...generated];
+      }
     } else if (item.type === 'bible') {
       const verses: ScriptureVerse[] = (item.data && Array.isArray(item.data.verses)) ? item.data.verses : [];
       const scriptureOpts = systemOptions?.mainOutput?.scripture;

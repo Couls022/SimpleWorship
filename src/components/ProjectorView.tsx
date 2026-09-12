@@ -149,60 +149,33 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
 
   // Resolve winning active route and all overlay routes targeting this physical display
   const { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds } = useMemo(() => {
-    let winningGroupId: string | null = null;
-    let isLiveActive = false;
+    // Strictly enforce output route targeting as the single source of truth
+    const assignments = resolveDisplayAssignments(
+      outputGroups,
+      // Pass the most up-to-date state (staged or committed)
+      groupStates,
+      activeControlGroupId,
+      [displayId] // Ensure this physical display is evaluated
+    );
+    
+    const assignment = assignments.get(displayId);
 
-    // 1. Determine primary/base route for this projector display
-    let baseGroupId = 'group-congregation';
-    if (currentRouteGroupId && outputGroups.some(g => g.id === currentRouteGroupId)) {
-      baseGroupId = currentRouteGroupId;
-    } else if (routedGroupId && outputGroups.some(g => g.id === routedGroupId)) {
-      baseGroupId = routedGroupId;
-    } else if (displayId && outputGroups.length > 0) {
-      const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
-      const match = assignments.get(displayId);
-      if (match?.assignedGroupId) {
-        baseGroupId = match.assignedGroupId;
-      } else if (match?.candidateGroupIds && match.candidateGroupIds.length > 0) {
-        baseGroupId = match.candidateGroupIds[0];
-      }
-    } else if (outputGroups.length > 0) {
-      baseGroupId = outputGroups[0].id;
+    if (assignment) {
+      return {
+        winningGroupId: assignment.assignedGroupId,
+        isLiveActive: Boolean(assignment.assignedGroupId && assignment.liveGroupIds.includes(assignment.assignedGroupId)),
+        candidateGroupIds: assignment.candidateGroupIds,
+        liveGroupIds: assignment.liveGroupIds,
+      };
     }
 
-    // 2. Candidate groups MUST contain the base route first, followed by all other output groups (R2, R3, R4...)
-    // This guarantees that all secondary router panels are mounted as overlays on top of the projector output!
-    const allGroupIds = outputGroups.map(g => g.id);
-    const candidateGroupIds: string[] = [
-      baseGroupId,
-      ...allGroupIds.filter(id => id !== baseGroupId)
-    ];
-
-    // 3. Live groups: find which candidates currently have isLiveEnabled = true
-    const liveGroupIds = candidateGroupIds.filter(gid => {
-      const st = groupStates[gid] || stagedGroupStates[gid];
-      return Boolean(st?.isLiveEnabled);
-    });
-
-    // 4. Winning active route: prioritize active control if live, or topmost live route, or base group
-    const isRouteLive = (gid: string) => {
-      const st = groupStates[gid] || stagedGroupStates[gid];
-      return Boolean(st?.isLiveEnabled);
+    return {
+      winningGroupId: null,
+      isLiveActive: false,
+      candidateGroupIds: [],
+      liveGroupIds: []
     };
-
-    if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId) && isRouteLive(activeControlGroupId)) {
-      winningGroupId = activeControlGroupId;
-      isLiveActive = true;
-    } else if (liveGroupIds.length > 0) {
-      winningGroupId = liveGroupIds[0];
-      isLiveActive = true;
-    } else {
-      winningGroupId = baseGroupId;
-      isLiveActive = false;
-    }
-
-    return { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds };
-  }, [displayId, outputGroups, groupStates, stagedGroupStates, activeControlGroupId, routedGroupId, currentRouteGroupId]);
+  }, [displayId, outputGroups, groupStates, activeControlGroupId]);
 
   // Grace period to prevent transient blackscreen flicker during rapid live transitions between items
   const [showStandbyCurtain, setShowStandbyCurtain] = useState(liveGroupIds.length === 0);

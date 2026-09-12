@@ -1,7 +1,7 @@
 import { getDB } from '../db';
-import { BAPTIST_HYMNAL_SONGS } from '../data/baptistHymnal';
+import { BAPTIST_HYMNAL } from '../data/baptistHymnal';
 import { HYMNS_OF_PRAISES } from '../data/hymnsOfPraises';
-import { BAPTIST_SPECIAL_NUMBERS } from '../data/specialNumbers';
+import { SPECIAL_NUMBERS } from '../data/specialNumbers';
 import { loadAllAuthenticBibleVerses } from '../data/fullBibleData';
 import { Song, ScriptureVerse } from '../types';
 
@@ -42,7 +42,7 @@ export async function runDatabaseSeeder(
     const fullBibleVerses = await loadAllAuthenticBibleVerses();
 
     onProgress?.('Preparing Hymnals and Special Numbers collection...');
-    const hymnalSongs = [...BAPTIST_HYMNAL_SONGS, ...HYMNS_OF_PRAISES, ...BAPTIST_SPECIAL_NUMBERS];
+    const hymnalSongs = [...BAPTIST_HYMNAL, ...HYMNS_OF_PRAISES, ...SPECIAL_NUMBERS];
 
     // 1. Seed Songs in Batch Transaction
     onProgress?.(`Seeding ${hymnalSongs.length} built-in songs into IndexedDB...`);

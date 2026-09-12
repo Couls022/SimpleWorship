@@ -1,7 +1,7 @@
 import { Song, Theme, OutputGroup, Schedule, ScriptureVerse, Asset } from '../types';
-import { BAPTIST_HYMNAL_SONGS } from '../data/baptistHymnal';
+import { BAPTIST_HYMNAL } from '../data/baptistHymnal';
 import { HYMNS_OF_PRAISES } from '../data/hymnsOfPraises';
-import { BAPTIST_SPECIAL_NUMBERS } from '../data/specialNumbers';
+import { SPECIAL_NUMBERS } from '../data/specialNumbers';
 
 
 export const defaultThemes: Theme[] = [
@@ -352,9 +352,9 @@ export const defaultSongs: Song[] = [
       }
     ]
   },
-  ...BAPTIST_HYMNAL_SONGS,
+  ...BAPTIST_HYMNAL,
   ...HYMNS_OF_PRAISES,
-  ...BAPTIST_SPECIAL_NUMBERS
+  ...SPECIAL_NUMBERS
 ];
 
 export const defaultScriptures: ScriptureVerse[] = [];

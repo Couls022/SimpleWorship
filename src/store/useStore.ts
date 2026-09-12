@@ -728,9 +728,6 @@ export const useStore = create<AppState>((set, get) => ({
       const newStates = { ...state.groupStates, [group.id]: { ...defaultState, timestamp: Date.now() } };
       dbApi.saveOutputGroup(group);
       
-      // Request display manager to sync up newly created panel windows
-      DisplayManager.syncPhysicalDisplays(newGroups, newStates, state.activeControlGroupId).catch(() => {});
-      
       broadcastStateChange({
         type: 'SYNC_STATE',
         data: {
@@ -755,8 +752,6 @@ export const useStore = create<AppState>((set, get) => ({
       newGroups[groupIndex] = updatedGroup;
       dbApi.saveOutputGroup(updatedGroup);
 
-      DisplayManager.syncPhysicalDisplays(newGroups, state.groupStates, state.activeControlGroupId).catch(() => {});
-
       broadcastStateChange({
         type: 'SYNC_STATE',
         data: {
@@ -779,8 +774,6 @@ export const useStore = create<AppState>((set, get) => ({
       const newGroups = [...state.outputGroups];
       newGroups[groupIndex] = updatedGroup;
       dbApi.saveOutputGroup(updatedGroup);
-
-      DisplayManager.syncPhysicalDisplays(newGroups, state.groupStates, state.activeControlGroupId).catch(() => {});
 
       broadcastStateChange({
         type: 'SYNC_STATE',
