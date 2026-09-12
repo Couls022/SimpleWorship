@@ -5,7 +5,7 @@ import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { dbApi } from '../db';
 import { Sparkles, Music, Volume2 } from 'lucide-react';
-import { OutputGroup, PresentationState, SystemOptions, NativeDisplayTarget } from '../types';
+import { OutputGroup, PresentationState, SystemOptions, NativeDisplayTarget, Slide, RenderFrame, PresentationItem } from '../types';
 import { DisplayManager } from '../core/DisplayManager';
 import { formatVerseNumber } from '../utils/scriptureFormatter';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
@@ -40,17 +40,16 @@ export default function MonitorPreviewCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
-  const store = useStore();
-  const { 
-    outputGroups, 
-    stagedGroupStates, groupStates, 
-    activeSchedule, 
-    songsList, 
-    themesList, 
-    alert, 
-    groupAlerts,
-    systemOptions 
-  } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const stagedGroupStates = useStore(state => state.stagedGroupStates);
+  const groupStates = useStore(state => state.groupStates);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const songsList = useStore(state => state.songsList);
+  const themesList = useStore(state => state.themesList);
+  const alert = useStore(state => state.alert);
+  const groupAlerts = useStore(state => state.groupAlerts);
+  const systemOptions = useStore(state => state.systemOptions);
+  const setStagedGroupState = useStore(state => state.setStagedGroupState);
 
   const currentAlert = (groupId && groupAlerts?.[groupId]) || alert || { active: false, showNursery: false, message: '', nurseryText: '' };
 
@@ -311,21 +310,75 @@ export default function MonitorPreviewCanvas({
     }
   }
 
-  const [localBackgroundUrl, setLocalBackgroundUrl] = useState<string>('');
+  const isOverlayGroup = Boolean(isProjectorMode && group?.id !== 'group-congregation' && group?.role !== 'primary');
+
+  // If this group acts as an overlay on the projector (e.g. R2, R3, R4...), suppress default background images/colors
+  // unless the item or slide explicitly specifies a custom background!
+  const hasExplicitCustomBackground = Boolean(
+    currentSlide?.backgroundUrl || 
+    activeItem?.customBackgroundUrl || 
+    (activeItem?.type === 'media' && (activeItem?.data?.url || activeItem?.contentId)) ||
+    (activeItem?.type === 'image') ||
+    (activeItem?.type === 'video')
+  );
+
+  if (isOverlayGroup && !hasExplicitCustomBackground) {
+    backgroundUrl = '';
+    videoSrc = '';
+    isVideo = false;
+  }
+
+  const resolveSyncUrl = (url: string, contentId?: string): string => {
+    if (!url) return '';
+    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
+      return url;
+    }
+    const assets = useStore.getState().assetsList || [];
+    const directAsset = assets.find(a => a.url === url || (a as any)._oldUrl === url || a.id === url);
+    if (directAsset?.url) return directAsset.url;
+    if (contentId) {
+      const byId = assets.find(a => a.id === contentId);
+      if (byId?.url) return byId.url;
+      const cached = dbApi.getCachedUrl(contentId);
+      if (cached) return cached;
+    }
+    return url;
+  };
+
+  const syncBg = resolveSyncUrl(backgroundUrl, activeItem?.contentId);
+  const [localBackgroundUrl, setLocalBackgroundUrl] = useState<string>(syncBg);
   const [localAudioSrc, setLocalAudioSrc] = useState<string>('');
+
+  const lastValidBgRef = useRef<string>(syncBg || backgroundUrl);
+  if (isOverlayGroup && !hasExplicitCustomBackground) {
+    lastValidBgRef.current = '';
+  } else if (localBackgroundUrl) {
+    lastValidBgRef.current = localBackgroundUrl;
+  } else if (syncBg) {
+    lastValidBgRef.current = syncBg;
+  }
+  const effectiveBackgroundUrl = (isOverlayGroup && !hasExplicitCustomBackground)
+    ? ''
+    : (localBackgroundUrl || syncBg || lastValidBgRef.current || backgroundUrl);
+
+  const lastValidItemRef = useRef<PresentationItem | null>(null);
+  if (activeItem) {
+    lastValidItemRef.current = activeItem;
+  }
+
+  const lastValidSlideRef = useRef<Slide | null>(null);
+  if (currentSlide) {
+    lastValidSlideRef.current = currentSlide;
+  }
+  const lastValidFrameRef = useRef<RenderFrame | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     
-    // Fast synchronous lookup from assetsList or cache
-    const currentAssets = useStore.getState().assetsList || [];
-    const matchedAsset = currentAssets.find(a => a.url === backgroundUrl || (a as any)._oldUrl === backgroundUrl || a.id === backgroundUrl || (activeItem?.contentId && a.id === activeItem.contentId));
-    if (matchedAsset?.url) {
-      setLocalBackgroundUrl(matchedAsset.url);
-    } else if (backgroundUrl) {
-      setLocalBackgroundUrl(backgroundUrl);
+    if (syncBg) {
+      setLocalBackgroundUrl(syncBg);
     }
-
+    
     if (activeItem?.contentId) {
       const cachedAudio = audioSrc && audioSrc.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
       if (cachedAudio) setLocalAudioSrc(cachedAudio);
@@ -349,21 +402,25 @@ export default function MonitorPreviewCanvas({
       return url;
     };
 
-    resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
-      if (isMounted) {
-        setLocalBackgroundUrl(resolved || '');
-      }
-    });
-    resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
-      if (isMounted) {
-        setLocalAudioSrc(resolved || '');
-      }
-    });
+    if (!syncBg && backgroundUrl) {
+      resolveUrl(backgroundUrl, activeItem?.contentId).then(resolved => {
+        if (isMounted && resolved) {
+          setLocalBackgroundUrl(resolved);
+        }
+      });
+    }
+    if (audioSrc) {
+      resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
+        if (isMounted && resolved) {
+          setLocalAudioSrc(resolved);
+        }
+      });
+    }
 
     return () => { 
       isMounted = false; 
     };
-  }, [backgroundUrl, audioSrc, activeItem?.contentId]);
+  }, [backgroundUrl, audioSrc, activeItem?.contentId, syncBg]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -425,8 +482,8 @@ export default function MonitorPreviewCanvas({
     const now = Date.now();
     if (now - lastVideoTimeUpdateRef.current >= 200) {
       lastVideoTimeUpdateRef.current = now;
-      if (store.setStagedGroupState) {
-        store.setStagedGroupState(groupId, {
+      if (setStagedGroupState) {
+        setStagedGroupState(groupId, {
           videoCurrentTime: videoEl.currentTime,
           videoDuration: videoEl.duration || 0,
         });
@@ -438,8 +495,8 @@ export default function MonitorPreviewCanvas({
     if (isProjectorMode) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
-    if (store.setStagedGroupState) {
-      store.setStagedGroupState(groupId, {
+    if (setStagedGroupState) {
+      setStagedGroupState(groupId, {
         videoCurrentTime: videoEl.currentTime,
         videoDuration: videoEl.duration || 0,
       });
@@ -454,8 +511,8 @@ export default function MonitorPreviewCanvas({
     const now = Date.now();
     if (now - lastAudioTimeUpdateRef.current >= 200) {
       lastAudioTimeUpdateRef.current = now;
-      if (store.setStagedGroupState) {
-        store.setStagedGroupState(groupId, {
+      if (setStagedGroupState) {
+        setStagedGroupState(groupId, {
           videoCurrentTime: audioEl.currentTime,
           videoDuration: audioEl.duration || 0,
         });
@@ -467,8 +524,8 @@ export default function MonitorPreviewCanvas({
     if (isProjectorMode) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
-    if (store.setStagedGroupState) {
-      store.setStagedGroupState(groupId, {
+    if (setStagedGroupState) {
+      setStagedGroupState(groupId, {
         videoCurrentTime: audioEl.currentTime,
         videoDuration: audioEl.duration || 0,
       });
@@ -513,12 +570,12 @@ export default function MonitorPreviewCanvas({
   return (
     <div 
       ref={containerRef}
-      className={`w-full h-full flex items-center justify-center relative overflow-hidden ${isProjectorMode ? 'bg-black' : 'bg-[#0a0b0e]'} select-none ${className}`}
+      className={`w-full h-full flex items-center justify-center relative overflow-hidden ${isProjectorMode ? 'bg-transparent' : 'bg-[#0a0b0e]'} select-none ${className}`}
     >
       {/* Aspect-Locked Scaled Monitor Canvas Wrapper */}
       <div 
         className={isProjectorMode
-          ? "relative bg-black overflow-hidden shrink-0"
+          ? "relative bg-transparent overflow-hidden shrink-0"
           : "relative bg-black rounded shadow-2xl overflow-hidden border border-[#2a2c36] shrink-0"}
         style={{
           width: `${fittedWidth}px`,
@@ -528,74 +585,111 @@ export default function MonitorPreviewCanvas({
         {/* Full Native Virtual Display Canvas (Scaled via CSS Transform) */}
         <div
           data-canvas-preview="true"
-          className="absolute top-0 left-0 origin-top-left overflow-hidden bg-black select-none pointer-events-none projector-canvas"
+          className="absolute top-0 left-0 origin-top-left overflow-hidden select-none pointer-events-none projector-canvas"
           style={{
             width: `${targetWidth}px`,
             height: `${targetHeight}px`,
             transform: `scale(${scale})`,
             fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
-            background: isGradient ? gradientVal : (resolvedStyles.backgroundColor || '#000000'),
+            background: isGradient 
+              ? gradientVal 
+              : (isOverlayGroup && !effectiveBackgroundUrl && !videoSrc)
+                ? 'transparent'
+                : (resolvedStyles.backgroundColor === '#000000' && isOverlayGroup)
+                  ? 'transparent' 
+                  : (resolvedStyles.backgroundColor || (isOverlayGroup ? 'transparent' : '#000000')),
           }}
         >
           {/* Live Display Canvas Content */}
           <div className="absolute inset-0 w-full h-full">
-            {/* Background Layer */}
-            <div className="absolute inset-0 z-0">
-            {isVideo && videoSrc ? (
-              <video
-                ref={videoRef}
-                src={managedVideoSrc || videoSrc}
-                autoPlay
-                loop={presentationState.isVideoLooping ?? true}
-                muted={presentationState.isVideoMuted ?? false}
-                playsInline
-                preload="auto"
-                onTimeUpdate={handleTimeUpdate}
-                onLoadedMetadata={handleLoadedMetadata}
-                onEnded={() => {
-                  if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
-                    store.setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
-                  }
-                }}
-                className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
-                style={{ 
-                  transform: 'translate3d(0, 0, 0)',
-                  willChange: 'transform',
-                  backfaceVisibility: 'hidden',
-                  WebkitBackfaceVisibility: 'hidden',
-                  filter: 'none'
-                }}
-              />
-            ) : localBackgroundUrl ? (
-              <div
-                className="w-full h-full bg-cover bg-center transition-all duration-300"
-                style={{ 
-                  transform: 'translateZ(0)',
-                  willChange: 'transform',
-                  backfaceVisibility: 'hidden',
-                  backgroundImage: `url(${localBackgroundUrl})`,
-                  filter: (isLogoMode ? (logoStyles.backgroundBlur || 0) : (resolvedStyles.backgroundBlur || 0)) > 0
-                    ? `blur(${isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur}px)`
-                    : 'none'
-                }}
-              />
-            ) : isGradient ? (
-              <div className="w-full h-full" style={{ background: gradientVal }} />
-            ) : (
-              <div className="w-full h-full bg-black" />
-            )}
+            {/* Background Layer - Solid Crossfade (Never drops to black) */}
+            <div className="absolute inset-0 z-0 overflow-hidden">
+              {/* Underlying persistent buffer to guarantee ZERO black flash during crossfade or image loading */}
+              {!isOverlayGroup && lastValidBgRef.current && (
+                <div 
+                  className="absolute inset-0 w-full h-full bg-cover bg-center"
+                  style={{ 
+                    backgroundImage: `url(${lastValidBgRef.current})`,
+                    zIndex: 0 
+                  }}
+                />
+              )}
+              <AnimatePresence mode="sync">
+                <motion.div
+                  key={`bg-${effectiveBackgroundUrl || videoSrc || gradientVal || (isOverlayGroup ? 'trans' : resolvedStyles.backgroundColor)}`}
+                  initial={{ opacity: (isOverlayGroup && !effectiveBackgroundUrl && !videoSrc) ? 1 : 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 1, zIndex: 0 }}
+                  transition={{ duration: 0.35, ease: 'easeInOut' }}
+                  className="absolute inset-0 w-full h-full"
+                  style={{ zIndex: 1 }}
+                >
+                {isVideo && videoSrc ? (
+                  <video
+                    ref={videoRef}
+                    src={managedVideoSrc || videoSrc}
+                    autoPlay
+                    loop={presentationState.isVideoLooping ?? true}
+                    muted={presentationState.isVideoMuted ?? false}
+                    playsInline
+                    preload="auto"
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    onEnded={() => {
+                      if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
+                        setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
+                      }
+                    }}
+                    className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
+                    style={{ 
+                      transform: 'translate3d(0, 0, 0)',
+                      willChange: 'transform',
+                      backfaceVisibility: 'hidden',
+                      WebkitBackfaceVisibility: 'hidden',
+                      filter: 'none'
+                    }}
+                  />
+                ) : effectiveBackgroundUrl ? (
+                  <div
+                    className="w-full h-full bg-cover bg-center"
+                    style={{ 
+                      transform: 'translateZ(0)',
+                      willChange: 'transform',
+                      backfaceVisibility: 'hidden',
+                      backgroundImage: `url(${effectiveBackgroundUrl})`,
+                      filter: (isLogoMode ? (logoStyles.backgroundBlur || 0) : (resolvedStyles.backgroundBlur || 0)) > 0
+                        ? `blur(${isLogoMode ? logoStyles.backgroundBlur : resolvedStyles.backgroundBlur}px)`
+                        : 'none'
+                    }}
+                  />
+                ) : isGradient ? (
+                  <div className="w-full h-full" style={{ background: gradientVal }} />
+                ) : (
+                  <div 
+                    className="w-full h-full" 
+                    style={{ 
+                      backgroundColor: isOverlayGroup
+                        ? 'transparent'
+                        : (resolvedStyles.backgroundColor === '#000000' && group?.id !== 'group-congregation') 
+                          ? 'transparent' 
+                          : (resolvedStyles.backgroundColor || '#000000') 
+                    }} 
+                  />
+                )}
+                </motion.div>
+              </AnimatePresence>
 
-            {/* Tint Overlay */}
-            {contentType !== 'video' && (
-              <div 
-                className="absolute inset-0"
-                style={{
-                  backgroundColor: (isLogoMode ? logoStyles.backgroundOverlayColor : resolvedStyles.backgroundOverlayColor) || '#000000',
-                  opacity: (isLogoMode ? logoStyles.backgroundOverlayOpacity : resolvedStyles.backgroundOverlayOpacity) ?? 0.35
-                }}
-              />
-            )}
-          </div>
+              {/* Tint Overlay - Omit for secondary router overlays without background */}
+              {contentType !== 'video' && (!isOverlayGroup || effectiveBackgroundUrl || videoSrc) && (
+                <div 
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    backgroundColor: (isLogoMode ? logoStyles.backgroundOverlayColor : resolvedStyles.backgroundOverlayColor) || '#000000',
+                    opacity: (isLogoMode ? logoStyles.backgroundOverlayOpacity : resolvedStyles.backgroundOverlayOpacity) ?? 0.35
+                  }}
+                />
+              )}
+            </div>
 
           {/* Top Corner Labels (Song Section Corner Badge or Scripture Reference) */}
           {currentSlide?.title && !presentationState.showLogo && (
@@ -647,11 +741,11 @@ export default function MonitorPreviewCanvas({
           )}
 
           {/* Foreground Crisp Image Layer */}
-          {contentType === 'image' && !presentationState.isClear && !presentationState.showLogo && localBackgroundUrl && (
+          {contentType === 'image' && !presentationState.isClear && !presentationState.showLogo && (effectiveBackgroundUrl || localBackgroundUrl || activeItem?.customBackgroundUrl || activeItem?.data?.url) && (
             <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
               <img 
                 className="w-full h-full object-contain" 
-                src={localBackgroundUrl} 
+                src={effectiveBackgroundUrl || localBackgroundUrl || activeItem?.customBackgroundUrl || activeItem?.data?.url} 
                 alt={activeItem?.name || 'Image'}
                 referrerPolicy="no-referrer"
               />
@@ -671,7 +765,7 @@ export default function MonitorPreviewCanvas({
                 onLoadedMetadata={handleAudioLoadedMetadata}
                 onEnded={() => {
                   if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
-                    store.setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
+                    setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                   }
                 }}
               />
@@ -783,16 +877,40 @@ export default function MonitorPreviewCanvas({
               themesList,
               DisplayManager.getCachedDisplays()
             );
-            if (!presentationState.isClear && !presentationState.showLogo && currentSlide && contentType !== 'image' && contentType !== 'video' && contentType !== 'audio' && contentType !== 'pptx' && activeItem?.type !== 'presentation' && activeItem?.type !== 'ppt' && computedRenderFrame) {
-              return (
-                <PresentationCanvas 
-                  frame={computedRenderFrame}
-                  scale={1}
-                  systemOptions={systemOptions}
-                />
-              );
+            if (computedRenderFrame) {
+              lastValidFrameRef.current = computedRenderFrame;
             }
-            return null;
+            const frameToRender = computedRenderFrame || lastValidFrameRef.current;
+            const slideToRender = currentSlide || lastValidSlideRef.current;
+
+            const effectiveItemForCanvas = activeItem || lastValidItemRef.current;
+            const isMediaOrPpt = effectiveItemForCanvas?.type === 'presentation' || 
+                                 effectiveItemForCanvas?.type === 'ppt' || 
+                                 contentType === 'image' || 
+                                 contentType === 'video' || 
+                                 contentType === 'audio' || 
+                                 contentType === 'pptx';
+
+            return (
+              <AnimatePresence mode="sync">
+                {!presentationState.isClear && !presentationState.showLogo && slideToRender && !isMediaOrPpt && frameToRender && (
+                  <motion.div
+                    key={`canvas-${effectiveItemForCanvas?.id || effectiveItemForCanvas?.contentId || 'slide'}-${presentationState.activeSlideIndex}`}
+                    initial={motionConfig.initial}
+                    animate={motionConfig.animate}
+                    exit={motionConfig.exit}
+                    transition={motionConfig.transition}
+                    className="absolute inset-0 z-10 w-full h-full overflow-hidden"
+                  >
+                    <PresentationCanvas 
+                      frame={frameToRender}
+                      scale={1}
+                      systemOptions={systemOptions}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            );
           })()}
 
           {/* Bottom Corner Labels (Song Section Corner Badge or Scripture Reference) */}

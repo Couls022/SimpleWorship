@@ -437,7 +437,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-3 animate-in fade-in duration-150">
-      <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[620px] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100 keep-dark">
+      <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] max-h-[750px] min-h-[500px] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100 keep-dark">
         
         {/* Title Bar */}
         <div className="h-9 bg-[#1c1e24] border-b border-[#303440] flex items-center justify-between px-3 shrink-0">

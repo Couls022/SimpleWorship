@@ -16,6 +16,8 @@ class CameraManager {
   private currentPreviewStream: MediaStream | null = null;
   private deviceCache: CameraDeviceInfo[] = [];
   
+  private liveStreams: Map<string, { stream: MediaStream, count: number }> = new Map();
+  
   private constructor() {
     if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
       navigator.mediaDevices.ondevicechange = () => {
@@ -35,7 +37,6 @@ class CameraManager {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
       return [];
     }
-
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       this.deviceCache = devices
@@ -71,20 +72,55 @@ class CameraManager {
 
   public stopPreviewStream() {
     if (this.currentPreviewStream) {
-      this.currentPreviewStream.getTracks().forEach(track => track.stop());
+      if (typeof this.currentPreviewStream.getTracks === 'function') {
+        this.currentPreviewStream.getTracks().forEach(track => track.stop());
+      }
       this.currentPreviewStream = null;
     }
   }
 
-  // Live projectors call getUserMedia independently directly, using the same constraint.
+  // Live projectors call getUserMedia. We cache by deviceId to prevent hardware locks if multiple canvases mount the same camera.
   public async getLiveStream(deviceId: string): Promise<MediaStream> {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
       throw new Error("navigator.mediaDevices is not available");
     }
-    return navigator.mediaDevices.getUserMedia({
+
+    const existing = this.liveStreams.get(deviceId);
+    if (existing) {
+      existing.count++;
+      return existing.stream;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: deviceId } },
       audio: false
     });
+
+    // When the stream ends, remove it
+    if (stream && typeof stream.getVideoTracks === 'function') {
+      stream.getVideoTracks().forEach(track => {
+        track.onended = () => {
+          this.liveStreams.delete(deviceId);
+        };
+      });
+    }
+
+    this.liveStreams.set(deviceId, { stream, count: 1 });
+    return stream;
+  }
+
+  // Release a live stream, stopping it if the count reaches zero
+  public releaseLiveStream(deviceId: string) {
+    const existing = this.liveStreams.get(deviceId);
+    if (existing) {
+      existing.count--;
+      if (existing.count <= 0) {
+        if (existing.stream && typeof existing.stream.getTracks === 'function') {
+          existing.stream.getTracks().forEach(track => track.stop());
+        }
+        this.liveStreams.delete(deviceId);
+      }
+    }
   }
 }
 

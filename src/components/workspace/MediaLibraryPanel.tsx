@@ -118,7 +118,7 @@ export default function MediaLibraryPanel() {
   const handleApplyToTimers = (asset: Asset) => {
     const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
     setDefaultBackground(asset.url, 'timers', isVideo);
-    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Timers!` }));
+    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Set "${asset.name}" as default background for Timer!` }));
   };
 
   const handleAddToSchedule = (asset: Asset) => {
@@ -561,7 +561,7 @@ export default function MediaLibraryPanel() {
           >
             <span className="flex items-center gap-2">
               <Sparkles size={12} className="text-teal-400" />
-              <span>For Timers</span>
+              <span>For Timer</span>
             </span>
             {isDefaultBgFor(contextMenu.asset, 'timers') && (
               <span className="flex items-center gap-1 text-[10px] text-teal-400 font-semibold bg-teal-950/60 px-1.5 py-0.5 rounded border border-teal-500/30">

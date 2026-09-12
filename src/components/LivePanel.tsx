@@ -75,38 +75,39 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     } catch {}
   };
 
-  const store = useStore();
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const groupStates = useStore(state => state.groupStates);
+  const outputGroups = useStore(state => state.outputGroups);
+  const songsList = useStore(state => state.songsList);
+  const themesList = useStore(state => state.themesList);
+  const alert = useStore(state => state.alert);
+  const systemOptions = useStore(state => state.systemOptions);
+  const setStagedGroupState = useStore(state => state.setStagedGroupState);
+  const addOutputGroup = useStore(state => state.addOutputGroup);
+  const removeOutputGroup = useStore(state => state.removeOutputGroup);
+  const reorderOutputGroups = useStore(state => state.reorderOutputGroups);
+  
+  const activeRouterId = useStore(state => state.activeRouterId);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const stagedGroupState = useStore(state => state.stagedGroupStates[groupId]);
+  
   const { panels, togglePanelDock } = useWorkspace();
   const isDocked = panels.live?.isDocked ?? true;
 
-  const { 
-    activeSchedule, 
-    groupStates, 
-    outputGroups, 
-    songsList, 
-    themesList,
-    alert,
-    systemOptions,
-    setStagedGroupState,
-    addOutputGroup,
-    removeOutputGroup,
-    reorderOutputGroups
-  } = store;
-
   const activeGroup = outputGroups.find(g => g.id === groupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === groupId);
-  const activeControlState = store.stagedGroupStates[groupId];
+  const activeControlState = stagedGroupState;
   const publicControlState = groupStates[groupId];
-  const isTargetedGroup = store.activeRouterId === routerId || (!routerId && store.activeControlGroupId === groupId);
-  const isActiveControlGroup = store.activeControlGroupId === groupId;
+  const isTargetedGroup = activeRouterId === routerId || (!routerId && activeControlGroupId === groupId);
+  const isActiveControlGroup = activeControlGroupId === groupId;
   const groupTargetDisplays = (activeGroup?.displayIds && activeGroup.displayIds.length > 0)
     ? activeGroup.displayIds
     : (activeGroup?.targetDisplayId ? [activeGroup.targetDisplayId] : []);
 
   const handleMakeActiveOverlay = () => {
-    const targetRouter = routerId || store.activeRouterId || 'router-1';
-    store.setActiveRouterId(targetRouter);
-    store.setActiveControlGroupId(groupId);
+    const targetRouter = routerId || useStore.getState().activeRouterId || 'router-1';
+    useStore.getState().setActiveRouterId(targetRouter);
+    useStore.getState().setActiveControlGroupId(groupId);
     DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, groupId);
   };
 
@@ -242,18 +243,18 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const dropResult = await processDroppedFileList(e.dataTransfer.files);
       if (dropResult.schedule) {
-        store.setActiveSchedule(dropResult.schedule);
+        useStore.getState().setActiveSchedule(dropResult.schedule);
         return;
       }
       if (dropResult.items && dropResult.items.length > 0) {
         // Ingest all dropped items into Schedule
         for (const item of dropResult.items) {
-          store.addScheduleItem(item);
+          useStore.getState().addScheduleItem(item);
         }
         // Go live with the first dropped item immediately on this output panel
         const targetLiveItem = dropResult.items[0];
-        store.goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem, routerId);
-        store.setStagedGroupState(groupId, {
+        useStore.getState().goLiveItem(targetLiveItem.id, 0, groupId, targetLiveItem, routerId);
+        useStore.getState().setStagedGroupState(groupId, {
           activeItemId: targetLiveItem.id,
           activeSlideIndex: 0,
           isBlack: false,
@@ -307,10 +308,10 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             }
           }
           if (payload.source !== 'schedule') {
-            store.addScheduleItem(newItem);
+            useStore.getState().addScheduleItem(newItem);
           }
-          store.goLiveItem(itemId, 0, groupId, undefined, routerId); 
-          store.setStagedGroupState(groupId, {
+          useStore.getState().goLiveItem(itemId, 0, groupId, undefined, routerId); 
+          useStore.getState().setStagedGroupState(groupId, {
             activeItemId: itemId,
             activeSlideIndex: 0,
             isBlack: false,
@@ -329,11 +330,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   };
 
   const handleSelectSlide = (idx: number) => {
-    store.setActiveControlGroupId(groupId);
+    useStore.getState().setActiveControlGroupId(groupId);
     if (activeControlState?.activeItemId === liveItem?.id) {
-      store.setStagedGroupState(groupId, { activeSlideIndex: idx });
+      useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: idx });
     } else if (liveItem) {
-      store.goLiveItem(liveItem.id, idx, groupId, liveItem, routerId);
+      useStore.getState().goLiveItem(liveItem.id, idx, groupId, liveItem, routerId);
     }
   };
 
@@ -341,14 +342,14 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     if (slides.length === 0) return;
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
-    store.setStagedGroupState(groupId, { activeSlideIndex: prev });
+    useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev });
   };
 
   const handleNextSlide = () => {
     if (slides.length === 0) return;
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
-    store.setStagedGroupState(groupId, { activeSlideIndex: next });
+    useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next });
   };
 
   // Auto-advance timer logic (synced from source PPTX transitions)
@@ -377,7 +378,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         clearInterval(interval);
         const current = activeControlState?.activeSlideIndex || 0;
         if (current < slides.length - 1) {
-          store.setStagedGroupState(groupId, { activeSlideIndex: current + 1 });
+          useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: current + 1 });
         }
       }
     }, 200);
@@ -387,7 +388,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   return (
     <section 
-      onClick={() => store.setActiveControlGroupId(groupId)}
+      onClick={() => useStore.getState().setActiveControlGroupId(groupId)}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -692,7 +693,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   
   <div className="flex items-center">
     <button
-      onClick={(e) => { e.stopPropagation(); store.toggleMasterLive(groupId); }}
+      onClick={(e) => { e.stopPropagation(); useStore.getState().toggleMasterLive(groupId); }}
       className={`px-3 py-1 rounded text-[10px] font-black tracking-widest transition-all ${
         activeControlState?.isLiveEnabled
           ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'

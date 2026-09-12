@@ -17,7 +17,7 @@ import {
   Wifi,
   Sparkles
 } from 'lucide-react';
-import QRCode from 'qrcode';
+import QRCode from '../utils/qrCode';
 import { useStore } from '../store/useStore';
 
 interface RemoteControlModalProps {

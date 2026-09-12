@@ -47,15 +47,14 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
   const targetIsPrimary = isPrimaryDescriptor(displayId);
 
   // Default fallback when output group has no explicit display IDs set yet:
-  // Main Congregation presentation route targets any presentation display
   if (list.length === 0) {
-    if (group.role === 'broadcast' || group.id === 'group-congregation') {
-      return true;
+    const isTargetStage = target.includes('stage') || target.includes('confidence') || target.includes('foldback');
+    if (isTargetStage) {
+      return group.role === 'confidence' || group.id === 'group-stage';
     }
-    if ((group.role === 'confidence' || group.id === 'group-stage') && (target.includes('stage') || target.includes('confidence') || target.includes('foldback'))) {
-      return true;
-    }
-    return false;
+    // For standard presentation / projector displays:
+    // Congregation presentation route and all router output panels (R1, R2, R3, R4...) target it as base or overlay
+    return true;
   }
 
   const displays = cachedDisplays || (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
@@ -194,24 +193,9 @@ export function resolveDisplayAssignments(
       return routeTargetsDisplay(g, displayId);
     });
 
-    // Prioritize explicit targets: if any group explicitly targets this display, remove groups that only matched via fallback.
-    const explicitGroups = groupsForDisplay.filter(g => {
-      const list = (g.displayIds && g.displayIds.length > 0) ? g.displayIds : (g.targetDisplayId ? [g.targetDisplayId] : []);
-      if (list.length === 0) return false;
-      const target = String(displayId).toLowerCase().trim();
-      const targetNorm = normalizeDisplayName(displayId);
-      return list.some(id => {
-        if (!id) return false;
-        const raw = String(id).toLowerCase().trim();
-        if (raw === target) return true;
-        const normId = normalizeDisplayName(id);
-        if (normId && targetNorm && (normId === targetNorm || normId.includes(targetNorm) || targetNorm.includes(normId))) return true;
-        return false;
-      });
-    });
-
-    const finalGroupsForDisplay = explicitGroups.length > 0 ? explicitGroups : groupsForDisplay;
-    const candidateGroupIds = finalGroupsForDisplay.map((g) => g.id);
+    // Include all groups targeting this display (both explicitly assigned and global/overlay router output groups).
+    // This ensures secondary routers (R2, R3, R4...) are available to display and overlay on the projector!
+    const candidateGroupIds = groupsForDisplay.map((g) => g.id);
     const liveGroupIds = candidateGroupIds.filter((gid) => isRouteLive(gid));
 
     // 2. Zero candidate routes targeting this display
@@ -234,6 +218,15 @@ export function resolveDisplayAssignments(
       winningGroupId = liveGroupIds[0];
     } else {
       winningGroupId = null;
+    }
+
+    // Ensure the winning group (active route) is the LAST element in liveGroupIds
+    // so it renders on top as the active overlay.
+    if (winningGroupId && liveGroupIds.includes(winningGroupId)) {
+      const filtered = liveGroupIds.filter(id => id !== winningGroupId);
+      filtered.push(winningGroupId);
+      liveGroupIds.length = 0;
+      liveGroupIds.push(...filtered);
     }
 
     result.set(displayId, {

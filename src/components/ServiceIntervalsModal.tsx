@@ -131,7 +131,7 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
         <div className="bg-[#181a20] px-4 py-3 border-b border-[#2a2d36] flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2 text-gray-200">
             <Clock size={16} className="text-amber-400" />
-            <h2 className="text-sm font-bold tracking-wide">Service Interval Timers</h2>
+            <h2 className="text-sm font-bold tracking-wide">Service Interval Timer</h2>
           </div>
           <button
             onClick={onClose}

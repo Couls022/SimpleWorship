@@ -532,7 +532,7 @@ export const useStore = create<AppState>((set, get) => ({
     },
     {
       routerId: 'router-2',
-      targetOutputGroupId: 'group-stage',
+      targetOutputGroupId: 'group-r2',
       active: false,
       visible: true,
       focused: false,
@@ -545,6 +545,7 @@ export const useStore = create<AppState>((set, get) => ({
     let targetGroupId = panel.targetOutputGroupId;
     let newGroups = [...state.outputGroups];
     let newGroupStates = { ...state.groupStates };
+    let newStagedStates = { ...state.stagedGroupStates };
 
     // Find which output groups are currently targeted by existing router panels
     const assignedGroupIds = new Set(state.routerPanels.map(p => p.targetOutputGroupId).filter(Boolean));
@@ -555,29 +556,53 @@ export const useStore = create<AppState>((set, get) => ({
       if (unassignedGroup) {
         targetGroupId = unassignedGroup.id;
       } else {
-        const count = state.outputGroups.length + 1;
+        const count = state.routerPanels.length + 1;
         const createdGroupId = `group-output-${Date.now()}`;
+        const defaultDisplayIds = state.outputGroups[0]?.displayIds || [];
         const newGroup: OutputGroup = {
           id: createdGroupId,
-          name: count === 2 ? 'Scripture / Stage Monitor' : `Live Output Panel ${count}`,
-          role: count === 2 ? 'confidence' : 'broadcast',
-          themeId: count === 2 ? 'theme-scripture' : 'theme-global',
-          displayIds: [],
+          name: `Router ${count} (Overlay R${count})`,
+          role: 'broadcast',
+          themeId: count % 2 === 0 ? 'theme-scripture' : 'theme-global',
+          displayIds: defaultDisplayIds.length > 0 ? [...defaultDisplayIds] : [],
           isBlack: false,
           isClear: false,
           showLogo: false
         };
         newGroups.push(newGroup);
+
+        const isMasterLive = Boolean(
+          state.groupStates['group-congregation']?.isLiveEnabled || 
+          (state.activeControlGroupId && state.groupStates[state.activeControlGroupId]?.isLiveEnabled)
+        );
+
         newGroupStates[createdGroupId] = {
           ...defaultState,
           activeItemId: null,
           activeSlideIndex: 0,
-          isLiveEnabled: false,
+          isLiveEnabled: isMasterLive,
+          timestamp: Date.now()
+        };
+        newStagedStates[createdGroupId] = {
+          ...defaultState,
+          activeItemId: null,
+          activeSlideIndex: 0,
+          isLiveEnabled: isMasterLive,
           timestamp: Date.now()
         };
         dbApi.saveOutputGroup(newGroup);
         targetGroupId = createdGroupId;
       }
+    }
+
+    if (targetGroupId && !newStagedStates[targetGroupId]) {
+      newStagedStates[targetGroupId] = {
+        ...defaultState,
+        activeItemId: null,
+        activeSlideIndex: 0,
+        isLiveEnabled: Boolean(newGroupStates[targetGroupId]?.isLiveEnabled),
+        timestamp: Date.now()
+      };
     }
 
     const updatedPanel: RouterPanelState = {
@@ -593,9 +618,22 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     panels.push(updatedPanel);
 
+    scheduleGroupStatesSave(newGroupStates);
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        outputGroups: newGroups,
+        groupStates: newGroupStates,
+        routerPanels: panels,
+        activeControlGroupId: targetGroupId,
+      }
+    });
+    DisplayManager.syncPhysicalDisplays(newGroups, newGroupStates, targetGroupId).catch(() => {});
+
     return {
       outputGroups: newGroups,
       groupStates: newGroupStates,
+      stagedGroupStates: newStagedStates,
       routerPanels: panels,
       activeRouterId: updatedPanel.routerId,
       activeControlGroupId: targetGroupId,
@@ -608,6 +646,17 @@ export const useStore = create<AppState>((set, get) => ({
     const newActiveId = state.activeRouterId === id ? (panels[0]?.routerId || null) : state.activeRouterId;
     const activePanel = panels.find(p => p.routerId === newActiveId);
     const newActiveTarget = activePanel?.targetOutputGroupId || null;
+
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        outputGroups: state.outputGroups,
+        groupStates: state.groupStates,
+        routerPanels: panels,
+        activeControlGroupId: newActiveTarget,
+      }
+    });
+
     return {
       routerPanels: panels.map(p => ({
         ...p,
@@ -623,6 +672,15 @@ export const useStore = create<AppState>((set, get) => ({
     const panels = state.routerPanels.map(p => p.routerId === id ? { ...p, ...updates } : p);
     const activePanel = panels.find(p => p.routerId === state.activeRouterId);
     const activeTarget = activePanel?.targetOutputGroupId || null;
+
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        routerPanels: panels,
+        activeControlGroupId: activeTarget,
+      }
+    });
+
     return { 
       routerPanels: panels,
       activeControlGroupId: activeTarget,
@@ -642,13 +700,25 @@ export const useStore = create<AppState>((set, get) => ({
       return {
         activeRouterId: id,
         routerPanels: panels,
-        activeControlGroupId: newActiveTarget,
+        activeControlGroupId: newActiveTarget || state.activeControlGroupId,
         previewItemId: activePanel?.previewItemId ?? null,
         previewSlideIndex: activePanel?.previewSlideIndex ?? 0
       };
     });
-    const { outputGroups, groupStates, activeControlGroupId } = get();
+    const { outputGroups, groupStates, activeControlGroupId, routerPanels } = get();
     DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, activeControlGroupId).catch(() => {});
+    
+    // Broadcast active router and active control group to all projector windows
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        activeRouterId: id,
+        activeControlGroupId,
+        routerPanels,
+        outputGroups,
+        groupStates
+      }
+    });
   },
 
   outputGroups: defaultOutputGroups,
@@ -728,6 +798,15 @@ export const useStore = create<AppState>((set, get) => ({
       // Request display manager to sync up newly created panel windows
       DisplayManager.syncPhysicalDisplays(newGroups, newStates, state.activeControlGroupId).catch(() => {});
       
+      broadcastStateChange({
+        type: 'SYNC_STATE',
+        data: {
+          outputGroups: newGroups,
+          groupStates: newStates,
+          activeControlGroupId: state.activeControlGroupId
+        }
+      });
+
       return { 
         outputGroups: newGroups,
         groupStates: newStates
@@ -744,6 +823,13 @@ export const useStore = create<AppState>((set, get) => ({
       dbApi.saveOutputGroup(updatedGroup);
 
       DisplayManager.syncPhysicalDisplays(newGroups, state.groupStates, state.activeControlGroupId).catch(() => {});
+
+      broadcastStateChange({
+        type: 'SYNC_STATE',
+        data: {
+          outputGroups: newGroups
+        }
+      });
 
       return { outputGroups: newGroups };
     });
@@ -762,6 +848,13 @@ export const useStore = create<AppState>((set, get) => ({
       dbApi.saveOutputGroup(updatedGroup);
 
       DisplayManager.syncPhysicalDisplays(newGroups, state.groupStates, state.activeControlGroupId).catch(() => {});
+
+      broadcastStateChange({
+        type: 'SYNC_STATE',
+        data: {
+          outputGroups: newGroups
+        }
+      });
 
       window.dispatchEvent(
         new CustomEvent('simpleworship:notify', { 
@@ -824,6 +917,15 @@ export const useStore = create<AppState>((set, get) => ({
     // Explicitly sync physical displays with the display manager to account for new or removed dynamic panels
     DisplayManager.syncPhysicalDisplays(current, newGroupStates, newActive).catch(() => {});
     
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        outputGroups: current,
+        groupStates: newGroupStates,
+        activeControlGroupId: newActive
+      }
+    });
+
     set({ 
       outputGroups: current, 
       groupStates: newGroupStates, 
@@ -854,6 +956,7 @@ export const useStore = create<AppState>((set, get) => ({
   
   groupStates: {
     'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-r2': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
     'group-stage': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setGroupState: (groupId, newState) => {
@@ -913,6 +1016,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   stagedGroupStates: {
     'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-r2': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
     'group-stage': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setStagedGroupState: (groupId, newState) => {
@@ -941,15 +1045,24 @@ export const useStore = create<AppState>((set, get) => ({
       }
       combinedState.renderFrame = frame;
 
+      // Synchronize canonical presentation state to both stagedGroupStates (Live Display Canvas)
+      // and groupStates (Target Monitor / Projector).
+      // Check if Master Live is active or if explicit isLiveEnabled is specified:
+      const publicState = state.groupStates[groupId] || defaultState;
+      const isMasterLiveActive = Boolean(
+        state.groupStates['group-congregation']?.isLiveEnabled || 
+        (state.activeControlGroupId && state.groupStates[state.activeControlGroupId]?.isLiveEnabled)
+      );
+      const isCurrentlyLive = newState.isLiveEnabled !== undefined 
+        ? newState.isLiveEnabled 
+        : (Boolean(publicState?.isLiveEnabled) || (isMasterLiveActive && groupId === state.activeControlGroupId));
+
+      combinedState.isLiveEnabled = isCurrentlyLive;
+
       const updatedStaged = {
         ...state.stagedGroupStates,
         [groupId]: combinedState
       };
-
-      // Synchronize canonical presentation state to both stagedGroupStates (Live Display Canvas)
-      // and groupStates (Target Monitor / Projector), while strictly preserving isLiveEnabled as the master output gate.
-      const publicState = state.groupStates[groupId] || defaultState;
-      const isCurrentlyLive = Boolean(publicState?.isLiveEnabled);
 
       const updatedPublicGroup = {
         ...publicState,
@@ -1062,12 +1175,18 @@ export const useStore = create<AppState>((set, get) => ({
         activeControlGroupId: id 
       };
     });
-    const { outputGroups, groupStates } = get();
+    const { outputGroups, groupStates, routerPanels } = get();
     DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, id).catch(() => {});
     
-    // Broadcast active control change so ProjectorView can mirror the active tab
-    import('../utils/broadcastSync').then(({ broadcastStateChange }) => {
-      broadcastStateChange({ type: 'SYNC_STATE', data: { activeControlGroupId: id } });
+    // Broadcast active control change with current states so ProjectorView can mirror the active tab without dropping state
+    broadcastStateChange({ 
+      type: 'SYNC_STATE', 
+      data: { 
+        activeControlGroupId: id,
+        outputGroups,
+        groupStates,
+        routerPanels
+      } 
     });
   },
 
@@ -1346,6 +1465,7 @@ export const useStore = create<AppState>((set, get) => ({
         directLiveItem: liveItem || null,
         isBlack: false,
         isClear: false,
+        isLiveEnabled: true,
       });
       if (routerIdToUse !== activeRouterId || groupToUpdate !== activeControlGroupId) {
         set({ activeControlGroupId: groupToUpdate, activeRouterId: routerIdToUse });
@@ -1358,6 +1478,7 @@ export const useStore = create<AppState>((set, get) => ({
           directLiveItem: liveItem || null,
           isBlack: false,
           isClear: false,
+          isLiveEnabled: true,
         });
       });
     }
@@ -1543,99 +1664,109 @@ export const useStore = create<AppState>((set, get) => ({
 
   toggleMasterLive: (groupId?: string) => {
     const { groupStates, stagedGroupStates, outputGroups, activeControlGroupId, songsList, themesList, systemOptions, activeSchedule } = get();
-    const targetGroupId = groupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
-    if (!targetGroupId) return;
+    
+    // Check if master live is currently on
+    const isCurrentlyLive = groupId 
+      ? Boolean(groupStates[groupId]?.isLiveEnabled)
+      : Boolean(groupStates['group-congregation']?.isLiveEnabled || (activeControlGroupId && groupStates[activeControlGroupId]?.isLiveEnabled));
+    const nextLive = !isCurrentlyLive;
 
-    const currentState = groupStates[targetGroupId] || defaultState;
-    const nextLive = !currentState.isLiveEnabled;
     const updatedStates = { ...groupStates };
     const updatedStaged = { ...stagedGroupStates };
 
-    if (nextLive) {
-      // Turning LIVE ON:
-      // Mirror the staged content from the Live Display Canvas to the projector screen
-      const staged = stagedGroupStates[targetGroupId] || currentState;
-      let effectiveActiveItemId = staged.activeItemId || currentState.activeItemId;
-      let effectiveDirectLiveItem = staged.directLiveItem || currentState.directLiveItem;
+    const targetGroupIds = groupId 
+      ? [groupId] 
+      : outputGroups.filter(g => g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2').map(g => g.id);
 
-      // If activeItemId is still not set, default to first item in schedule or song list to avoid black screen
-      if (!effectiveActiveItemId && !effectiveDirectLiveItem) {
-        if (activeSchedule?.items && activeSchedule.items.length > 0) {
-          effectiveActiveItemId = activeSchedule.items[0].id;
-          effectiveDirectLiveItem = activeSchedule.items[0];
-        } else if (songsList.length > 0) {
-          effectiveActiveItemId = songsList[0].id;
-          const s = songsList[0];
-          effectiveDirectLiveItem = {
-            id: s.id,
-            type: 'song',
-            name: s.title,
-            contentId: s.id,
-            notes: s.author || '',
-            isExpanded: false,
-            customBackgroundUrl: undefined,
-          };
-        }
-      }
-
+    targetGroupIds.forEach(targetGroupId => {
+      const currentState = groupStates[targetGroupId] || defaultState;
       const targetGroup = outputGroups.find(g => g.id === targetGroupId);
-      const combined = {
-        ...staged,
-        activeScheduleId: staged.activeScheduleId || activeSchedule?.id || null,
-        activeItemId: effectiveActiveItemId,
-        activeSlideIndex: staged.activeSlideIndex ?? 0,
-        directLiveItem: effectiveDirectLiveItem || null,
-        isVideoPlaying: staged.isVideoPlaying,
-        isVideoMuted: staged.isVideoMuted,
-        isVideoLooping: staged.isVideoLooping,
-        videoVolume: staged.videoVolume,
-        videoSeekTime: staged.videoSeekTime,
-        isBlack: false,
-        isClear: false,
-        showLogo: staged.showLogo ?? false,
-        isLiveEnabled: true,
-      };
 
-      const frame = staged.renderFrame || buildRenderFrame(
-        targetGroupId,
-        combined,
-        activeSchedule,
-        targetGroup,
-        systemOptions,
-        songsList,
-        themesList,
-        DisplayManager.getCachedDisplays()
-      );
+      if (nextLive) {
+        // Turning LIVE ON:
+        // Mirror the staged content from the Live Display Canvas to the projector screen
+        const staged = stagedGroupStates[targetGroupId] || currentState;
+        let effectiveActiveItemId = staged.activeItemId || currentState.activeItemId;
+        let effectiveDirectLiveItem = staged.directLiveItem || currentState.directLiveItem;
 
-      updatedStates[targetGroupId] = {
-        ...currentState,
-        ...combined,
-        renderFrame: frame,
-        timestamp: Date.now(),
-      };
+        // If activeItemId is still not set, default to first item in schedule or song list for congregation
+        if (!effectiveActiveItemId && !effectiveDirectLiveItem && targetGroupId === 'group-congregation') {
+          if (activeSchedule?.items && activeSchedule.items.length > 0) {
+            effectiveActiveItemId = activeSchedule.items[0].id;
+            effectiveDirectLiveItem = activeSchedule.items[0];
+          } else if (songsList.length > 0) {
+            effectiveActiveItemId = songsList[0].id;
+            const s = songsList[0];
+            effectiveDirectLiveItem = {
+              id: s.id,
+              type: 'song',
+              name: s.title,
+              contentId: s.id,
+              notes: s.author || '',
+              isExpanded: false,
+              customBackgroundUrl: undefined,
+            };
+          }
+        }
 
-      updatedStaged[targetGroupId] = {
-        ...staged,
-        ...combined,
-        renderFrame: frame,
-        timestamp: Date.now(),
-      };
-    } else {
-      // Turning LIVE OFF:
-      // Projector screen returns to Standby / Black
-      updatedStates[targetGroupId] = {
-        ...currentState,
-        isLiveEnabled: false,
-        timestamp: Date.now(),
-      };
-      if (updatedStaged[targetGroupId]) {
+        const combined = {
+          ...staged,
+          activeScheduleId: staged.activeScheduleId || activeSchedule?.id || null,
+          activeItemId: effectiveActiveItemId,
+          activeSlideIndex: staged.activeSlideIndex ?? 0,
+          directLiveItem: effectiveDirectLiveItem || null,
+          isVideoPlaying: staged.isVideoPlaying,
+          isVideoMuted: staged.isVideoMuted,
+          isVideoLooping: staged.isVideoLooping,
+          videoVolume: staged.videoVolume,
+          videoSeekTime: staged.videoSeekTime,
+          isBlack: false,
+          isClear: false,
+          showLogo: staged.showLogo ?? false,
+          isLiveEnabled: true,
+        };
+
+        const frame = staged.renderFrame || buildRenderFrame(
+          targetGroupId,
+          combined,
+          activeSchedule,
+          targetGroup,
+          systemOptions,
+          songsList,
+          themesList,
+          DisplayManager.getCachedDisplays()
+        );
+
+        updatedStates[targetGroupId] = {
+          ...currentState,
+          ...combined,
+          renderFrame: frame,
+          timestamp: Date.now(),
+        };
+
         updatedStaged[targetGroupId] = {
-          ...updatedStaged[targetGroupId],
+          ...staged,
+          ...combined,
+          renderFrame: frame,
+          timestamp: Date.now(),
+        };
+      } else {
+        // Turning LIVE OFF:
+        // Projector screen returns to Standby / Black
+        updatedStates[targetGroupId] = {
+          ...currentState,
           isLiveEnabled: false,
           timestamp: Date.now(),
         };
+        if (updatedStaged[targetGroupId]) {
+          updatedStaged[targetGroupId] = {
+            ...updatedStaged[targetGroupId],
+            isLiveEnabled: false,
+            timestamp: Date.now(),
+          };
+        }
       }
-    }
+    });
 
     set({ groupStates: updatedStates, stagedGroupStates: updatedStaged });
 
@@ -2116,10 +2247,18 @@ export const useStore = create<AppState>((set, get) => ({
     set({ scripturesList: mergedScriptures.length > 0 ? mergedScriptures : defaultScriptures });
 
     // Load or initialize output groups efficiently without deleting DB records
-    let finalOutputGroups = outputGroups;
+    let finalOutputGroups = [...outputGroups];
     if (!finalOutputGroups || finalOutputGroups.length === 0) {
-      finalOutputGroups = defaultOutputGroups;
+      finalOutputGroups = [...defaultOutputGroups];
       await Promise.all(defaultOutputGroups.map(g => dbApi.saveOutputGroup(g)));
+    } else {
+      // Ensure default groups like group-r2 exist
+      for (const dg of defaultOutputGroups) {
+        if (!finalOutputGroups.some(g => g.id === dg.id)) {
+          finalOutputGroups.push(dg);
+          dbApi.saveOutputGroup(dg).catch(() => {});
+        }
+      }
     }
     set({ outputGroups: finalOutputGroups });
 
@@ -2141,8 +2280,23 @@ export const useStore = create<AppState>((set, get) => ({
       }
     });
 
+    const initialStaged: Record<string, any> = {};
+    finalOutputGroups.forEach(g => {
+      initialStaged[g.id] = { ...(initialStates[g.id] || defaultState) };
+    });
+
+    // Ensure router-2 routes to group-r2 if currently set to group-stage
+    const currentPanels = get().routerPanels.map(p => {
+      if (p.routerId === 'router-2' && p.targetOutputGroupId === 'group-stage') {
+        return { ...p, targetOutputGroupId: 'group-r2' };
+      }
+      return p;
+    });
+
     set({ 
-      groupStates: initialStates, 
+      groupStates: initialStates,
+      stagedGroupStates: initialStaged,
+      routerPanels: currentPanels,
       activeControlGroupId: finalOutputGroups[0]?.id || 'group-congregation' 
     });
 

@@ -232,35 +232,56 @@ export function initSync(isProjector: boolean = false) {
       const data = payload.data;
 
       if (payload.type === 'SYNC_STATE') {
+        const currentGroupStates = useStore.getState().groupStates || {};
+        const incomingGroupStates = data.groupStates;
+        const mergedGroupStates = (incomingGroupStates && typeof incomingGroupStates === 'object' && Object.keys(incomingGroupStates).length > 0)
+          ? { ...currentGroupStates, ...incomingGroupStates }
+          : currentGroupStates;
+
         useStore.setState({
-          groupStates: data.groupStates || {},
+          groupStates: mergedGroupStates,
           alert: data.alert || useStore.getState().alert,
           ...(data.annotationState ? { annotationState: data.annotationState } : {}),
+          ...(data.activeRouterId !== undefined ? { activeRouterId: data.activeRouterId } : {}),
           ...(data.activeControlGroupId !== undefined ? { activeControlGroupId: data.activeControlGroupId } : {}),
-          ...(data.outputGroups ? { outputGroups: data.outputGroups } : {}),
+          ...(data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0 ? { outputGroups: data.outputGroups } : {}),
+          ...(data.routerPanels && Array.isArray(data.routerPanels) && data.routerPanels.length > 0 ? { routerPanels: data.routerPanels } : {}),
           ...(data.activeSchedule ? { activeSchedule: data.activeSchedule } : {}),
           ...(data.themesList ? { themesList: data.themesList } : {}),
           ...(data.systemOptions ? { systemOptions: data.systemOptions } : {})
         });
       } else if (payload.type === 'GROUP_STATES_UPDATE' || payload.type === 'PREVIEW_UPDATE') {
-        if (data.groupStates) {
-          useStore.setState({ groupStates: data.groupStates });
+        const currentGroupStates = useStore.getState().groupStates || {};
+        if (data.groupStates && typeof data.groupStates === 'object' && Object.keys(data.groupStates).length > 0) {
+          useStore.setState({ 
+            groupStates: {
+              ...currentGroupStates,
+              ...data.groupStates
+            },
+            ...(data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0 ? { outputGroups: data.outputGroups } : {}),
+            ...(data.routerPanels && Array.isArray(data.routerPanels) && data.routerPanels.length > 0 ? { routerPanels: data.routerPanels } : {}),
+          });
         } else if (data.groupId && (data.isLiveEnabled !== undefined || data.activeItemId !== undefined)) {
-          const currentGroupStates = useStore.getState().groupStates;
           useStore.setState({
             groupStates: {
               ...currentGroupStates,
-              [data.groupId]: data
+              [data.groupId]: {
+                ...(currentGroupStates[data.groupId] || {}),
+                ...data
+              }
             }
           });
         }
       } else if (payload.type === 'GO_LIVE') {
         if (data.groupId && data.state) {
-          const currentGroupStates = useStore.getState().groupStates;
+          const currentGroupStates = useStore.getState().groupStates || {};
           useStore.setState({
             groupStates: {
               ...currentGroupStates,
-              [data.groupId]: data.state
+              [data.groupId]: {
+                ...(currentGroupStates[data.groupId] || {}),
+                ...data.state
+              }
             }
           });
         }

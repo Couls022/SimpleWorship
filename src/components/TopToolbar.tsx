@@ -110,6 +110,25 @@ export default function TopToolbar({
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Timer active tracking (highlights only when actively in use: running or showing on main display)
+  const serviceIntervals = store.systemOptions?.serviceIntervals;
+  const [timerNow, setTimerNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!serviceIntervals?.isRunning || !serviceIntervals?.targetTimestamp) return;
+    const interval = setInterval(() => {
+      setTimerNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [serviceIntervals?.isRunning, serviceIntervals?.targetTimestamp]);
+
+  const isTimerRunning = Boolean(
+    serviceIntervals?.isRunning &&
+    (!serviceIntervals.targetTimestamp || serviceIntervals.targetTimestamp > timerNow)
+  );
+  const isTimerShowing = Boolean(serviceIntervals?.showOnMainDisplay);
+  const isTimerActive = isTimerRunning || isTimerShowing;
+
   // Monitor window maximized and fullscreen states
   useEffect(() => {
     if (typeof window !== 'undefined' && window.electronAPI?.isWindowMaximized) {
@@ -1276,24 +1295,24 @@ export default function TopToolbar({
         {/* Right Side: Presentation Master Controls (Go Live, Alerts, Logo, Black, Clear, Master Live) */}
         <div className="flex items-center space-x-1 shrink-0 flex-nowrap">
 
-          {/* TIMERS BUTTON */}
+          {/* TIMER BUTTON */}
           {onOpenTimers && (
             <div className={`flex items-center rounded-md border transition-all ${
-              store.systemOptions?.serviceIntervals?.countdownEnabled
+              isTimerActive
                 ? 'bg-amber-600/30 text-amber-300 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
                 : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
             }`}>
               <button
                 onClick={onOpenTimers}
-                className="flex items-center gap-1.5 justify-center p-1.5"
-                title="Service Interval Timers & Stage Countdowns"
+                className="flex items-center gap-1.5 justify-center p-1.5 cursor-pointer"
+                title={isTimerActive ? "Service Interval Timer Active (Click to configure)" : "Service Interval Timer & Stage Countdown"}
               >
                 <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
-                  store.systemOptions?.serviceIntervals?.countdownEnabled ? 'bg-amber-500 text-black border-amber-300' : 'bg-transparent text-gray-400 border-transparent'
+                  isTimerActive ? 'bg-amber-500 text-black border-amber-300' : 'bg-transparent text-gray-400 border-transparent'
                 }`}>
                   <Timer size={13} />
                 </div>
-                <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Timers</span>
+                <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Timer</span>
               </button>
             </div>
           )}

@@ -46,7 +46,7 @@ export default function CameraLiveRenderer({
         } else {
           // If unmounted before we got here, stop the stream
           if (isLiveOutput && stream) {
-            stream.getTracks().forEach(t => t.stop());
+            cameraManager.releaseLiveStream(deviceId);
           }
         }
       } catch (err: any) {
@@ -64,7 +64,7 @@ export default function CameraLiveRenderer({
     return () => {
       isMounted = false;
       if (isLiveOutput && activeStream) {
-        activeStream.getTracks().forEach(t => t.stop());
+        cameraManager.releaseLiveStream(deviceId);
       } else if (!isLiveOutput) {
         cameraManager.stopPreviewStream();
       }

@@ -241,6 +241,7 @@ export default defineConfig(() => {
       alias: {
         '@': path.resolve(__dirname, '.'),
         'pptx-react-viewer/i18n': path.resolve(__dirname, 'node_modules/pptx-react-viewer/dist/i18n.mjs'),
+        'qrcode': path.resolve(__dirname, 'src/utils/qrCode.ts'),
       },
     },
     server: {

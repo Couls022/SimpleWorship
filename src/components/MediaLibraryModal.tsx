@@ -76,7 +76,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
     if (isDefaultBgFor(asset.url, 'scriptures')) badges.push({ scope: 'scriptures', label: 'BIBLE', color: 'bg-amber-500/90 text-white border-amber-400/50' });
     if (isDefaultBgFor(asset.url, 'presentations')) badges.push({ scope: 'presentations', label: 'PPT', color: 'bg-purple-500/90 text-white border-purple-400/50' });
     if (isDefaultBgFor(asset.url, 'announcements')) badges.push({ scope: 'announcements', label: 'NOTICE', color: 'bg-rose-500/90 text-white border-rose-400/50' });
-    if (isDefaultBgFor(asset.url, 'timers')) badges.push({ scope: 'timers', label: 'TIMERS', color: 'bg-orange-500/90 text-white border-orange-400/50' });
+    if (isDefaultBgFor(asset.url, 'timers')) badges.push({ scope: 'timers', label: 'TIMER', color: 'bg-orange-500/90 text-white border-orange-400/50' });
     return badges;
   };
   
@@ -730,7 +730,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
           >
             <span className="flex items-center gap-2">
               <Sparkles size={11} className="text-orange-400" />
-              <span>For Timers</span>
+              <span>For Timer</span>
             </span>
             {isDefaultBgFor(contextMenu.asset.url, 'timers') && (
               <span className="flex items-center gap-1 text-[10px] text-orange-400 font-semibold bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-500/30">

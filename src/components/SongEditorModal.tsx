@@ -1,8 +1,5 @@
 import { withPortal } from './common/withPortal';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 import { 
   X, 
@@ -34,7 +31,10 @@ import {
   Edit3,
   Move,
   RotateCcw,
-  Check
+  Check,
+  GripVertical,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { Song, SongSection, ThemeStyles, PresentationItem } from '../types';
 import { useStore } from '../store/useStore';
@@ -50,64 +50,192 @@ interface SongEditorModalProps {
 }
 
 
-interface SortableSlideItemProps {
-  slide: { label: string; text: string };
-  idx: number;
-  activeSlideIndex: number;
-  setActiveSlideIndex: (idx: number) => void;
-  id: string;
+function arrayMove<T>(array: T[], from: number, to: number): T[] {
+  const newArray = array.slice();
+  const [removed] = newArray.splice(from, 1);
+  newArray.splice(to < 0 ? newArray.length + to : to, 0, removed);
+  return newArray;
 }
 
-function SortableSlideItem({ slide, idx, activeSlideIndex, setActiveSlideIndex, id }: SortableSlideItemProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
+interface SlideThumbnailItemProps {
+  slide: { label: string; text: string };
+  idx: number;
+  totalSlides: number;
+  activeSlideIndex: number;
+  setActiveSlideIndex: (idx: number) => void;
+  onReorder: (fromIdx: number, toIdx: number) => void;
+  draggedIdx: number | null;
+  setDraggedIdx: (idx: number | null) => void;
+  dropTargetIdx: number | null;
+  setDropTargetIdx: (idx: number | null) => void;
+  dropPosition: 'before' | 'after' | null;
+  setDropPosition: (pos: 'before' | 'after' | null) => void;
+}
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 10 : 1,
-    opacity: isDragging ? 0.8 : 1,
+function SlideThumbnailItem({
+  slide,
+  idx,
+  totalSlides,
+  activeSlideIndex,
+  setActiveSlideIndex,
+  onReorder,
+  draggedIdx,
+  setDraggedIdx,
+  dropTargetIdx,
+  setDropTargetIdx,
+  dropPosition,
+  setDropPosition,
+}: SlideThumbnailItemProps) {
+  const isDraggingThis = draggedIdx === idx;
+  const isDropTarget = dropTargetIdx === idx && draggedIdx !== null && draggedIdx !== idx;
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+    setDraggedIdx(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedIdx === null || draggedIdx === idx) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const pos = e.clientY < midpoint ? 'before' : 'after';
+
+    setDropTargetIdx(idx);
+    setDropPosition(pos);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    const related = e.relatedTarget as Node | null;
+    if (!e.currentTarget.contains(related)) {
+      if (dropTargetIdx === idx) {
+        setDropTargetIdx(null);
+        setDropPosition(null);
+      }
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggedIdx === null || draggedIdx === idx) return;
+
+    let targetIdx = idx;
+    if (dropPosition === 'after') {
+      targetIdx = draggedIdx < idx ? idx : idx + 1;
+    } else {
+      targetIdx = draggedIdx < idx ? idx - 1 : idx;
+    }
+    targetIdx = Math.max(0, Math.min(targetIdx, totalSlides - 1));
+
+    onReorder(draggedIdx, targetIdx);
+    setDraggedIdx(null);
+    setDropTargetIdx(null);
+    setDropPosition(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDropTargetIdx(null);
+    setDropPosition(null);
   };
 
   return (
-    
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={() => setActiveSlideIndex(idx)}
-      className={`p-2.5 rounded cursor-pointer transition-all border ${
-        activeSlideIndex === idx
-          ? 'bg-[#293245] border-cyan-400 shadow-md ring-1 ring-cyan-400'
-          : 'bg-[#141519] border-[#292c36] hover:bg-[#1e222b]'
-      }`}
-    >
-      <div className="flex items-center justify-between text-[11px] font-bold mb-1">
-        <span className={`px-1.5 py-0.5 rounded ${
-          (() => {
-            const t = slide.label.toLowerCase();
-            if (t.includes('chorus') || t.includes('koro') || t.includes('refrain')) return 'bg-emerald-900/50 text-emerald-300 border border-emerald-700/50';
-            if (t.includes('bridge') || t.includes('tulay')) return 'bg-purple-900/50 text-purple-300 border border-purple-700/50';
-            if (t.includes('pre-chorus')) return 'bg-amber-900/50 text-amber-300 border border-amber-700/50';
-            if (t.includes('tag') || t.includes('ending') || t.includes('coda')) return 'bg-rose-900/50 text-rose-300 border border-rose-700/50';
-            if (t.includes('verse') || t.includes('talatâ') || t.match(/^v\d+$/)) return 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50';
-            return 'bg-[#293245] text-cyan-300 border border-cyan-700/50';
-          })()
-        }`}>{slide.label}</span>
-        <span className="text-gray-500 text-[10px] font-mono">#{idx + 1}</span>
+    <div className="relative group">
+      {/* Drop Before Indicator */}
+      {isDropTarget && dropPosition === 'before' && (
+        <div className="h-1 bg-gradient-to-r from-cyan-500 via-indigo-400 to-cyan-500 rounded-full mb-1 shadow-md shadow-cyan-500/50 flex items-center justify-center animate-pulse">
+          <span className="bg-cyan-500 text-gray-950 font-bold text-[8px] px-1 rounded-full uppercase tracking-tighter">
+            Insert Here
+          </span>
+        </div>
+      )}
+
+      <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onDragEnd={handleDragEnd}
+        onClick={() => setActiveSlideIndex(idx)}
+        className={`p-2.5 rounded cursor-pointer transition-all border select-none ${
+          isDraggingThis
+            ? 'opacity-40 border-dashed border-cyan-500 scale-[0.98]'
+            : activeSlideIndex === idx
+            ? 'bg-[#293245] border-cyan-400 shadow-md ring-1 ring-cyan-400'
+            : 'bg-[#141519] border-[#292c36] hover:bg-[#1e222b]'
+        }`}
+      >
+        <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="text-gray-500 hover:text-cyan-400 cursor-grab active:cursor-grabbing p-0.5 -ml-1 rounded"
+              title="Drag to reorder slide"
+            >
+              <GripVertical size={13} />
+            </span>
+            <span className={`px-1.5 py-0.5 rounded ${
+              (() => {
+                const t = slide.label.toLowerCase();
+                if (t.includes('chorus') || t.includes('koro') || t.includes('refrain')) return 'bg-emerald-900/50 text-emerald-300 border border-emerald-700/50';
+                if (t.includes('bridge') || t.includes('tulay')) return 'bg-purple-900/50 text-purple-300 border border-purple-700/50';
+                if (t.includes('pre-chorus')) return 'bg-amber-900/50 text-amber-300 border border-amber-700/50';
+                if (t.includes('tag') || t.includes('ending') || t.includes('coda')) return 'bg-rose-900/50 text-rose-300 border border-rose-700/50';
+                if (t.includes('verse') || t.includes('talatâ') || t.match(/^v\d+$/)) return 'bg-indigo-900/50 text-indigo-300 border border-indigo-700/50';
+                return 'bg-[#293245] text-cyan-300 border border-cyan-700/50';
+              })()
+            }`}>{slide.label}</span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Quick Reorder Controls on Hover */}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center bg-[#1e222b] rounded px-0.5 border border-[#373b47]">
+              <button
+                type="button"
+                disabled={idx === 0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReorder(idx, idx - 1);
+                }}
+                title="Move slide up"
+                className="p-0.5 text-gray-400 hover:text-cyan-300 disabled:opacity-20 disabled:hover:text-gray-400"
+              >
+                <ChevronUp size={11} />
+              </button>
+              <button
+                type="button"
+                disabled={idx === totalSlides - 1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReorder(idx, idx + 1);
+                }}
+                title="Move slide down"
+                className="p-0.5 text-gray-400 hover:text-cyan-300 disabled:opacity-20 disabled:hover:text-gray-400"
+              >
+                <ChevronDown size={11} />
+              </button>
+            </div>
+            <span className="text-gray-500 text-[10px] font-mono">#{idx + 1}</span>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-200 line-clamp-3 font-serif leading-tight">
+          {slide.text}
+        </p>
       </div>
-      <p className="text-[11px] text-gray-200 line-clamp-3 font-serif leading-tight">
-        {slide.text}
-      </p>
+
+      {/* Drop After Indicator */}
+      {isDropTarget && dropPosition === 'after' && (
+        <div className="h-1 bg-gradient-to-r from-cyan-500 via-indigo-400 to-cyan-500 rounded-full mt-1 shadow-md shadow-cyan-500/50 flex items-center justify-center animate-pulse">
+          <span className="bg-cyan-500 text-gray-950 font-bold text-[8px] px-1 rounded-full uppercase tracking-tighter">
+            Insert Here
+          </span>
+        </div>
+      )}
     </div>
-    
   );
 }
 
@@ -644,36 +772,24 @@ function SongEditorModal({
     }
   };
 
-    const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-    
-  );
+  const [draggedSlideIdx, setDraggedSlideIdx] = useState<number | null>(null);
+  const [dropTargetSlideIdx, setDropTargetSlideIdx] = useState<number | null>(null);
+  const [dropSlidePosition, setDropSlidePosition] = useState<'before' | 'after' | null>(null);
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (active && over && active.id !== over.id) {
-      const oldIndex = parsedSlides.findIndex((_, i) => `slide-${i}` === active.id);
-      const newIndex = parsedSlides.findIndex((_, i) => `slide-${i}` === over.id);
-      
-      const newSlides = arrayMove(parsedSlides, oldIndex, newIndex);
-      
-      const newLyrics = newSlides.map(s => `[${s.label}]\n${s.text}`).join('\n\n');
-      setRawLyrics(newLyrics);
-      
-      if (activeSlideIndex === oldIndex) {
-         setActiveSlideIndex(newIndex);
-      } else if (activeSlideIndex > oldIndex && activeSlideIndex <= newIndex) {
-         setActiveSlideIndex(activeSlideIndex - 1);
-      } else if (activeSlideIndex < oldIndex && activeSlideIndex >= newIndex) {
-         setActiveSlideIndex(activeSlideIndex + 1);
-      }
+  const handleReorderSlide = (oldIndex: number, newIndex: number) => {
+    if (oldIndex === newIndex || oldIndex < 0 || newIndex < 0 || oldIndex >= parsedSlides.length || newIndex >= parsedSlides.length) {
+      return;
+    }
+    const newSlides = arrayMove(parsedSlides, oldIndex, newIndex);
+    const newLyrics = newSlides.map(s => `[${s.label}]\n${s.text}`).join('\n\n');
+    setRawLyrics(newLyrics);
+
+    if (activeSlideIndex === oldIndex) {
+      setActiveSlideIndex(newIndex);
+    } else if (activeSlideIndex > oldIndex && activeSlideIndex <= newIndex) {
+      setActiveSlideIndex(activeSlideIndex - 1);
+    } else if (activeSlideIndex < oldIndex && activeSlideIndex >= newIndex) {
+      setActiveSlideIndex(activeSlideIndex + 1);
     }
   };
 
@@ -1269,30 +1385,27 @@ function SongEditorModal({
                 </div>
               ) : (
                 /* Slides Thumbnail List */
-                <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                  <DndContext 
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <SortableContext 
-                      items={parsedSlides.map((_, i) => `slide-${i}`)}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      <div className="space-y-2">
-                        {parsedSlides.map((slide, idx) => (
-                          <SortableSlideItem
-                            key={`slide-${idx}`}
-                            id={`slide-${idx}`}
-                            slide={slide}
-                            idx={idx}
-                            activeSlideIndex={activeSlideIndex}
-                            setActiveSlideIndex={setActiveSlideIndex}
-                          />
-                        ))}
-                      </div>
-                    </SortableContext>
-                  </DndContext>
+                <div 
+                  className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-2"
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  {parsedSlides.map((slide, idx) => (
+                    <SlideThumbnailItem
+                      key={`slide-${idx}`}
+                      slide={slide}
+                      idx={idx}
+                      totalSlides={parsedSlides.length}
+                      activeSlideIndex={activeSlideIndex}
+                      setActiveSlideIndex={setActiveSlideIndex}
+                      onReorder={handleReorderSlide}
+                      draggedIdx={draggedSlideIdx}
+                      setDraggedIdx={setDraggedSlideIdx}
+                      dropTargetIdx={dropTargetSlideIdx}
+                      setDropTargetIdx={setDropTargetSlideIdx}
+                      dropPosition={dropSlidePosition}
+                      setDropPosition={setDropSlidePosition}
+                    />
+                  ))}
                 </div>
               )}
             </div>

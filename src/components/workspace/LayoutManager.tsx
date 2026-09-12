@@ -37,6 +37,12 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
 
   // Determine active target route for the Fixed Live Output Panel (Without Display)
   const effectiveTargetGroupId = (() => {
+    if (store.activeRouterId && store.routerPanels.length > 0) {
+      const activeRouter = store.routerPanels.find(p => p.routerId === store.activeRouterId);
+      if (activeRouter?.targetOutputGroupId && outputGroups.some(g => g.id === activeRouter.targetOutputGroupId)) {
+        return activeRouter.targetOutputGroupId;
+      }
+    }
     if (activeControlGroupId && outputGroups.some(g => g.id === activeControlGroupId)) {
       return activeControlGroupId;
     }
@@ -142,6 +148,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
               <LivePanel 
                 key={`live-control-${effectiveTargetGroupId}`}
                 groupId={effectiveTargetGroupId} 
+                routerId={store.activeRouterId || undefined}
                 showPreviewDisplay={false} 
               />
             </div>

@@ -14,8 +14,12 @@ interface ProjectorViewProps {
 }
 
 export default function ProjectorView({ groupId: initialGroupId, displayId: propDisplayId }: ProjectorViewProps = {}) {
-  const store = useStore();
-  const { outputGroups, groupStates, stagedGroupStates, activeControlGroupId } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const groupStates = useStore(state => state.groupStates);
+  const stagedGroupStates = useStore(state => state.stagedGroupStates);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const activeRouterId = useStore(state => state.activeRouterId);
+  const routerPanels = useStore(state => state.routerPanels);
 
   const { screens } = useScreens();
   const [identifyActive, setIdentifyActive] = useState(false);
@@ -131,49 +135,75 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     return 1;
   }, [screens, displayId, identifyNumber]);
 
-  // Resolve winning active route targeting this physical display
-  const { winningGroupId, isLiveActive } = useMemo(() => {
-    if (displayId && outputGroups.length > 0) {
+  // Resolve winning active route and all overlay routes targeting this physical display
+  const { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds } = useMemo(() => {
+    let winningGroupId: string | null = null;
+    let isLiveActive = false;
+
+    // 1. Determine primary/base route for this projector display
+    let baseGroupId = 'group-congregation';
+    if (currentRouteGroupId && outputGroups.some(g => g.id === currentRouteGroupId)) {
+      baseGroupId = currentRouteGroupId;
+    } else if (routedGroupId && outputGroups.some(g => g.id === routedGroupId)) {
+      baseGroupId = routedGroupId;
+    } else if (displayId && outputGroups.length > 0) {
       const assignments = resolveDisplayAssignments(outputGroups, groupStates, activeControlGroupId, [displayId]);
       const match = assignments.get(displayId);
-      if (match) {
-        if (match.assignedGroupId) {
-          // A designated route targeting this display is LIVE ON!
-          return { winningGroupId: match.assignedGroupId, isLiveActive: true };
-        }
-        if (match.candidateGroupIds && match.candidateGroupIds.length > 0) {
-          // Check if any candidate group is currently LIVE in groupStates
-          const liveCandidate = match.candidateGroupIds.find(gid => {
-            const st = groupStates[gid] || stagedGroupStates[gid];
-            return Boolean(st?.isLiveEnabled);
-          });
-          if (liveCandidate) {
-            return { winningGroupId: liveCandidate, isLiveActive: true };
-          }
-          // Candidate routes explicitly target this display, but ALL are LIVE OFF: Standby mode (Solid Black)
-          return { winningGroupId: match.candidateGroupIds[0], isLiveActive: false };
-        }
+      if (match?.assignedGroupId) {
+        baseGroupId = match.assignedGroupId;
+      } else if (match?.candidateGroupIds && match.candidateGroupIds.length > 0) {
+        baseGroupId = match.candidateGroupIds[0];
       }
+    } else if (outputGroups.length > 0) {
+      baseGroupId = outputGroups[0].id;
     }
 
-    // Fallback: If no candidate route specifically matched this displayId string
-    // (e.g. single projector output, unconfigured mapping, or generic window):
-    const effectiveGroupId = (currentRouteGroupId && outputGroups.some(g => g.id === currentRouteGroupId))
-      ? currentRouteGroupId
-      : (routedGroupId && outputGroups.some(g => g.id === routedGroupId))
-      ? routedGroupId
-      : (activeControlGroupId && outputGroups.some(g => g.id === activeControlGroupId))
-      ? activeControlGroupId
-      : outputGroups[0]?.id || 'group-congregation';
+    // 2. Candidate groups MUST contain the base route first, followed by all other output groups (R2, R3, R4...)
+    // This guarantees that all secondary router panels are mounted as overlays on top of the projector output!
+    const allGroupIds = outputGroups.map(g => g.id);
+    const candidateGroupIds: string[] = [
+      baseGroupId,
+      ...allGroupIds.filter(id => id !== baseGroupId)
+    ];
 
-    const state = groupStates[effectiveGroupId] || stagedGroupStates[effectiveGroupId];
-    const live = Boolean(state?.isLiveEnabled);
+    // 3. Live groups: find which candidates currently have isLiveEnabled = true
+    const liveGroupIds = candidateGroupIds.filter(gid => {
+      const st = groupStates[gid] || stagedGroupStates[gid];
+      return Boolean(st?.isLiveEnabled);
+    });
 
-    return {
-      winningGroupId: effectiveGroupId,
-      isLiveActive: live,
+    // 4. Winning active route: prioritize active control if live, or topmost live route, or base group
+    const isRouteLive = (gid: string) => {
+      const st = groupStates[gid] || stagedGroupStates[gid];
+      return Boolean(st?.isLiveEnabled);
     };
+
+    if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId) && isRouteLive(activeControlGroupId)) {
+      winningGroupId = activeControlGroupId;
+      isLiveActive = true;
+    } else if (liveGroupIds.length > 0) {
+      winningGroupId = liveGroupIds[0];
+      isLiveActive = true;
+    } else {
+      winningGroupId = baseGroupId;
+      isLiveActive = false;
+    }
+
+    return { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds };
   }, [displayId, outputGroups, groupStates, stagedGroupStates, activeControlGroupId, routedGroupId, currentRouteGroupId]);
+
+  // Grace period to prevent transient blackscreen flicker during rapid live transitions between items
+  const [showStandbyCurtain, setShowStandbyCurtain] = useState(liveGroupIds.length === 0);
+  useEffect(() => {
+    if (liveGroupIds.length > 0) {
+      setShowStandbyCurtain(false);
+    } else {
+      const timer = setTimeout(() => {
+        setShowStandbyCurtain(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [liveGroupIds.length]);
 
   // Determine what state to pass to the canvas
   const winningState = winningGroupId ? (groupStates[winningGroupId] || stagedGroupStates[winningGroupId]) : undefined;
@@ -184,24 +214,42 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       data-canvas-preview="true"
       className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
     >
-      {/* ALWAYS render the canvas to preserve DOM state, video playheads, and asset caches. 
-          Use opacity to hide it if Master Live is OFF or no group is assigned. */}
-      {winningGroupId && winningGroup && (
-        <div className="absolute inset-0 transition-opacity duration-500 ease-in-out" style={{ opacity: isLiveActive ? 1 : 0 }}>
-          <MonitorPreviewCanvas
-            groupId={winningGroupId}
-            customGroup={winningGroup}
-            customState={winningState}
-            isProjectorMode={true}
-            className="w-full h-full"
-          />
-        </div>
-      )}
+      {/* ALWAYS render all candidate canvases to preserve DOM state, video playheads, and asset caches. 
+          Use opacity to hide them if they are not the active winning route. 
+          Only the ACTIVE router has projector/output authority. */}
+      {candidateGroupIds.map((groupId, index) => {
+        const isWinning = groupId === winningGroupId;
+        // A route is only visible if it is BOTH live AND the active winning route.
+        // A non-active router may remain LIVE/ON internally but must not take over the projector.
+        const isVisible = liveGroupIds.includes(groupId) && isWinning;
+        const state = groupStates[groupId] || stagedGroupStates[groupId];
+        const group = outputGroups.find(g => g.id === groupId) || outputGroups[0];
+        
+        return (
+          <div 
+            key={groupId}
+            className="absolute inset-0 transition-opacity duration-300 ease-in-out pointer-events-none" 
+            style={{ 
+              opacity: isVisible ? 1 : 0,
+              zIndex: isVisible ? 20 : 0,
+              pointerEvents: isVisible ? 'auto' : 'none' 
+            }}
+          >
+            <MonitorPreviewCanvas
+              groupId={groupId}
+              customGroup={group}
+              customState={state}
+              isProjectorMode={true}
+              className="w-full h-full"
+            />
+          </div>
+        );
+      })}
 
-      {/* Master Gate Standby Overlay: Solid black if LIVE switch is OFF */}
+      {/* Master Gate Standby Overlay: Solid black if NO LIVE ROUTES AT ALL */}
       <div 
         className="absolute inset-0 z-[100] bg-black pointer-events-none transition-opacity duration-500 ease-in-out flex items-center justify-center"
-        style={{ opacity: (!isLiveActive || !winningGroupId) ? 1 : 0 }}
+        style={{ opacity: showStandbyCurtain ? 1 : 0 }}
       >
         {/* Visual Identification Overlay for connected monitors */}
         <AnimatePresence>

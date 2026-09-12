@@ -33,19 +33,15 @@ interface FixedLiveDisplayProps {
 }
 
 export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProps) {
-  const store = useStore();
-  const { 
-    outputGroups, 
-    groupStates, 
-    activeSchedule, 
-    activeControlGroupId, 
-    systemOptions, 
-    songsList, 
-    themesList, 
-    setStagedGroupState 
-  } = store;
-
-  // Selected display mode: 'follow-target' or specific groupId
+  const outputGroups = useStore(state => state.outputGroups);
+  const groupStates = useStore(state => state.groupStates);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const systemOptions = useStore(state => state.systemOptions);
+  const songsList = useStore(state => state.songsList);
+  const themesList = useStore(state => state.themesList);
+  const setStagedGroupState = useStore(state => state.setStagedGroupState);
+  
   const [displayTargetId, setDisplayTargetId] = useState<string>('follow-target');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
@@ -85,7 +81,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
   const activeGroup = outputGroups.find(g => g.id === effectiveGroupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === effectiveGroupId);
   const publicControlState = groupStates[effectiveGroupId];
-  const stagedControlState = store.stagedGroupStates[effectiveGroupId];
+  const stagedControlState = useStore(state => state.stagedGroupStates[effectiveGroupId]);
 
   // Active item & slide info
   const liveItem = React.useMemo(() => {
@@ -266,16 +262,16 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
           if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const dropResult = await processDroppedFileList(e.dataTransfer.files);
             if (dropResult.schedule) {
-              store.setActiveSchedule(dropResult.schedule);
+              useStore.getState().setActiveSchedule(dropResult.schedule);
               return;
             }
             if (dropResult.items && dropResult.items.length > 0) {
               for (const item of dropResult.items) {
-                store.addScheduleItem(item);
+                useStore.getState().addScheduleItem(item);
               }
               const targetItem = dropResult.items[0];
-              store.goLiveItem(targetItem.id, 0, effectiveGroupId, targetItem);
-              store.setStagedGroupState(effectiveGroupId, {
+              useStore.getState().goLiveItem(targetItem.id, 0, effectiveGroupId, targetItem);
+              useStore.getState().setStagedGroupState(effectiveGroupId, {
                 activeItemId: targetItem.id,
                 activeSlideIndex: 0,
                 isBlack: false,
@@ -298,10 +294,10 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
               if (payload && payload.item) {
                 const item = payload.item;
                 if (payload.source !== 'schedule') {
-                  store.addScheduleItem(item);
+                  useStore.getState().addScheduleItem(item);
                 }
-                store.goLiveItem(item.id, 0, effectiveGroupId, item);
-                store.setStagedGroupState(effectiveGroupId, {
+                useStore.getState().goLiveItem(item.id, 0, effectiveGroupId, item);
+                useStore.getState().setStagedGroupState(effectiveGroupId, {
                   activeItemId: item.id,
                   activeSlideIndex: 0,
                   isBlack: false,

@@ -8,25 +8,22 @@ import { DisplayManager } from '../core/DisplayManager';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
 
 export default function MultiGroupPreviewBar() {
-  const store = useStore();
   const { panels, togglePanelDock } = useWorkspace();
   const isDocked = panels.multiGroup?.isDocked ?? true;
   const [draggedGroupId, setDraggedGroupId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; side: 'left' | 'right' } | null>(null);
 
-  const { 
-    outputGroups, 
-    groupStates, 
-    activeControlGroupId, 
-    setActiveControlGroupId, 
-    activeSchedule, 
-    songsList, 
-    themesList,
-    alert,
-    systemOptions,
-    reorderOutputGroups,
-    moveOutputGroup
-  } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const groupStates = useStore(state => state.groupStates);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const setActiveControlGroupId = useStore(state => state.setActiveControlGroupId);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const songsList = useStore(state => state.songsList);
+  const themesList = useStore(state => state.themesList);
+  const alert = useStore(state => state.alert);
+  const systemOptions = useStore(state => state.systemOptions);
+  const reorderOutputGroups = useStore(state => state.reorderOutputGroups);
+  const moveOutputGroup = useStore(state => state.moveOutputGroup);
 
   const handleLaunchProjector = async (groupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -239,26 +236,26 @@ export default function MultiGroupPreviewBar() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      const groupState = store.groupStates[group.id];
+                      const groupState = useStore.getState().groupStates[group.id];
                       if (groupState?.activeItemId) {
                         // Keep whatever is currently loaded in this output group
-                        store.setStagedGroupState(group.id, {
+                        useStore.getState().setStagedGroupState(group.id, {
                           isBlack: false,
                           isClear: false,
                           showLogo: false,
                         });
-                        store.setActiveControlGroupId(group.id);
+                        useStore.getState().setActiveControlGroupId(group.id);
                         window.dispatchEvent(
                           new CustomEvent('simpleworship:notify', { 
                             detail: `LIVE: Output active for ${group.name}!` 
                           })
                         );
                       } else {
-                        const itemToGoLive = store.activeSchedule?.items.length 
+                        const itemToGoLive = useStore.getState().activeSchedule?.items.length 
                           ? activeSchedule.items[0].id 
-                          : store.previewItemId;
+                          : useStore.getState().previewItemId;
                         if (itemToGoLive) {
-                          store.goLiveItem(itemToGoLive, 0, group.id);
+                          useStore.getState().goLiveItem(itemToGoLive, 0, group.id);
                           window.dispatchEvent(
                             new CustomEvent('simpleworship:notify', { 
                               detail: `LIVE: Direct Output to ${group.name}!` 

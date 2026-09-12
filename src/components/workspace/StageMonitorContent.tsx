@@ -24,16 +24,13 @@ const StageClock = React.memo(() => {
 });
 
 export default function StageMonitorContent() {
-  const store = useStore();
-  const { 
-    activeSchedule, 
-    groupStates, 
-    activeControlGroupId, 
-    outputGroups, 
-    songsList, 
-    alert,
-    systemOptions 
-  } = store;
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const groupStates = useStore(state => state.groupStates);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const outputGroups = useStore(state => state.outputGroups);
+  const songsList = useStore(state => state.songsList);
+  const alert = useStore(state => state.alert);
+  const systemOptions = useStore(state => state.systemOptions);
 
   const activeControlState = activeControlGroupId && groupStates[activeControlGroupId] 
     ? groupStates[activeControlGroupId] 
