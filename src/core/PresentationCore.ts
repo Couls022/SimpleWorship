@@ -293,10 +293,9 @@ export class PresentationCore {
       const hasTitleSlide = generated.length > 0 && generated[0].title === 'Title';
       if (!hasTitleSlide) {
         const songTitle = matchedSong?.title || item.name || 'Song';
-        const songAuthor = matchedSong?.author ? `\n\n${matchedSong.author}` : '';
         const titleSlide = PresentationCore.splitSongSection(
           'Title',
-          `${songTitle}${songAuthor}`,
+          `${songTitle}`,
           'title-slide',
           effectiveSongBg,
           songOpts

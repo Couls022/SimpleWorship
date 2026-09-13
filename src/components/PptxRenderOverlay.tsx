@@ -11,12 +11,7 @@ interface PptxRenderOverlayProps {
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
   onActiveSlideChange?: (index: number) => void;
-  pptxAction?: 'next' | 'prev' | null;
-  pptxActionTimestamp?: number;
-  onActiveSlideChange?: (index: number) => void;
   activeSlideIndex: number;
-  isThumbnail?: boolean;
-  isThumbnail?: boolean;
 }
 
 interface ErrorBoundaryProps {
@@ -35,8 +30,7 @@ class PptxErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
   override render() {
     if (this.state.hasError) {
-      return null;
-    }
+      return    }
     return this.props.children;
   }
 }
@@ -67,7 +61,6 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     const el = containerRef.current;
     if (!el) return;
     let animationFrameId: number | null = null;
-
     const getUnscaledDimensions = () => {
       let width = el.clientWidth || el.offsetWidth;
       let height = el.clientHeight || el.offsetHeight;
@@ -223,8 +216,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
       if (contentId) pptxBytesCache.set(contentId, valid);
       return valid;
     }
-    return null;
-  });
+    return  });
 
   useEffect(() => {
     let isMounted = true;
@@ -259,8 +251,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     return () => { isMounted = false; };
   }, [fileBytes, contentId]);
 
-  if (!localBytes) return null;
-
+  if (!localBytes) return
   return (
     <PptxErrorBoundary>
       <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} contentId={contentId} isThumbnail={isThumbnail} pptxAction={pptxAction} pptxActionTimestamp={pptxActionTimestamp} onActiveSlideChange={onActiveSlideChange} />

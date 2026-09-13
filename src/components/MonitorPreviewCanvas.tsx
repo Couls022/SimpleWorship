@@ -434,9 +434,14 @@ export default function MonitorPreviewCanvas({
   );
 
   useEffect(() => {
-    if (isVideo && (isExplicitVideoItem ? activeItem?.contentId : videoSrc)) {
+    let sourceIdToLoad = isExplicitVideoItem ? activeItem?.contentId : undefined;
+    if (isLogoMode) {
+      sourceIdToLoad = undefined; // Force it to use videoSrc (the Logo video) instead of the active item
+    }
+
+    if (isVideo && (sourceIdToLoad || videoSrc)) {
       mediaController.replace(
-        isExplicitVideoItem ? activeItem?.contentId : undefined,
+        sourceIdToLoad,
         videoSrc
       ).then(url => {
         setManagedVideoSrc(url);
@@ -445,7 +450,7 @@ export default function MonitorPreviewCanvas({
       mediaController.dispose();
       setManagedVideoSrc(null);
     }
-  }, [isVideo, activeItem?.contentId, videoSrc, isExplicitVideoItem, mediaController]);
+  }, [isVideo, activeItem?.contentId, videoSrc, isExplicitVideoItem, mediaController, isLogoMode]);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -639,7 +644,7 @@ export default function MonitorPreviewCanvas({
               {/* Underlying persistent buffer to guarantee ZERO black flash during crossfade or image loading */}
               {!isOverlayGroup && lastValidBgRef.current && (
                 <div 
-                  className="absolute inset-0 w-full h-full bg-cover bg-center"
+                  className={`absolute inset-0 w-full h-full bg-center ${isLogoMode ? 'bg-contain bg-no-repeat bg-black' : 'bg-cover'}`}
                   style={{ 
                     backgroundImage: `url(${lastValidBgRef.current})`,
                     zIndex: 0 
@@ -672,7 +677,7 @@ export default function MonitorPreviewCanvas({
                         setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                       }
                     }}
-                    className={contentType === 'video' ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
+                    className={(contentType === 'video' || isLogoMode) ? "w-full h-full object-contain relative z-10 bg-black" : "w-full h-full object-cover"}
                     style={{ 
                       transform: 'translate3d(0, 0, 0)',
                       willChange: 'transform',
@@ -683,7 +688,7 @@ export default function MonitorPreviewCanvas({
                   />
                 ) : effectiveBackgroundUrl ? (
                   <div
-                    className="w-full h-full bg-cover bg-center"
+                    className={`w-full h-full bg-center ${isLogoMode ? 'bg-contain bg-no-repeat bg-black' : 'bg-cover'}`}
                     style={{ 
                       transform: 'translateZ(0)',
                       willChange: 'transform',

@@ -1378,11 +1378,11 @@ export const useStore = create<AppState>((set, get) => ({
         activeItemId: itemId,
         activeSlideIndex: slideIndex,
         pptxAction: null,
-          pptxAction: null,
-        pptxAction: null,
+        pptxActionTimestamp: Date.now(),
         directLiveItem: liveItem || null,
         isBlack: false,
         isClear: false,
+        isVideoPlaying: true,
       });
       if (routerIdToUse !== activeRouterId || groupToUpdate !== activeControlGroupId) {
         set({ activeControlGroupId: groupToUpdate, activeRouterId: routerIdToUse });
@@ -1589,7 +1589,9 @@ export const useStore = create<AppState>((set, get) => ({
     const targetGroupId = groupId || activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
     const nextLogo = !currentState.showLogo;
-    get().setStagedGroupState(targetGroupId, { showLogo: nextLogo, isBlack: false });
+    const updates: any = { showLogo: nextLogo, isBlack: false };
+    if (nextLogo) updates.isVideoPlaying = true;
+    get().setStagedGroupState(targetGroupId, updates);
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextLogo ? 'Logo Display Enabled (F8 / L)' : 'Logo Display Disabled' 
@@ -2293,6 +2295,14 @@ export const useStore = create<AppState>((set, get) => ({
         registerAsset(targetAsset);
       }
 
+      if (scope === 'logo' && !isTogglingOff) {
+        const activeGroup = state.activeControlGroupId || state.outputGroups[0]?.id || 'group-congregation';
+        const currentGroupState = state.groupStates[activeGroup] || state.stagedGroupStates[activeGroup];
+        if (currentGroupState?.showLogo) {
+          setTimeout(() => get().setStagedGroupState(activeGroup, { isVideoPlaying: true }), 0);
+        }
+      }
+      
       // 1. Update assetsList so ONLY target asset is marked default for this scope (automatic replacement)
       const updatedAssetsList = state.assetsList.map(a => {
         const isMatch = a.url === assetUrl || a.id === assetUrl;
