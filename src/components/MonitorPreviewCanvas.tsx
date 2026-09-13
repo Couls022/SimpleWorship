@@ -559,6 +559,23 @@ export default function MonitorPreviewCanvas({
     audioEl.currentTime = presentationState.videoSeekTime;
   }, [presentationState.videoSeekTime]);
 
+  // Continuously synchronize playback position between controller and projector
+  useEffect(() => {
+    if (!isProjectorMode || presentationState.videoCurrentTime === undefined) return;
+    
+    const syncMedia = (el: HTMLVideoElement | HTMLAudioElement | null) => {
+      if (!el) return;
+      const targetTime = presentationState.videoCurrentTime;
+      // Use a generous threshold (0.5s) to avoid micro-stutters during normal playback
+      if (targetTime !== undefined && Math.abs(el.currentTime - targetTime) > 0.5) {
+        el.currentTime = targetTime;
+      }
+    };
+
+    syncMedia(videoRef.current);
+    syncMedia(audioRef.current);
+  }, [presentationState.videoCurrentTime, isProjectorMode]);
+
   const isGradient = isLogoMode
     ? (logoStyles.backgroundType === 'gradient' && Boolean(logoStyles.backgroundGradient))
     : (resolvedStyles.backgroundType === 'gradient' && Boolean(resolvedStyles.backgroundGradient));

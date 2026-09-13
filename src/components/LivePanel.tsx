@@ -108,7 +108,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     const targetRouter = routerId || useStore.getState().activeRouterId || 'router-1';
     useStore.getState().setActiveRouterId(targetRouter);
     useStore.getState().setActiveControlGroupId(groupId);
-    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, groupId);
   };
 
   const handleAddPanel = () => {

@@ -1,377 +1,893 @@
 const fs = require('fs');
 
-const hymns = [
+const baptistHymns = [
   {
-    id: "hymn-1",
+    title: "How Great Thou Art",
+    author: "Carl Boberg",
+    lyrics: `[Title]
+How Great Thou Art
+Carl Boberg
+
+[Verse 1]
+O Lord my God, when I in awesome wonder
+Consider all the worlds Thy hands have made,
+I see the stars, I hear the rolling thunder,
+Thy power throughout the universe displayed.
+
+[Chorus]
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+
+[Verse 2]
+When through the woods and forest glades I wander
+And hear the birds sing sweetly in the trees,
+When I look down from lofty mountain grandeur,
+And hear the brook and feel the gentle breeze.
+
+[Chorus]
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+
+[Verse 3]
+And when I think that God, His Son not sparing,
+Sent Him to die, I scarce can take it in,
+That on the cross, my burden gladly bearing,
+He bled and died to take away my sin.
+
+[Chorus]
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+
+[Verse 4]
+When Christ shall come with shout of acclamation
+And take me home, what joy shall fill my heart!
+Then I shall bow in humble adoration,
+And there proclaim: My God, how great Thou art!
+
+[Chorus]
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!
+Then sings my soul, my Savior God, to Thee:
+How great Thou art, how great Thou art!`
+  },
+  {
+    title: "Amazing Grace",
+    author: "John Newton",
+    lyrics: `[Title]
+Amazing Grace
+John Newton
+
+[Verse 1]
+Amazing grace! how sweet the sound,
+That saved a wretch like me!
+I once was lost but now am found,
+Was blind but now I see.
+
+[Verse 2]
+'Twas grace that taught my heart to fear,
+And grace my fears relieved;
+How precious did that grace appear
+The hour I first believed!
+
+[Verse 3]
+The Lord has promised good to me,
+His word my hope secures;
+He will my shield and portion be
+As long as life endures.
+
+[Verse 4]
+Through many dangers, toils, and snares,
+I have already come;
+'Tis grace hath brought me safe thus far,
+And grace will lead me home.
+
+[Verse 5]
+When we've been there ten thousand years,
+Bright shining as the sun,
+We've no less days to sing God's praise
+Than when we'd first begun.`
+  },
+  {
     title: "Holy, Holy, Holy! Lord God Almighty",
     author: "Reginald Heber",
-    copyright: "Public Domain",
-    key: "E",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!" },
-      { name: "Verse 2", text: "Holy, holy, holy! All the saints adore Thee,\nCasting down their golden crowns around the glassy sea;\nCherubim and seraphim falling down before Thee,\nWho was, and is, and evermore shall be." },
-      { name: "Verse 3", text: "Holy, holy, holy! though the darkness hide Thee,\nThough the eye of sinful man Thy glory may not see;\nOnly Thou art holy; there is none beside Thee,\nPerfect in power, in love, and purity." },
-      { name: "Verse 4", text: "Holy, holy, holy! Lord God Almighty!\nAll Thy works shall praise Thy Name, in earth, and sky, and sea;\nHoly, holy, holy; merciful and mighty!\nGod in three Persons, blessed Trinity!" }
-    ]
+    lyrics: `[Title]
+Holy, Holy, Holy! Lord God Almighty
+Reginald Heber
+
+[Verse 1]
+Holy, holy, holy! Lord God Almighty!
+Early in the morning our song shall rise to Thee;
+Holy, holy, holy, merciful and mighty!
+God in three Persons, blessed Trinity!
+
+[Verse 2]
+Holy, holy, holy! All the saints adore Thee,
+Casting down their golden crowns around the glassy sea;
+Cherubim and seraphim falling down before Thee,
+Who was, and is, and evermore shall be.
+
+[Verse 3]
+Holy, holy, holy! though the darkness hide Thee,
+Though the eye of sinful man Thy glory may not see;
+Only Thou art holy; there is none beside Thee,
+Perfect in power, in love, and purity.
+
+[Verse 4]
+Holy, holy, holy! Lord God Almighty!
+All Thy works shall praise Thy Name, in earth, and sky, and sea;
+Holy, holy, holy; merciful and mighty!
+God in three Persons, blessed Trinity!`
   },
   {
-    id: "hymn-2",
     title: "Come, Thou Fount of Every Blessing",
     author: "Robert Robinson",
-    copyright: "Public Domain",
-    key: "Eb",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Come, Thou Fount of every blessing,\nTune my heart to sing Thy grace;\nStreams of mercy, never ceasing,\nCall for songs of loudest praise.\nTeach me some melodious sonnet,\nSung by flaming tongues above.\nPraise the mount! I'm fixed upon it,\nMount of Thy redeeming love." },
-      { name: "Verse 2", text: "Here I raise mine Ebenezer;\nHither by Thy help I'm come;\nAnd I hope, by Thy good pleasure,\nSafely to arrive at home.\nJesus sought me when a stranger,\nWandering from the fold of God;\nHe, to rescue me from danger,\nInterposed His precious blood." },
-      { name: "Verse 3", text: "O to grace how great a debtor\nDaily I'm constrained to be!\nLet Thy goodness, like a fetter,\nBind my wandering heart to Thee.\nProne to wander, Lord, I feel it,\nProne to leave the God I love;\nHere's my heart, O take and seal it,\nSeal it for Thy courts above." }
-    ]
+    lyrics: `[Title]
+Come, Thou Fount of Every Blessing
+Robert Robinson
+
+[Verse 1]
+Come, Thou Fount of every blessing,
+Tune my heart to sing Thy grace;
+Streams of mercy, never ceasing,
+Call for songs of loudest praise.
+Teach me some melodious sonnet,
+Sung by flaming tongues above.
+Praise the mount! I'm fixed upon it,
+Mount of Thy redeeming love.
+
+[Verse 2]
+Here I raise mine Ebenezer;
+Hither by Thy help I'm come;
+And I hope, by Thy good pleasure,
+Safely to arrive at home.
+Jesus sought me when a stranger,
+Wandering from the fold of God;
+He, to rescue me from danger,
+Interposed His precious blood.
+
+[Verse 3]
+O to grace how great a debtor
+Daily I'm constrained to be!
+Let Thy goodness, like a fetter,
+Bind my wandering heart to Thee.
+Prone to wander, Lord, I feel it,
+Prone to leave the God I love;
+Here's my heart, O take and seal it,
+Seal it for Thy courts above.`
   },
   {
-    id: "hymn-3",
-    title: "Blessed Assurance, Jesus Is Mine",
-    author: "Fanny J. Crosby",
-    copyright: "Public Domain",
-    key: "D",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Blessed assurance, Jesus is mine!\nO what a foretaste of glory divine!\nHeir of salvation, purchase of God,\nBorn of His Spirit, washed in His blood." },
-      { name: "Chorus", text: "This is my story, this is my song,\nPraising my Savior, all the day long;\nThis is my story, this is my song,\nPraising my Savior, all the day long." },
-      { name: "Verse 2", text: "Perfect submission, perfect delight,\nVisions of rapture now burst on my sight;\nAngels descending bring from above\nEchoes of mercy, whispers of love." },
-      { name: "Chorus", text: "This is my story, this is my song,\nPraising my Savior, all the day long;\nThis is my story, this is my song,\nPraising my Savior, all the day long." },
-      { name: "Verse 3", text: "Perfect submission, all is at rest\nI in my Savior am happy and blest,\nWatching and waiting, looking above,\nFilled with His goodness, lost in His love." },
-      { name: "Chorus", text: "This is my story, this is my song,\nPraising my Savior, all the day long;\nThis is my story, this is my song,\nPraising my Savior, all the day long." }
-    ]
-  },
-  {
-    id: "hymn-4",
-    title: "Great Is Thy Faithfulness",
-    author: "Thomas O. Chisholm",
-    copyright: "Public Domain",
-    key: "Eb",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Great is Thy faithfulness, O God my Father,\nThere is no shadow of turning with Thee;\nThou changest not, Thy compassions, they fail not\nAs Thou hast been Thou forever wilt be." },
-      { name: "Chorus", text: "Great is Thy faithfulness! Great is Thy faithfulness!\nMorning by morning new mercies I see;\nAll I have needed Thy hand hath provided\nGreat is Thy faithfulness, Lord, unto me!" },
-      { name: "Verse 2", text: "Summer and winter, and springtime and harvest,\nSun, moon and stars in their courses above,\nJoin with all nature in manifold witness\nTo Thy great faithfulness, mercy and love." },
-      { name: "Chorus", text: "Great is Thy faithfulness! Great is Thy faithfulness!\nMorning by morning new mercies I see;\nAll I have needed Thy hand hath provided\nGreat is Thy faithfulness, Lord, unto me!" },
-      { name: "Verse 3", text: "Pardon for sin and a peace that endureth,\nThine own dear presence to cheer and to guide;\nStrength for today and bright hope for tomorrow,\nBlessings all mine, with ten thousand beside!" },
-      { name: "Chorus", text: "Great is Thy faithfulness! Great is Thy faithfulness!\nMorning by morning new mercies I see;\nAll I have needed Thy hand hath provided\nGreat is Thy faithfulness, Lord, unto me!" }
-    ]
-  },
-  {
-    id: "hymn-5",
-    title: "To God Be The Glory",
-    author: "Fanny J. Crosby",
-    copyright: "Public Domain",
-    key: "Ab",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "To God be the glory, great things He hath done,\nSo loved He the world that He gave us His Son,\nWho yielded His life an atonement for sin,\nAnd opened the life-gate that all may go in." },
-      { name: "Chorus", text: "Praise the Lord, praise the Lord,\nLet the earth hear His voice;\nPraise the Lord, praise the Lord,\nLet the people rejoice;\nOh, come to the Father, through Jesus the Son,\nAnd give Him the glory; great things He hath done." },
-      { name: "Verse 2", text: "Oh, perfect redemption, the purchase of blood,\nTo every believer the promise of God;\nThe vilest offender who truly believes,\nThat moment from Jesus a pardon receives." },
-      { name: "Chorus", text: "Praise the Lord, praise the Lord,\nLet the earth hear His voice;\nPraise the Lord, praise the Lord,\nLet the people rejoice;\nOh, come to the Father, through Jesus the Son,\nAnd give Him the glory; great things He hath done." },
-      { name: "Verse 3", text: "Great things He hath taught us, great things He hath done,\nAnd great our rejoicing through Jesus the Son;\nBut purer, and higher, and greater will be\nOur wonder, our transport when Jesus we see." },
-      { name: "Chorus", text: "Praise the Lord, praise the Lord,\nLet the earth hear His voice;\nPraise the Lord, praise the Lord,\nLet the people rejoice;\nOh, come to the Father, through Jesus the Son,\nAnd give Him the glory; great things He hath done." }
-    ]
-  },
-  {
-    id: "hymn-6",
-    title: "Crown Him With Many Crowns",
-    author: "Matthew Bridges",
-    copyright: "Public Domain",
-    key: "D",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Crown Him with many crowns,\nThe Lamb upon His throne;\nHark! how the heavenly anthem drowns\nAll music but its own:\nAwake, my soul, and sing\nOf Him who died for thee,\nAnd hail Him as thy matchless King\nThrough all eternity." },
-      { name: "Verse 2", text: "Crown Him the Lord of love,\nBehold His hands and side,\nThose wounds, yet visible above,\nIn beauty glorified:\nNo angel in the sky\nCan fully bear that sight,\nBut downward bends his burning eye\nAt mysteries so bright." },
-      { name: "Verse 3", text: "Crown Him the Lord of life,\nWho triumphed o'er the grave,\nAnd rose victorious in the strife\nFor those He came to save;\nHis glories now we sing\nWho died, and rose on high,\nWho died, eternal life to bring,\nAnd lives that death may die." },
-      { name: "Verse 4", text: "Crown Him the Lord of heaven,\nEnthroned in worlds above;\nCrown Him the King, to whom is given,\nThe wondrous name of Love.\nCrown Him with many crowns,\nAs thrones before Him fall,\nCrown Him, ye kings, with many crowns,\nFor He is King of all." }
-    ]
-  },
-  {
-    id: "hymn-7",
-    title: "What A Friend We Have In Jesus",
-    author: "Joseph M. Scriven",
-    copyright: "Public Domain",
-    key: "F",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "What a friend we have in Jesus,\nAll our sins and griefs to bear!\nWhat a privilege to carry\nEverything to God in prayer!\nO what peace we often forfeit,\nO what needless pain we bear,\nAll because we do not carry\nEverything to God in prayer." },
-      { name: "Verse 2", text: "Have we trials and temptations?\nIs there trouble anywhere?\nWe should never be discouraged;\nTake it to the Lord in prayer.\nCan we find a friend so faithful\nWho will all our sorrows share?\nJesus knows our every weakness;\nTake it to the Lord in prayer." },
-      { name: "Verse 3", text: "Are we weak and heavy laden,\nCumbered with a load of care?\nPrecious Savior, still our refuge,\nTake it to the Lord in prayer.\nDo thy friends despise, forsake thee?\nTake it to the Lord in prayer!\nIn His arms He'll take and shield thee;\nThou wilt find a solace there." }
-    ]
-  },
-  {
-    id: "hymn-8",
     title: "It Is Well With My Soul",
     author: "Horatio G. Spafford",
-    copyright: "Public Domain",
-    key: "C",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "When peace, like a river, attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou has taught me to say,\nIt is well, it is well, with my soul." },
-      { name: "Chorus", text: "It is well, with my soul,\nIt is well, with my soul,\nIt is well, it is well, with my soul." },
-      { name: "Verse 2", text: "Though Satan should buffet, though trials should come,\nLet this blest assurance control,\nThat Christ has regarded my helpless estate,\nAnd hath shed His own blood for my soul." },
-      { name: "Chorus", text: "It is well, with my soul,\nIt is well, with my soul,\nIt is well, it is well, with my soul." },
-      { name: "Verse 3", text: "My sin, oh, the bliss of this glorious thought!\nMy sin, not in part but the whole,\nIs nailed to the cross, and I bear it no more,\nPraise the Lord, praise the Lord, O my soul!" },
-      { name: "Chorus", text: "It is well, with my soul,\nIt is well, with my soul,\nIt is well, it is well, with my soul." },
-      { name: "Verse 4", text: "And Lord, haste the day when my faith shall be sight,\nThe clouds be rolled back as a scroll;\nThe trump shall resound, and the Lord shall descend,\nEven so, it is well with my soul." },
-      { name: "Chorus", text: "It is well, with my soul,\nIt is well, with my soul,\nIt is well, it is well, with my soul." }
-    ]
+    lyrics: `[Title]
+It Is Well With My Soul
+Horatio G. Spafford
+
+[Verse 1]
+When peace like a river attendeth my way,
+When sorrows like sea billows roll;
+Whatever my lot, Thou hast taught me to say,
+"It is well, it is well with my soul."
+
+[Chorus]
+It is well (it is well)
+With my soul (with my soul),
+It is well, it is well with my soul.
+
+[Verse 2]
+Though Satan should buffet, though trials should come,
+Let this blest assurance control,
+That Christ hath regarded my helpless estate,
+And hath shed His own blood for my soul.
+
+[Chorus]
+It is well (it is well)
+With my soul (with my soul),
+It is well, it is well with my soul.
+
+[Verse 3]
+My sin—O the bliss of this glorious thought!—
+My sin, not in part but the whole,
+Is nailed to the cross, and I bear it no more,
+Praise the Lord, praise the Lord, O my soul!
+
+[Chorus]
+It is well (it is well)
+With my soul (with my soul),
+It is well, it is well with my soul.
+
+[Verse 4]
+And Lord, haste the day when my faith shall be sight,
+The clouds be rolled back as a scroll;
+The trump shall resound, and the Lord shall descend,
+Even so, it is well with my soul.
+
+[Chorus]
+It is well (it is well)
+With my soul (with my soul),
+It is well, it is well with my soul.`
   },
   {
-    id: "hymn-9",
-    title: "In The Garden",
-    author: "C. Austin Miles",
-    copyright: "Public Domain",
-    key: "Ab",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "I come to the garden alone,\nWhile the dew is still on the roses;\nAnd the voice I hear, falling on my ear,\nThe Son of God discloses." },
-      { name: "Chorus", text: "And He walks with me, and He talks with me,\nAnd He tells me I am His own,\nAnd the joy we share as we tarry there,\nNone other has ever known." },
-      { name: "Verse 2", text: "He speaks, and the sound of His voice\nIs so sweet the birds hush their singing;\nAnd the melody that He gave to me\nWithin my heart is ringing." },
-      { name: "Chorus", text: "And He walks with me, and He talks with me,\nAnd He tells me I am His own,\nAnd the joy we share as we tarry there,\nNone other has ever known." },
-      { name: "Verse 3", text: "I'd stay in the garden with Him\nTho' the night around me be falling;\nBut He bids me go; thro' the voice of woe,\nHis voice to me is calling." },
-      { name: "Chorus", text: "And He walks with me, and He talks with me,\nAnd He tells me I am His own,\nAnd the joy we share as we tarry there,\nNone other has ever known." }
-    ]
+    title: "To God Be the Glory",
+    author: "Fanny J. Crosby",
+    lyrics: `[Title]
+To God Be the Glory
+Fanny J. Crosby
+
+[Verse 1]
+To God be the glory, great things He has done;
+So loved He the world that He gave us His Son,
+Who yielded His life an atonement for sin,
+And opened the life gate that all may go in.
+
+[Chorus]
+Praise the Lord, praise the Lord,
+Let the earth hear His voice!
+Praise the Lord, praise the Lord,
+Let the people rejoice!
+O come to the Father, through Jesus the Son,
+And give Him the glory, great things He has done.
+
+[Verse 2]
+O perfect redemption, the purchase of blood,
+To every believer the promise of God;
+The vilest offender who truly believes,
+That moment from Jesus a pardon receives.
+
+[Chorus]
+Praise the Lord, praise the Lord,
+Let the earth hear His voice!
+Praise the Lord, praise the Lord,
+Let the people rejoice!
+O come to the Father, through Jesus the Son,
+And give Him the glory, great things He has done.
+
+[Verse 3]
+Great things He has taught us, great things He has done,
+And great our rejoicing through Jesus the Son;
+But purer, and higher, and greater will be
+Our wonder, our transport, when Jesus we see.
+
+[Chorus]
+Praise the Lord, praise the Lord,
+Let the earth hear His voice!
+Praise the Lord, praise the Lord,
+Let the people rejoice!
+O come to the Father, through Jesus the Son,
+And give Him the glory, great things He has done.`
   },
   {
-    id: "hymn-10",
-    title: "When We All Get To Heaven",
-    author: "Eliza E. Hewitt",
-    copyright: "Public Domain",
-    key: "C",
-    tempo: "Joyful",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Sing the wondrous love of Jesus,\nSing His mercy and His grace.\nIn the mansions bright and blessed\nHe'll prepare for us a place." },
-      { name: "Chorus", text: "When we all get to heaven,\nWhat a day of rejoicing that will be!\nWhen we all see Jesus,\nWe'll sing and shout the victory!" },
-      { name: "Verse 2", text: "While we walk the pilgrim pathway,\nClouds will overspread the sky;\nBut when traveling days are over,\nNot a shadow, not a sigh." },
-      { name: "Chorus", text: "When we all get to heaven,\nWhat a day of rejoicing that will be!\nWhen we all see Jesus,\nWe'll sing and shout the victory!" },
-      { name: "Verse 3", text: "Let us then be true and faithful,\nTrusting, serving every day;\nJust one glimpse of Him in glory\nWill the toils of life repay." },
-      { name: "Chorus", text: "When we all get to heaven,\nWhat a day of rejoicing that will be!\nWhen we all see Jesus,\nWe'll sing and shout the victory!" },
-      { name: "Verse 4", text: "Onward to the prize before us!\nSoon His beauty we'll behold;\nSoon the pearly gates will open;\nWe shall tread the streets of gold." },
-      { name: "Chorus", text: "When we all get to heaven,\nWhat a day of rejoicing that will be!\nWhen we all see Jesus,\nWe'll sing and shout the victory!" }
-    ]
+    title: "Blessed Assurance",
+    author: "Fanny J. Crosby",
+    lyrics: `[Title]
+Blessed Assurance
+Fanny J. Crosby
+
+[Verse 1]
+Blessed assurance, Jesus is mine!
+O what a foretaste of glory divine!
+Heir of salvation, purchase of God,
+Born of His Spirit, washed in His blood.
+
+[Chorus]
+This is my story, this is my song,
+Praising my Savior all the day long;
+This is my story, this is my song,
+Praising my Savior all the day long.
+
+[Verse 2]
+Perfect submission, perfect delight,
+Visions of rapture now burst on my sight;
+Angels descending bring from above
+Echoes of mercy, whispers of love.
+
+[Chorus]
+This is my story, this is my song,
+Praising my Savior all the day long;
+This is my story, this is my song,
+Praising my Savior all the day long.
+
+[Verse 3]
+Perfect submission, all is at rest,
+I in my Savior am happy and blest,
+Watching and waiting, looking above,
+Filled with His goodness, lost in His love.
+
+[Chorus]
+This is my story, this is my song,
+Praising my Savior all the day long;
+This is my story, this is my song,
+Praising my Savior all the day long.`
   },
   {
-    id: "hymn-11",
-    title: "Victory In Jesus",
-    author: "E.M. Bartlett",
-    copyright: "Public Domain",
-    key: "G",
-    tempo: "Joyful",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "I heard an old, old story,\nHow a Savior came from glory,\nHow He gave His life on Calvary\nTo save a wretch like me;\nI heard about His groaning,\nOf His precious blood's atoning,\nThen I repented of my sins\nAnd won the victory." },
-      { name: "Chorus", text: "O victory in Jesus,\nMy Savior, forever.\nHe sought me and bought me\nWith His redeeming blood;\nHe loved me ere I knew Him,\nAnd all my love is due Him,\nHe plunged me to victory,\nBeneath the cleansing flood." },
-      { name: "Verse 2", text: "I heard about His healing,\nOf His cleansing power revealing.\nHow He made the lame to walk again\nAnd caused the blind to see;\nAnd then I cried, \"Dear Jesus,\nCome and heal my broken spirit,\"\nAnd somehow Jesus came and brought\nTo me the victory." },
-      { name: "Chorus", text: "O victory in Jesus,\nMy Savior, forever.\nHe sought me and bought me\nWith His redeeming blood;\nHe loved me ere I knew Him,\nAnd all my love is due Him,\nHe plunged me to victory,\nBeneath the cleansing flood." },
-      { name: "Verse 3", text: "I heard about a mansion\nHe has built for me in glory.\nAnd I heard about the streets of gold\nBeyond the crystal sea;\nAbout the angels singing,\nAnd the old redemption story,\nAnd some sweet day I'll sing up there\nThe song of victory." },
-      { name: "Chorus", text: "O victory in Jesus,\nMy Savior, forever.\nHe sought me and bought me\nWith His redeeming blood;\nHe loved me ere I knew Him,\nAnd all my love is due Him,\nHe plunged me to victory,\nBeneath the cleansing flood." }
-    ]
+    title: "Great Is Thy Faithfulness",
+    author: "Thomas O. Chisholm",
+    lyrics: `[Title]
+Great Is Thy Faithfulness
+Thomas O. Chisholm
+
+[Verse 1]
+Great is Thy faithfulness, O God my Father;
+There is no shadow of turning with Thee;
+Thou changest not, Thy compassions, they fail not;
+As Thou hast been, Thou forever wilt be.
+
+[Chorus]
+Great is Thy faithfulness!
+Great is Thy faithfulness!
+Morning by morning new mercies I see:
+All I have needed Thy hand hath provided—
+Great is Thy faithfulness, Lord, unto me!
+
+[Verse 2]
+Summer and winter and springtime and harvest,
+Sun, moon, and stars in their courses above
+Join with all nature in manifold witness
+To Thy great faithfulness, mercy, and love.
+
+[Chorus]
+Great is Thy faithfulness!
+Great is Thy faithfulness!
+Morning by morning new mercies I see:
+All I have needed Thy hand hath provided—
+Great is Thy faithfulness, Lord, unto me!
+
+[Verse 3]
+Pardon for sin and a peace that endureth,
+Thine own dear presence to cheer and to guide,
+Strength for today and bright hope for tomorrow,
+Blessings all mine, with ten thousand beside!
+
+[Chorus]
+Great is Thy faithfulness!
+Great is Thy faithfulness!
+Morning by morning new mercies I see:
+All I have needed Thy hand hath provided—
+Great is Thy faithfulness, Lord, unto me!`
   },
   {
-    id: "hymn-12",
-    title: "Standing On The Promises",
-    author: "R. Kelso Carter",
-    copyright: "Public Domain",
-    key: "Bb",
-    tempo: "Joyful",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Standing on the promises of Christ my King,\nThrough eternal ages let His praises ring,\nGlory in the highest, I will shout and sing,\nStanding on the promises of God." },
-      { name: "Chorus", text: "Standing, standing,\nStanding on the promises of God my Savior;\nStanding, standing,\nI'm standing on the promises of God." },
-      { name: "Verse 2", text: "Standing on the promises that cannot fail,\nWhen the howling storms of doubt and fear assail,\nBy the living Word of God I shall prevail,\nStanding on the promises of God." },
-      { name: "Chorus", text: "Standing, standing,\nStanding on the promises of God my Savior;\nStanding, standing,\nI'm standing on the promises of God." },
-      { name: "Verse 3", text: "Standing on the promises of Christ the Lord,\nBound to Him eternally by love's strong cord,\nOvercoming daily with the Spirit's sword,\nStanding on the promises of God." },
-      { name: "Chorus", text: "Standing, standing,\nStanding on the promises of God my Savior;\nStanding, standing,\nI'm standing on the promises of God." },
-      { name: "Verse 4", text: "Standing on the promises I cannot fall,\nListening every moment to the Spirit's call,\nResting in my Savior as my all in all,\nStanding on the promises of God." },
-      { name: "Chorus", text: "Standing, standing,\nStanding on the promises of God my Savior;\nStanding, standing,\nI'm standing on the promises of God." }
-    ]
+    title: "Because He Lives",
+    author: "William J. Gaither",
+    lyrics: `[Title]
+Because He Lives
+William J. Gaither
+
+[Verse 1]
+God sent His son, they called Him Jesus;
+He came to love, heal, and forgive;
+He lived and died to buy my pardon,
+An empty grave is there to prove my Savior lives.
+
+[Chorus]
+Because He lives, I can face tomorrow;
+Because He lives, all fear is gone;
+Because I know He holds the future,
+And life is worth the living just because He lives.
+
+[Verse 2]
+How sweet to hold a newborn baby,
+And feel the pride and joy he gives;
+But greater still the calm assurance,
+This child can face uncertain days because He lives.
+
+[Chorus]
+Because He lives, I can face tomorrow;
+Because He lives, all fear is gone;
+Because I know He holds the future,
+And life is worth the living just because He lives.
+
+[Verse 3]
+And then one day I'll cross the river;
+I'll fight life's final war with pain;
+And then as death gives way to vict'ry,
+I'll see the lights of glory and I'll know He lives.
+
+[Chorus]
+Because He lives, I can face tomorrow;
+Because He lives, all fear is gone;
+Because I know He holds the future,
+And life is worth the living just because He lives.`
   },
   {
-    id: "hymn-13",
-    title: "The Old Rugged Cross",
-    author: "George Bennard",
-    copyright: "Public Domain",
-    key: "Bb",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "On a hill far away stood an old rugged cross,\nThe emblem of suffering and shame;\nAnd I love that old cross where the dearest and best\nFor a world of lost sinners was slain." },
-      { name: "Chorus", text: "So I'll cherish the old rugged cross,\nTill my trophies at last I lay down;\nI will cling to the old rugged cross,\nAnd exchange it some day for a crown." },
-      { name: "Verse 2", text: "Oh, that old rugged cross, so despised by the world,\nHas a wondrous attraction for me;\nFor the dear Lamb of God left His glory above\nTo bear it to dark Calvary." },
-      { name: "Chorus", text: "So I'll cherish the old rugged cross,\nTill my trophies at last I lay down;\nI will cling to the old rugged cross,\nAnd exchange it some day for a crown." },
-      { name: "Verse 3", text: "In that old rugged cross, stained with blood so divine,\nA wondrous beauty I see,\nFor 'twas on that old cross Jesus suffered and died,\nTo pardon and sanctify me." },
-      { name: "Chorus", text: "So I'll cherish the old rugged cross,\nTill my trophies at last I lay down;\nI will cling to the old rugged cross,\nAnd exchange it some day for a crown." },
-      { name: "Verse 4", text: "To the old rugged cross I will ever be true,\nIts shame and reproach gladly bear;\nThen He'll call me some day to my home far away,\nWhere His glory forever I'll share." },
-      { name: "Chorus", text: "So I'll cherish the old rugged cross,\nTill my trophies at last I lay down;\nI will cling to the old rugged cross,\nAnd exchange it some day for a crown." }
-    ]
-  },
-  {
-    id: "hymn-14",
-    title: "Trust And Obey",
-    author: "John H. Sammis",
-    copyright: "Public Domain",
-    key: "F",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "When we walk with the Lord in the light of His Word,\nWhat a glory He sheds on our way!\nWhile we do His good will, He abides with us still,\nAnd with all who will trust and obey." },
-      { name: "Chorus", text: "Trust and obey, for there's no other way\nTo be happy in Jesus, but to trust and obey." },
-      { name: "Verse 2", text: "Not a shadow can rise, not a cloud in the skies,\nBut His smile quickly drives it away;\nNot a doubt or a fear, not a sigh or a tear,\nCan abide while we trust and obey." },
-      { name: "Chorus", text: "Trust and obey, for there's no other way\nTo be happy in Jesus, but to trust and obey." },
-      { name: "Verse 3", text: "Not a burden we bear, not a sorrow we share,\nBut our toil He doth richly repay;\nNot a grief or a loss, not a frown or a cross,\nBut is blessed if we trust and obey." },
-      { name: "Chorus", text: "Trust and obey, for there's no other way\nTo be happy in Jesus, but to trust and obey." },
-      { name: "Verse 4", text: "But we never can prove the delights of His love\nUntil all on the altar we lay;\nFor the favor He shows, for the joy He bestows,\nAre for them who will trust and obey." },
-      { name: "Chorus", text: "Trust and obey, for there's no other way\nTo be happy in Jesus, but to trust and obey." },
-      { name: "Verse 5", text: "Then in fellowship sweet we will sit at His feet,\nOr we'll walk by His side in the way;\nWhat He says we will do, where He sends we will go;\nNever fear, only trust and obey." },
-      { name: "Chorus", text: "Trust and obey, for there's no other way\nTo be happy in Jesus, but to trust and obey." }
-    ]
-  },
-  {
-    id: "hymn-15",
-    title: "Rock Of Ages, Cleft For Me",
-    author: "Augustus M. Toplady",
-    copyright: "Public Domain",
-    key: "Bb",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Rock of Ages, cleft for me,\nLet me hide myself in Thee;\nLet the water and the blood,\nFrom Thy wounded side which flowed,\nBe of sin the double cure;\nSave from wrath and make me pure." },
-      { name: "Verse 2", text: "Not the labor of my hands\nCan fulfill Thy law's demands;\nCould my zeal no respite know,\nCould my tears forever flow,\nAll for sin could not atone;\nThou must save, and Thou alone." },
-      { name: "Verse 3", text: "Nothing in my hand I bring,\nSimply to the cross I cling;\nNaked, come to Thee for dress;\nHelpless, look to Thee for grace;\nFoul, I to the fountain fly;\nWash me, Savior, or I die." },
-      { name: "Verse 4", text: "While I draw this fleeting breath,\nWhen my eyes shall close in death,\nWhen I soar to worlds unknown,\nSee Thee on Thy judgment throne,\nRock of Ages, cleft for me,\nLet me hide myself in Thee." }
-    ]
-  },
-  {
-    id: "hymn-16",
-    title: "Nothing But The Blood of Jesus",
-    author: "Robert Lowry",
-    copyright: "Public Domain",
-    key: "G",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "What can wash away my sin?\nNothing but the blood of Jesus;\nWhat can make me whole again?\nNothing but the blood of Jesus." },
-      { name: "Chorus", text: "Oh! precious is the flow\nThat makes me white as snow;\nNo other fount I know,\nNothing but the blood of Jesus." },
-      { name: "Verse 2", text: "For my pardon, this I see,\nNothing but the blood of Jesus;\nFor my cleansing this my plea,\nNothing but the blood of Jesus." },
-      { name: "Chorus", text: "Oh! precious is the flow\nThat makes me white as snow;\nNo other fount I know,\nNothing but the blood of Jesus." },
-      { name: "Verse 3", text: "Nothing can for sin atone,\nNothing but the blood of Jesus;\nNaught of good that I have done,\nNothing but the blood of Jesus." },
-      { name: "Chorus", text: "Oh! precious is the flow\nThat makes me white as snow;\nNo other fount I know,\nNothing but the blood of Jesus." },
-      { name: "Verse 4", text: "This is all my hope and peace,\nNothing but the blood of Jesus;\nThis is all my righteousness,\nNothing but the blood of Jesus." },
-      { name: "Chorus", text: "Oh! precious is the flow\nThat makes me white as snow;\nNo other fount I know,\nNothing but the blood of Jesus." }
-    ]
-  },
-  {
-    id: "hymn-17",
-    title: "A Mighty Fortress Is Our God",
-    author: "Martin Luther",
-    copyright: "Public Domain",
-    key: "C",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "A mighty fortress is our God,\na bulwark never failing;\nOur helper He, amid the flood\nof mortal ills prevailing:\nFor still our ancient foe\ndoth seek to work us woe;\nHis craft and power are great,\nand, armed with cruel hate,\nOn earth is not his equal." },
-      { name: "Verse 2", text: "Did we in our own strength confide,\nour striving would be losing;\nWere not the right Man on our side,\nthe Man of God's own choosing:\nDost ask who that may be?\nChrist Jesus, it is He;\nLord Sabaoth, His Name,\nfrom age to age the same,\nAnd He must win the battle." },
-      { name: "Verse 3", text: "And though this world, with devils filled,\nshould threaten to undo us,\nWe will not fear, for God hath willed\nHis truth to triumph through us:\nThe Prince of Darkness grim,\nwe tremble not for him;\nHis rage we can endure,\nfor lo, his doom is sure,\nOne little word shall fell him." },
-      { name: "Verse 4", text: "That word above all earthly powers,\nno thanks to them, abideth;\nThe Spirit and the gifts are ours\nthrough Him Who with us sideth:\nLet goods and kindred go,\nthis mortal life also;\nThe body they may kill:\nGod's truth abideth still,\nHis kingdom is forever." }
-    ]
-  },
-  {
-    id: "hymn-18",
-    title: "He Lives! (I Serve A Risen Savior)",
-    author: "Alfred H. Ackley",
-    copyright: "Public Domain",
-    key: "Ab",
-    tempo: "Joyful",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "I serve a risen Savior, He's in the world today;\nI know that He is living, whatever men may say;\nI see His hand of mercy, I hear His voice of cheer,\nAnd just the time I need Him He's always near." },
-      { name: "Chorus", text: "He lives, He lives, Christ Jesus lives today!\nHe walks with me and talks with me along life's narrow way.\nHe lives, He lives, salvation to impart!\nYou ask me how I know He lives?\nHe lives within my heart." },
-      { name: "Verse 2", text: "In all the world around me I see His loving care,\nAnd though my heart grows weary, I never will despair;\nI know that He is leading, through all the stormy blast,\nThe day of His appearing will come at last." },
-      { name: "Chorus", text: "He lives, He lives, Christ Jesus lives today!\nHe walks with me and talks with me along life's narrow way.\nHe lives, He lives, salvation to impart!\nYou ask me how I know He lives?\nHe lives within my heart." },
-      { name: "Verse 3", text: "Rejoice, rejoice, O Christian, lift up your voice and sing\nEternal hallelujahs to Jesus Christ the King!\nThe Hope of all who seek Him, the Help of all who find,\nNone other is so loving, so good and kind." },
-      { name: "Chorus", text: "He lives, He lives, Christ Jesus lives today!\nHe walks with me and talks with me along life's narrow way.\nHe lives, He lives, salvation to impart!\nYou ask me how I know He lives?\nHe lives within my heart." }
-    ]
-  },
-  {
-    id: "hymn-19",
-    title: "Grace Greater Than Our Sin",
-    author: "Julia H. Johnston",
-    copyright: "Public Domain",
-    key: "G",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "Marvelous grace of our loving Lord,\nGrace that exceeds our sin and our guilt!\nYonder on Calvary's mount outpoured,\nThere where the blood of the Lamb was spilt." },
-      { name: "Chorus", text: "Grace, grace, God's grace,\nGrace that will pardon and cleanse within;\nGrace, grace, God's grace,\nGrace that is greater than all our sin!" },
-      { name: "Verse 2", text: "Sin and despair, like the sea waves cold,\nThreaten the soul with infinite loss;\nGrace that is greater, yes, grace untold,\nPoints to the refuge, the mighty cross." },
-      { name: "Chorus", text: "Grace, grace, God's grace,\nGrace that will pardon and cleanse within;\nGrace, grace, God's grace,\nGrace that is greater than all our sin!" },
-      { name: "Verse 3", text: "Dark is the stain that we cannot hide,\nWhat can avail to wash it away?\nLook! There is flowing a crimson tide,\nBrighter than snow you may be today." },
-      { name: "Chorus", text: "Grace, grace, God's grace,\nGrace that will pardon and cleanse within;\nGrace, grace, God's grace,\nGrace that is greater than all our sin!" },
-      { name: "Verse 4", text: "Marvelous, infinite, matchless grace,\nFreely bestowed on all who believe!\nYou that are longing to see His face,\nWill you this moment His grace receive?" },
-      { name: "Chorus", text: "Grace, grace, God's grace,\nGrace that will pardon and cleanse within;\nGrace, grace, God's grace,\nGrace that is greater than all our sin!" }
-    ]
-  },
-  {
-    id: "hymn-20",
-    title: "How Great Thou Art",
-    author: "Stuart K. Hine",
-    copyright: "Public Domain",
-    key: "Bb",
-    tempo: "Moderate",
-    category: "Hymns",
-    sections: [
-      { name: "Verse 1", text: "O Lord my God, When I in awesome wonder,\nConsider all the worlds Thy Hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed." },
-      { name: "Chorus", text: "Then sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art.\nThen sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art!" },
-      { name: "Verse 2", text: "When through the woods, and forest glades I wander,\nAnd hear the birds sing sweetly in the trees.\nWhen I look down, from lofty mountain grandeur\nAnd see the brook, and feel the gentle breeze." },
-      { name: "Chorus", text: "Then sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art.\nThen sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art!" },
-      { name: "Verse 3", text: "And when I think, that God, His Son not sparing;\nSent Him to die, I scarce can take it in;\nThat on the Cross, my burden gladly bearing,\nHe bled and died to take away my sin." },
-      { name: "Chorus", text: "Then sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art.\nThen sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art!" },
-      { name: "Verse 4", text: "When Christ shall come, with shout of acclamation,\nAnd take me home, what joy shall fill my heart.\nThen I shall bow, in humble adoration,\nAnd then proclaim: \"My God, how great Thou art!\"" },
-      { name: "Chorus", text: "Then sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art.\nThen sings my soul, My Savior God, to Thee,\nHow great Thou art, How great Thou art!" }
-    ]
+    title: "In Christ Alone",
+    author: "Keith Getty, Stuart Townend",
+    lyrics: `[Title]
+In Christ Alone
+Keith Getty, Stuart Townend
+
+[Verse 1]
+In Christ alone my hope is found,
+He is my light, my strength, my song;
+This Cornerstone, this solid Ground,
+Firm through the fiercest drought and storm.
+What heights of love, what depths of peace,
+When fears are stilled, when strivings cease!
+My Comforter, my All in All,
+Here in the love of Christ I stand.
+
+[Verse 2]
+In Christ alone! - who took on flesh,
+Fullness of God in helpless babe.
+This gift of love and righteousness,
+Scorned by the ones He came to save:
+Till on that cross as Jesus died,
+The wrath of God was satisfied -
+For every sin on Him was laid;
+Here in the death of Christ I live.
+
+[Verse 3]
+There in the ground His body lay,
+Light of the world by darkness slain:
+Then bursting forth in glorious day
+Up from the grave He rose again!
+And as He stands in victory
+Sin's curse has lost its grip on me,
+For I am His and He is mine -
+Bought with the precious blood of Christ.
+
+[Verse 4]
+No guilt in life, no fear in death,
+This is the power of Christ in me;
+From life's first cry to final breath,
+Jesus commands my destiny.
+No power of hell, no scheme of man,
+Can ever pluck me from His hand:
+Till He returns or calls me home,
+Here in the power of Christ I'll stand.`
   }
 ];
 
-let output = `import { Song } from '../types';
+const hymnsOfPraises = [
+  {
+    title: "Dakilang Katapatan",
+    author: "Papuri Singers",
+    lyrics: `[Title]
+Dakilang Katapatan
+Papuri Singers
 
-export const BAPTIST_HYMNAL: Song[] = [
-`;
+[Verse 1]
+Sadyang kay buti ng ating Panginoon
+Nagtatapat sa habang panahon
+Maging sa kabila ng ating pagkukulang
+Biyaya Niya'y patuloy na laan
 
-hymns.forEach(hymn => {
-  let lyrics = '';
-  hymn.sections.forEach(s => {
-    lyrics += `[${s.name}]\n${s.text}\n\n`;
-  });
-  
-  output += `  {
-    id: ${JSON.stringify(hymn.id)},
-    title: ${JSON.stringify(hymn.title)},
-    author: ${JSON.stringify(hymn.author)},
-    copyright: ${JSON.stringify(hymn.copyright)},
-    key: ${JSON.stringify(hymn.key)},
-    tempo: ${JSON.stringify(hymn.tempo)},
-    category: ${JSON.stringify(hymn.category)},
-    lyrics: ${JSON.stringify(lyrics.trim())},
-    sections: ${JSON.stringify(hymn.sections, null, 6)}
+[Chorus]
+Dakila Ka O Diyos
+Tapat Ka ngang tunay
+Magmula pa sa ugat ng aming lahi
+Mundo'y magunaw man
+Maaasahan Kang lagi
+Maging hanggang wakas nitong buhay
+
+[Verse 2]
+Kaya O Diyos Ika'y laging pupurihin
+Sa buong mundo'y aking aawitin
+Ang kadakilaan Mo at katapatan
+Pag-ibig Mong walang hanggan
+
+[Chorus]
+Dakila Ka O Diyos
+Tapat Ka ngang tunay
+Magmula pa sa ugat ng aming lahi
+Mundo'y magunaw man
+Maaasahan Kang lagi
+Maging hanggang wakas nitong buhay`
   },
+  {
+    title: "Salamat Panginoon",
+    author: "Papuri",
+    lyrics: `[Title]
+Salamat Panginoon
+Papuri
+
+[Verse 1]
+Ikaw ay mabuti, bawat sandali
+Sa habang buhay ay mananatili
+Hindi nagbabago, di nagkukulang
+Ang Iyong pag-ibig, laging laan
+
+[Chorus]
+Salamat Panginoon, kilala Mo ako
+Ang lahat ng bagay ay di lingid sa Iyo
+Salamat Panginoon, tinutugon Mo
+Ang tanging dalangin ng aking puso
+
+[Verse 2]
+Sa Iyong paningin, ako'y mahalaga
+Sa piling Mo, ako'y may pag-asa
+Walang katapusan, ang 'Yong pag-ibig
+Ika'y magtatapat sa bawat saglit
+
+[Chorus]
+Salamat Panginoon, kilala Mo ako
+Ang lahat ng bagay ay di lingid sa Iyo
+Salamat Panginoon, tinutugon Mo
+Ang tanging dalangin ng aking puso`
+  },
+  {
+    title: "Banal Mong Tahanan",
+    author: "Papuri",
+    lyrics: `[Title]
+Banal Mong Tahanan
+Papuri
+
+[Verse 1]
+Ang puso ko ay dinudulog sa Iyo
+Nagpapakumbaba, sumasamo
+Pag-ibig Mo'y nawa'y maranasan ko
+Panginoon, ako'y turuan Mo
+
+[Chorus]
+Buhay ko'y Iyong pagharian
+Puso ko'y Iyong tahanan
+Nais ko'y manatili sa Iyong piling
+Panginoon, Ika'y laging pupurihin
+
+[Verse 2]
+Sa Iyong biyaya ako'y umaasa
+Ikaw ang kalakasan at pag-asa
+Di ko kayang mabuhay kung wala Ka
+Tanging sa Iyo, ako'y sasamba
+
+[Chorus]
+Buhay ko'y Iyong pagharian
+Puso ko'y Iyong tahanan
+Nais ko'y manatili sa Iyong piling
+Panginoon, Ika'y laging pupurihin`
+  },
+  {
+    title: "Wala Kang Katulad",
+    author: "Papuri",
+    lyrics: `[Title]
+Wala Kang Katulad
+Papuri
+
+[Verse 1]
+Awitin ko man lahat ng awit sa mundo
+Ay di kayang ilarawan ang kadakilaan Mo
+Kulang ang lahat ng tula, kulang maging mga salita
+Upang ihayag ang kabutihan Mo
+
+[Chorus]
+Wala Kang katulad, wala Kang katulad
+Ikaw ang Diyos na sa 'mi'y nagmamahal
+Wala Kang katulad, wala Kang katulad
+Panginoon, Ika'y aming itatanghal
+
+[Verse 2]
+Sa habang panahon, Ika'y aming pupurihin
+Sa bawat sandali, Ika'y aawitin
+Walang ibang Diyos na sa 'mi'y magliligtas
+Tanging Ikaw, hanggang wakas
+
+[Chorus]
+Wala Kang katulad, wala Kang katulad
+Ikaw ang Diyos na sa 'mi'y nagmamahal
+Wala Kang katulad, wala Kang katulad
+Panginoon, Ika'y aming itatanghal`
+  },
+  {
+    title: "Sambahin Ka O Diyos",
+    author: "Papuri Singers",
+    lyrics: `[Title]
+Sambahin Ka O Diyos
+Papuri Singers
+
+[Verse 1]
+O Diyos, Ikaw ang aming pinupuri
+Ang Iyong pangalan ay itinataas
+Sa Iyong kabutihan kami'y nagagalak
+Ang Iyong pag-ibig ay wagas
+
+[Chorus]
+Sambahin Ka O Diyos, sambahin Ka
+Ika'y aming pinupuri, Ika'y aming sinasamba
+Wala Kang katulad sa buong mundo
+Sambahin Ka O Diyos ng aming puso
+
+[Verse 2]
+Ang Iyong kaharian ay walang hanggan
+Ang Iyong kapangyarihan ay di matatawaran
+Sa Iyong pangalan kami'y magdiriwang
+Ang Iyong pag-ibig, walang hanggan
+
+[Chorus]
+Sambahin Ka O Diyos, sambahin Ka
+Ika'y aming pinupuri, Ika'y aming sinasamba
+Wala Kang katulad sa buong mundo
+Sambahin Ka O Diyos ng aming puso`
+  }
+];
+
+const specialNumbers = [
+  {
+    title: "Via Dolorosa",
+    author: "Sandi Patty",
+    lyrics: `[Title]
+Via Dolorosa
+Sandi Patty
+
+[Verse 1]
+Down the Via Dolorosa in Jerusalem that day
+The soldiers tried to clear the narrow street
+But the crowd pressed in to see
+The Man condemned to die on Calvary
+
+[Verse 2]
+He was bleeding from a beating, there were stripes upon His back
+And He wore a crown of thorns upon His head
+And He bore with every step
+The scorn of those who cried out for His death
+
+[Chorus]
+Down the Via Dolorosa called the way of suffering
+Like a lamb came the Messiah, Christ the King,
+But He chose to walk that road out of His love for you and me.
+Down the Via Dolorosa, all the way to Calvary.
+
+[Verse 3]
+Por la Via Dolorosa, triste dia en Jerusalem
+Los soldados le abrian paso a Jesus
+Mas la gente se acercaba
+Para ver al que llevaba aquella cruz
+
+[Chorus]
+Por la Via Dolorosa, que es la via del dolor
+Como oveja vino Cristo, Rey, Señor
+Y fue Él quien quiso ir por su amor por ti y por mi
+Por la Via Dolorosa al Calvario y a morir
+
+[Bridge]
+The blood that would cleanse the souls of all men
+Made its way through the heart of Jerusalem.
+
+[Chorus]
+Down the Via Dolorosa called the way of suffering
+Like a lamb came the Messiah, Christ the King,
+But He chose to walk that road out of His love for you and me.
+Down the Via Dolorosa, all the way to Calvary.`
+  },
+  {
+    title: "I Can Only Imagine",
+    author: "MercyMe",
+    lyrics: `[Title]
+I Can Only Imagine
+MercyMe
+
+[Verse 1]
+I can only imagine what it will be like
+When I walk by Your side
+I can only imagine what my eyes will see
+When Your face is before me
+I can only imagine, yeah
+
+[Chorus]
+Surrounded by Your glory
+What will my heart feel?
+Will I dance for You Jesus
+Or in awe of You be still?
+Will I stand in Your presence
+Or to my knees will I fall?
+Will I sing hallelujah?
+Will I be able to speak at all?
+I can only imagine
+I can only imagine
+
+[Verse 2]
+I can only imagine when that day comes
+And I find myself standing in the Son
+I can only imagine when all I will do
+Is forever, forever worship You
+I can only imagine, yeah
+I can only imagine
+
+[Chorus]
+Surrounded by Your glory
+What will my heart feel?
+Will I dance for You Jesus
+Or in awe of You be still?
+Will I stand in Your presence
+Or to my knees will I fall?
+Will I sing hallelujah?
+Will I be able to speak at all?
+I can only imagine
+I can only imagine`
+  },
+  {
+    title: "Blessings",
+    author: "Laura Story",
+    lyrics: `[Title]
+Blessings
+Laura Story
+
+[Verse 1]
+We pray for blessings, we pray for peace
+Comfort for family, protection while we sleep
+We pray for healing, for prosperity
+We pray for Your mighty hand to ease our suffering
+
+[Pre-Chorus]
+And all the while, You hear each spoken need
+Yet love us way too much to give us lesser things
+
+[Chorus]
+'Cause what if Your blessings come through raindrops?
+What if Your healing comes through tears?
+What if a thousand sleepless nights
+Are what it takes to know You're near?
+And what if trials of this life
+Are Your mercies in disguise?
+
+[Verse 2]
+We pray for wisdom, Your voice to hear
+And we cry in anger when we cannot feel You near
+We doubt Your goodness, we doubt Your love
+As if every promise from His Word is not enough
+
+[Pre-Chorus]
+And all the while, You hear each desperate plea
+And long that we'd have faith to believe
+
+[Chorus]
+'Cause what if Your blessings come through raindrops?
+What if Your healing comes through tears?
+What if a thousand sleepless nights
+Are what it takes to know You're near?
+And what if trials of this life
+Are Your mercies in disguise?
+
+[Bridge]
+When friends betray us, and when darkness seems to win
+We know that pain reminds this heart
+That this is not, this is not our home
+It's not our home
+
+[Chorus]
+'Cause what if Your blessings come through raindrops?
+What if Your healing comes through tears?
+And what if a thousand sleepless nights
+Are what it takes to know You're near?
+What if my greatest disappointments
+Or the aching of this life
+Is the revealing of a greater thirst
+This world can't satisfy?
+And what if trials of this life
+The rain, the storms, the hardest nights
+Are Your mercies in disguise?`
+  },
+  {
+    title: "You Raise Me Up",
+    author: "Josh Groban",
+    lyrics: `[Title]
+You Raise Me Up
+Josh Groban
+
+[Verse 1]
+When I am down and, oh my soul, so weary;
+When troubles come and my heart burdened be;
+Then, I am still and wait here in the silence,
+Until you come and sit awhile with me.
+
+[Chorus]
+You raise me up, so I can stand on mountains;
+You raise me up, to walk on stormy seas;
+I am strong, when I am on your shoulders;
+You raise me up: To more than I can be.
+
+[Verse 2]
+There is no life - no life without its hunger;
+Each restless heart beats so imperfectly;
+But when you come and I am filled with wonder,
+Sometimes, I think I glimpse eternity.
+
+[Chorus]
+You raise me up, so I can stand on mountains;
+You raise me up, to walk on stormy seas;
+I am strong, when I am on your shoulders;
+You raise me up: To more than I can be.
+
+[Chorus]
+You raise me up, so I can stand on mountains;
+You raise me up, to walk on stormy seas;
+I am strong, when I am on your shoulders;
+You raise me up: To more than I can be.
+
+[Chorus]
+You raise me up, so I can stand on mountains;
+You raise me up, to walk on stormy seas;
+I am strong, when I am on your shoulders;
+You raise me up: To more than I can be.
+
+[Outro]
+You raise me up: To more than I can be.`
+  },
+  {
+    title: "Lead Me Lord",
+    author: "Gary Valenciano",
+    lyrics: `[Title]
+Lead Me Lord
+Gary Valenciano
+
+[Verse 1]
+Lead me Lord, lead me by the hand
+And make me face the rising sun
+Comfort me through all the pain that life may bring
+There's no other hope that I can lean upon
+Lead me Lord, lead me all my life
+
+[Verse 2]
+Walk by me, walk by me across the lonely road of everyday
+Take my arms and let Your hand show me the way
+Show the way to live inside Your love
+Lead me Lord, all my life
+
+[Chorus]
+You are my light
+You're the lamp upon my feet
+All the time, my Lord, I need You there
+You are my life
+I cannot live alone
+Let me stay by Your guiding love
+All through my life, lead me Lord
+
+[Verse 3]
+Lead me Lord, even though at times I'd rather go along my way
+Help me take the right direction, take Your road
+Lead me Lord and never leave my side
+All my days, all my life
+
+[Chorus]
+You are my light
+You're the lamp upon my feet
+All the time, my Lord, I need You there
+You are my life
+I cannot live alone
+Let me stay by Your guiding love
+All through my life, lead me Lord`
+  }
+];
+
+function generateFile(array, arrayName, idPrefix, catName) {
+  let content = `import { Song } from '../types';
+
+export const ${arrayName}: Song[] = [
 `;
-});
 
-output += `];\n`;
+  array.forEach((s, idx) => {
+    let sections = [];
+    const blocks = s.lyrics.split(/\n\s*\n/).filter(b => b.trim().length > 0);
+    blocks.forEach((block, bIdx) => {
+      const match = block.match(/^\[(.*?)\]\n?([\s\S]*)$/);
+      const title = match ? match[1] : "Verse " + (bIdx + 1);
+      const text = match ? match[2].trim() : block.trim();
+      sections.push({ name: title, text: text });
+    });
 
-fs.writeFileSync('./src/data/baptistHymnal.ts', output);
+    content += `  {
+    id: "${idPrefix}-${idx + 1}",
+    title: ${JSON.stringify(s.title)},
+    author: ${JSON.stringify(s.author)},
+    copyright: "Public Domain",
+    key: "C",
+    tempo: "Moderate",
+    category: "${catName}",
+    lyrics: ${JSON.stringify(s.lyrics)},
+    sections: ${JSON.stringify(sections, null, 6)}
+  }`;
+    if (idx < array.length - 1) content += ',';
+    content += '\n';
+  });
+
+  content += `];\n`;
+  return content;
+}
+
+fs.writeFileSync('./src/data/baptistHymnal.ts', generateFile(baptistHymns, 'BAPTIST_HYMNAL', 'hymn', 'Hymns'));
+fs.writeFileSync('./src/data/hymnsOfPraises.ts', generateFile(hymnsOfPraises, 'HYMNS_OF_PRAISES', 'hop', 'Hymns of Praises'));
+fs.writeFileSync('./src/data/specialNumbers.ts', generateFile(specialNumbers, 'SPECIAL_NUMBERS', 'special', 'Special Numbers'));
+console.log('Updated songs data files.');

@@ -94,6 +94,11 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       customResolution: { width: targetW, height: targetH }
     });
 
+    // Ensure the route is OFF (not live) when newly locked to a monitor
+    // This enforces "target monitor lock only, no display yet" behavior
+    store.setGroupState(groupId, { isLiveEnabled: false });
+    store.setStagedGroupState(groupId, { isLiveEnabled: false });
+
     // 2. Sync legacy systemOptions if it maps to a standard legacy route
     updateSystemOptions((prev) => {
       const next = { ...prev };

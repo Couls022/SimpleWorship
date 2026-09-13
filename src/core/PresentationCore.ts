@@ -75,9 +75,12 @@ export class PresentationCore {
     const splitLongSections = songOpts?.splitLongSections ?? true;
     const splitLabelStyle = songOpts?.splitLabelStyle ?? 'part';
 
+    // If it's a Title slide, never split it by stanzas regardless of settings
+    const isTitleSlide = rawTitle === 'Title';
+
     // If breakOnNewVerse is true and the section has multiple stanzas separated by blank lines
     // e.g. "Line 1\nLine 2\n\nLine 3\nLine 4"
-    const stanzas = breakOnNewVerse
+    const stanzas = (breakOnNewVerse && !isTitleSlide)
       ? (rawText || '').split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)
       : [(rawText || '').trim()];
 

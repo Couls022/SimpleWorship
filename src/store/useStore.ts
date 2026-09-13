@@ -414,8 +414,6 @@ export const useStore = create<AppState>((set, get) => ({
       });
       broadcastStateChange({ type: 'GROUP_STATES_UPDATE', data: { groupStates: updatedGroupStates } });
 
-      DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
-
       return {
         systemOptions: next,
         themesList: updatedThemes,
@@ -561,7 +559,6 @@ export const useStore = create<AppState>((set, get) => ({
         activeControlGroupId: targetGroupId,
       }
     });
-    DisplayManager.syncPhysicalDisplays(newGroups, newGroupStates, targetGroupId).catch(() => {});
 
     return {
       outputGroups: newGroups,
@@ -639,7 +636,6 @@ export const useStore = create<AppState>((set, get) => ({
       };
     });
     const { outputGroups, groupStates, activeControlGroupId, routerPanels } = get();
-    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, activeControlGroupId).catch(() => {});
     
     // Broadcast active router and active control group to all projector windows
     broadcastStateChange({
@@ -841,7 +837,6 @@ export const useStore = create<AppState>((set, get) => ({
     }
     
     // Explicitly sync physical displays with the display manager to account for new or removed dynamic panels
-    DisplayManager.syncPhysicalDisplays(current, newGroupStates, newActive).catch(() => {});
     
     broadcastStateChange({
       type: 'SYNC_STATE',
@@ -924,15 +919,16 @@ export const useStore = create<AppState>((set, get) => ({
         // Debounce blocking synchronous localStorage writes to keep UI thread fluid and zero-lag
         scheduleGroupStatesSave(updatedGroupStates);
 
-        broadcastStateChange({
-          type: 'GROUP_STATES_UPDATE',
-          data: { groupStates: updatedGroupStates }
-        });
-
         if (newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
           DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
         }
       }
+      
+      // Broadcast to other windows so projector syncs correctly
+      broadcastStateChange({
+        type: 'GROUP_STATES_UPDATE',
+        data: { groupStates: updatedGroupStates }
+      });
 
       return {
         groupStates: updatedGroupStates
@@ -1012,12 +1008,12 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (!isOnlyPlaybackTimeUpdate) {
         scheduleGroupStatesSave(updatedGroupStates);
-
-        broadcastStateChange({
-          type: 'GROUP_STATES_UPDATE',
-          data: { groupStates: updatedGroupStates }
-        });
       }
+
+      broadcastStateChange({
+        type: 'GROUP_STATES_UPDATE',
+        data: { groupStates: updatedGroupStates }
+      });
 
       return {
         stagedGroupStates: updatedStaged,
@@ -1099,7 +1095,6 @@ export const useStore = create<AppState>((set, get) => ({
       };
     });
     const { outputGroups, groupStates, routerPanels } = get();
-    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, id).catch(() => {});
     
     // Broadcast active control change with current states so ProjectorView can mirror the active tab without dropping state
     broadcastStateChange({ 
