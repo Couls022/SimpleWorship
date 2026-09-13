@@ -2781,14 +2781,14 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          localStorage.removeItem('workspace-layout-v1-main');
-                          localStorage.removeItem('workspace-layout-v1-top');
-                          localStorage.removeItem('workspace-layout-v1-bottom');
-                          localStorage.removeItem('workspace-layout-v1-preview');
-                          localStorage.removeItem('workspace-layout-v1-live');
-                          localStorage.removeItem('workspace-layout-v1-resources-tree');
-                          localStorage.removeItem('workspace-layout-v1-songs-tree');
-                          localStorage.removeItem('workspace-layout-v1-scriptures-tree');
+                          localStorage.removeItem('simpleworship-main-workspace-3pane-v3');
+                          localStorage.removeItem('simpleworship-main-workspace-3pane-v4');
+                          localStorage.removeItem('simpleworship-vertical-main-v2');
+                          localStorage.removeItem('simpleworship-horizontal-top-v2');
+                          localStorage.removeItem('simpleworship-horizontal-bottom-v2');
+                          localStorage.removeItem('workspace-layout-v1-vertical');
+                          localStorage.removeItem('workspace-layout-v1-horizontal');
+                          localStorage.removeItem('simpleworship_workspace_state_v2');
                           window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Workspace layout reset to default' }));
                           window.dispatchEvent(new CustomEvent('simpleworship:reset-layout'));
                         }}
