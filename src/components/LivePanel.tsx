@@ -429,7 +429,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           e.dataTransfer.effectAllowed = 'move';
         }}
         onDragEnd={() => setIsDraggingSelf(false)}
-        className="h-9 flex items-center justify-between px-3 shrink-0 cursor-grab active:cursor-grabbing transition-colors bg-[#151720] border-b border-[#222634] z-40"
+        className="min-h-9 py-1 flex items-center justify-between flex-wrap gap-1 px-3 shrink-0 cursor-grab active:cursor-grabbing transition-colors bg-[#151720] border-b border-[#222634] z-40"
         title="Drag header to move panel left or right • Click to select as Active Target"
       >
         <div 

@@ -245,7 +245,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
               exit={{ opacity: 0, scale: 0.8 }}
               className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
             >
-              <div className="w-48 h-48 rounded-3xl bg-blue-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
+              <div className="w-48 h-48 rounded-3xl bg-indigo-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
                 <span className="text-8xl font-black">{displayIndex}</span>
                 <span className="text-xs uppercase font-mono tracking-widest text-blue-200 mt-2">
                   {displayId || `Display ${displayIndex}`}
@@ -265,7 +265,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
             exit={{ opacity: 0, scale: 0.8 }}
             className="absolute inset-0 z-[110] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
           >
-            <div className="w-48 h-48 rounded-3xl bg-blue-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
+            <div className="w-48 h-48 rounded-3xl bg-indigo-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
               <span className="text-8xl font-black">{displayIndex}</span>
               <span className="text-xs uppercase font-mono tracking-widest text-blue-200 mt-2">
                 {displayId || `Display ${displayIndex}`}

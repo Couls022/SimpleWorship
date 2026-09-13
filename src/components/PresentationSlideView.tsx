@@ -243,7 +243,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
                 )}
 
                 {(obj.type === 'scripture' || obj.type === 'song' || obj.type === 'camera') && (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-blue-600/20 border border-blue-400/30 rounded p-2 text-blue-200 text-center font-medium">
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-indigo-600/20 border border-indigo-400/30 rounded p-2 text-blue-200 text-center font-medium">
                     <span className="capitalize text-xs font-bold">{obj.type} Content</span>
                     <span className="text-[10px] opacity-80">{obj.text || 'Live Feed Stream'}</span>
                   </div>

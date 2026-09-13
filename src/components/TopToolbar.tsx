@@ -615,7 +615,7 @@ export default function TopToolbar({
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white text-left cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
-                    <Save size={12} className="text-blue-400" />
+                    <Save size={12} className="text-indigo-400" />
                     <span>Save Schedule (.sws)</span>
                   </span>
                   <span className="text-[10px] text-gray-400 font-mono">Ctrl+S</span>
@@ -1255,7 +1255,7 @@ export default function TopToolbar({
             className="flex items-center gap-1.5 justify-center p-1.5 rounded-md hover:bg-[#3c414d] border border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95"
             title="Save Schedule to DB & Download .sws (Ctrl+S)"
           >
-            <div className="w-6 h-6 rounded bg-blue-700/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shadow-xs shrink-0">
+            <div className="w-6 h-6 rounded bg-blue-700/30 border border-indigo-400/40 flex items-center justify-center text-blue-300 shadow-xs shrink-0">
               <Save size={14} />
             </div>
             <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Save</span>
@@ -1320,7 +1320,7 @@ export default function TopToolbar({
           {/* ALERTS BUTTON */}
           <div className={`flex items-center rounded-md border transition-all ${
             alertState?.active
-              ? 'bg-blue-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+              ? 'bg-indigo-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
               : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
           }`}>
             <button
@@ -1342,7 +1342,7 @@ export default function TopToolbar({
             onClick={() => toggleLogo(activeControlGroupId || store.outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.showLogo
-                ? 'bg-blue-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                ? 'bg-indigo-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                 : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
             }`}
             title="Display Logo Overlay (F8 or L)"

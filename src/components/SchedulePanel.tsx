@@ -661,7 +661,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     switch (type) {
       case 'song': return <Music size={12} className="text-cyan-400" />;
       case 'bible': return <BookOpen size={12} className="text-amber-400" />;
-      case 'ppt': case 'presentation': return <FileText size={12} className="text-blue-400" />;
+      case 'ppt': case 'presentation': return <FileText size={12} className="text-indigo-400" />;
       case 'media': case 'video': case 'image': return <Film size={12} className="text-emerald-400" />;
       default: return <Layers size={12} className="text-gray-400" />;
     }
@@ -1306,7 +1306,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                             }}
                             className={`flex items-start gap-2.5 px-3 py-1.5 cursor-pointer transition-colors border-y border-transparent ${
                               isSlideLive
-                                ? 'bg-blue-600/30 text-white font-medium shadow-sm'
+                                ? 'bg-indigo-600/30 text-white font-medium shadow-sm'
                                 : isSlidePreview
                                 ? 'bg-cyan-950/40 text-cyan-200'
                                 : 'hover:bg-[#23262e] text-gray-300'
@@ -1336,7 +1336,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                                     </div>
                                   )}
                                   <span className={`absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[7px] font-mono font-bold ${
-                                    isSlideLive ? 'bg-blue-600 text-white' : 'bg-black/80 text-gray-300'
+                                    isSlideLive ? 'bg-indigo-600 text-white' : 'bg-black/80 text-gray-300'
                                   }`}>
                                     {slideIdx + 1}
                                   </span>
@@ -1344,7 +1344,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                               );
                             })() : (
                               <span className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold font-mono shrink-0 mt-0.5 ${
-                                isSlideLive ? 'bg-blue-500 text-white' : 'bg-[#2b2e37] text-gray-400'
+                                isSlideLive ? 'bg-indigo-500 text-white' : 'bg-[#2b2e37] text-gray-400'
                               }`}>
                                 {slideIdx + 1}
                               </span>

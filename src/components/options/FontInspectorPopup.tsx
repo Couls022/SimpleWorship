@@ -169,7 +169,7 @@ export default function FontInspectorPopup({
                     onClick={() => handleUpdate({ bold: !localFont.bold })}
                     className={`w-8 h-7 rounded flex items-center justify-center font-bold text-xs border transition-colors ${
                       localFont.bold
-                        ? 'bg-blue-600 border-blue-400 text-white'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
                         : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                     }`}
                     title="Bold"
@@ -181,7 +181,7 @@ export default function FontInspectorPopup({
                     onClick={() => handleUpdate({ italic: !localFont.italic })}
                     className={`w-8 h-7 rounded flex items-center justify-center italic text-xs border transition-colors ${
                       localFont.italic
-                        ? 'bg-blue-600 border-blue-400 text-white'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
                         : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                     }`}
                     title="Italic"
@@ -193,7 +193,7 @@ export default function FontInspectorPopup({
                     onClick={() => handleUpdate({ underline: !localFont.underline })}
                     className={`w-8 h-7 rounded flex items-center justify-center underline text-xs border transition-colors ${
                       localFont.underline
-                        ? 'bg-blue-600 border-blue-400 text-white'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
                         : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                     }`}
                     title="Underline"
@@ -205,7 +205,7 @@ export default function FontInspectorPopup({
                     onClick={() => handleUpdate({ superscript: !localFont.superscript, subscript: false })}
                     className={`px-2 h-7 rounded flex items-center justify-center text-xs border transition-colors ${
                       localFont.superscript
-                        ? 'bg-blue-600 border-blue-400 text-white'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
                         : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                     }`}
                     title="Superscript"
@@ -217,7 +217,7 @@ export default function FontInspectorPopup({
                     onClick={() => handleUpdate({ subscript: !localFont.subscript, superscript: false })}
                     className={`px-2 h-7 rounded flex items-center justify-center text-xs border transition-colors ${
                       localFont.subscript
-                        ? 'bg-blue-600 border-blue-400 text-white'
+                        ? 'bg-indigo-600 border-indigo-400 text-white'
                         : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                     }`}
                     title="Subscript"
@@ -240,7 +240,7 @@ export default function FontInspectorPopup({
                         onClick={() => handleUpdate({ alignHorizontal: align })}
                         className={`p-1.5 rounded border transition-colors ${
                           localFont.alignHorizontal === align
-                            ? 'bg-blue-600 border-blue-400 text-white'
+                            ? 'bg-indigo-600 border-indigo-400 text-white'
                             : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                         }`}
                         title={`Align ${align}`}
@@ -263,7 +263,7 @@ export default function FontInspectorPopup({
                         onClick={() => handleUpdate({ alignVertical: valign })}
                         className={`p-1.5 rounded border transition-colors ${
                           localFont.alignVertical === valign
-                            ? 'bg-blue-600 border-blue-400 text-white'
+                            ? 'bg-indigo-600 border-indigo-400 text-white'
                             : 'bg-[#181a20] border-[#3b404d] text-gray-300 hover:bg-[#2c303c]'
                         }`}
                         title={`Vertical ${valign}`}
@@ -558,7 +558,7 @@ export default function FontInspectorPopup({
             <button
               type="button"
               onClick={handleApply}
-              className="flex items-center gap-1 px-4 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded transition-colors"
+              className="flex items-center gap-1 px-4 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded transition-colors"
             >
               <Check size={12} />
               <span>OK</span>

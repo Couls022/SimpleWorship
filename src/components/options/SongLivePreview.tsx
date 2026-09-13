@@ -403,7 +403,7 @@ export default function SongLivePreview({
                 onClick={() => setActiveSlideIndex(idx)}
                 className={`px-2 py-0.5 rounded text-[10.5px] transition-all font-semibold ${
                   validSlideIndex === idx
-                    ? 'bg-blue-600 text-white shadow'
+                    ? 'bg-indigo-600 text-white shadow'
                     : 'bg-[#222632] hover:bg-[#2e3444] text-gray-300'
                 }`}
               >

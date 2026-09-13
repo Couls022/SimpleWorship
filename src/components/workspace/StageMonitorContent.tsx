@@ -92,7 +92,7 @@ export default function StageMonitorContent() {
 
         {/* NEXT SLIDE */}
         <div className="bg-[#14161d] border border-blue-500/30 rounded p-2 flex flex-col justify-between overflow-hidden">
-          <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+          <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
             <Eye size={12} />
             Next Slide: {nextSlide ? `${liveItem?.name} (Slide ${currentSlideIndex + 2})` : 'End of Item'}
           </div>

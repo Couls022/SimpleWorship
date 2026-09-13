@@ -157,7 +157,7 @@ export const SlideAnnotationHUD: React.FC<SlideAnnotationHUDProps> = ({
               onClick={() => setAnnotationTool(tool.id)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 isActive
-                  ? 'bg-blue-600 text-white border-blue-400 shadow-md shadow-blue-500/20'
+                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-blue-500/20'
                   : 'bg-slate-800/80 text-slate-300 border-slate-700/80 hover:bg-slate-700 hover:text-white'
               }`}
               title={`${tool.label} (${tool.shortcut})`}

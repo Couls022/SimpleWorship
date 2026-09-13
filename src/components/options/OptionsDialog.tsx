@@ -87,7 +87,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
   const categories: { id: MainCategory; label: string; icon: React.ReactNode }[] = [
     { id: 'Main Output', label: 'Main Output', icon: <Monitor size={15} className="text-cyan-400" /> },
-    { id: 'Alternate Output', label: 'Alternate Output', icon: <Tv size={15} className="text-blue-400" /> },
+    { id: 'Alternate Output', label: 'Alternate Output', icon: <Tv size={15} className="text-indigo-400" /> },
     { id: 'Foldback', label: 'Foldback', icon: <Tv size={15} className="text-emerald-400" /> },
     { id: 'Service Intervals', label: 'Service Intervals', icon: <Clock size={15} className="text-amber-400" /> },
     { id: 'Slide Labels', label: 'Slide Labels', icon: <Tag size={15} className="text-purple-400" /> },
@@ -289,7 +289,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                   <span className="text-[9px] font-bold text-gray-500 font-mono">MONITOR {idx + 1}</span>
                   <div className="flex gap-0.5">
                     {scr.isPrimary && (
-                      <span className="text-[7px] bg-blue-500/20 text-blue-300 font-extrabold px-1 rounded uppercase">Primary</span>
+                      <span className="text-[7px] bg-indigo-500/20 text-blue-300 font-extrabold px-1 rounded uppercase">Primary</span>
                     )}
                     {isSelectedForMain && (
                       <span className="text-[7px] bg-cyan-500/20 text-cyan-300 font-extrabold px-1 rounded uppercase">Main</span>
@@ -441,7 +441,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
         
         {/* Title Bar */}
         <div className="h-9 bg-[#1c1e24] border-b border-[#303440] flex items-center justify-between px-3 shrink-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Settings size={15} className="text-cyan-400" />
             <span className="font-bold text-gray-100 text-xs tracking-wide">Options</span>
           </div>
@@ -454,15 +454,15 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
         </div>
 
         {/* Main Body Grid: Left Category Sidebar + Right Content Area */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           
           {/* Left Category Sidebar */}
-          <div className="w-52 bg-[#1b1c22] border-r border-[#303440] p-2 space-y-1 overflow-y-auto custom-scrollbar shrink-0">
+          <div className="w-full md:w-52 bg-[#1b1c22] border-b md:border-b-0 md:border-r border-[#303440] p-2 md:space-y-1 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto custom-scrollbar shrink-0">
             {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left font-medium transition-all ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded text-left font-medium transition-all whitespace-nowrap ${
                   activeCategory === cat.id
                     ? 'bg-[#2b303d] text-white shadow-sm border-l-2 border-l-cyan-400 font-semibold'
                     : 'text-gray-400 hover:bg-[#23262e] hover:text-gray-200'
@@ -479,14 +479,14 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
             
             {/* Contextual Top Tabs or Category Sub-header */}
             {activeCategory === 'Main Output' ? (
-              <div className="h-8 bg-[#181a20] border-b border-[#303440] flex items-center px-2 shrink-0 space-x-1">
+              <div className="min-h-8 bg-[#181a20] border-b border-[#303440] flex items-center px-2 shrink-0 space-x-1 overflow-x-auto custom-scrollbar">
                 {outputTabs.map((tab) => {
                   const label = tab === 'Song' ? 'Songs' : tab === 'Scripture' ? 'Scriptures' : tab;
                   return (
                     <button
                       key={tab}
                       onClick={() => setActiveOutputTab(tab)}
-                      className={`px-3 py-1.5 rounded-t text-xs font-semibold transition-all ${
+                      className={`px-3 py-1.5 rounded-t text-xs font-semibold transition-all whitespace-nowrap ${
                         activeOutputTab === tab
                           ? 'bg-[#20222a] text-white border-t-2 border-t-cyan-400 -mb-px shadow-sm'
                           : 'text-gray-400 hover:text-gray-200 hover:bg-[#282b34]'
@@ -532,7 +532,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                     {renderDisplayLayoutVisualizer()}
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <select
                         value={localOptions.mainOutput.general.outputMonitor}
                         onChange={(e) => {
@@ -807,7 +807,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <span className="text-[10px] text-gray-400">Used during Logo mode and standby screens</span>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       {/* Logo Preview */}
                       <div className="w-16 h-16 rounded bg-black/60 border border-[#3b404d] flex items-center justify-center overflow-hidden shrink-0">
                         {localOptions.mainOutput.general.logoUrl ? (
@@ -824,7 +824,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <div className="flex-1 space-y-2 text-[11px]">
                         <div>
                           <label className="text-gray-400 block mb-1">Logo Image URL / Preset:</label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <input
                               type="text"
                               value={localOptions.mainOutput.general.logoUrl || ''}
@@ -855,7 +855,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-gray-400">Presets:</span>
                           <button
                             type="button"
@@ -933,10 +933,10 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                 <div className="space-y-4">
                   {/* 1. Song Lyrics Font & Typography Presentation */}
                   <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div>
                         <div className="font-bold text-gray-100 flex items-center gap-1.5">
-                          <Music size={15} className="text-blue-400" />
+                          <Music size={15} className="text-indigo-400" />
                           <span>Song Lyrics Font</span>
                         </div>
                         <div className="text-[11px] text-gray-400">
@@ -953,7 +953,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             apply: (f) => updateMainSong({ songFont: f })
                           });
                         }}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded flex items-center gap-1.5 shadow"
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded flex items-center gap-1.5 shadow"
                       >
                         <span>Song Font</span>
                         <ChevronDown size={12} />
@@ -1015,7 +1015,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                   {/* 2. Verse / Chorus / Section Label Formatting */}
                   <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-100 text-sm">
                         <input
                           type="checkbox"
@@ -1094,7 +1094,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                   {/* 3. Copyright Notice & CCLI Information */}
                   <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-100 text-sm">
                         <input
                           type="checkbox"
@@ -1277,7 +1277,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-[#252833] text-[11px]">
                         <div>
                           <label className="text-gray-400 block mb-1">Min Font Size (Floor):</label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <input
                               type="number"
                               min="16"
@@ -1407,7 +1407,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           apply: (f) => updateMainScripture({ scriptureFont: f })
                         });
                       }}
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded text-xs flex items-center gap-1.5 cursor-pointer shadow"
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded text-xs flex items-center gap-1.5 cursor-pointer shadow"
                     >
                       <span>Scripture Font</span>
                       <ChevronDown size={12} />
@@ -1417,7 +1417,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                   {/* 2. Book, Chapter & Reference Label Settings */}
                   <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-3">
                     <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-100 text-sm">
                           <input
                             type="checkbox"
@@ -1578,7 +1578,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                         <div>
                           <label className="text-gray-300 font-semibold block mb-1">Verse Label Color:</label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <input
                               type="color"
                               value={localOptions.mainOutput.scripture.verseFont?.color || localOptions.mainOutput.scripture.verseLabelColor || '#F6E05E'}
@@ -1754,7 +1754,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           onClick={() => updateMainTransitions({ activeTab: t })}
                           className={`px-3 py-1 rounded text-xs font-semibold ${
                             localOptions.mainOutput.transitions.activeTab === t
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-indigo-600 text-white'
                               : 'bg-[#121317] text-gray-400 hover:text-gray-200'
                           }`}
                         >
@@ -1808,7 +1808,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       onClick={() => setActiveAlertSubTab('Nursery')}
                       className={`px-3 py-1 rounded text-xs font-semibold ${
                         activeAlertSubTab === 'Nursery'
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-indigo-600 text-white'
                           : 'bg-[#18191f] text-gray-400 hover:text-white'
                       }`}
                     >
@@ -1818,7 +1818,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       onClick={() => setActiveAlertSubTab('Message')}
                       className={`px-3 py-1 rounded text-xs font-semibold ${
                         activeAlertSubTab === 'Message'
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-indigo-600 text-white'
                           : 'bg-[#18191f] text-gray-400 hover:text-white'
                       }`}
                     >
@@ -1855,7 +1855,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                         <div>
                           <label className="text-gray-400 block mb-1">Background Color</label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <input
                               type="color"
                               value={localOptions.mainOutput.alerts.nursery.backgroundColor}
@@ -1901,13 +1901,13 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                       {/* Live Interactive Nursery Alert Sender */}
                       <div className="bg-[#121317] border border-[#2a2d38] p-3 rounded-lg space-y-2.5">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <span className="text-gray-300 font-semibold text-xs">Live Nursery Alert Dispatcher</span>
                           <span className="font-mono text-xs text-amber-400">
                             Active: {localOptions.mainOutput.alerts.nursery.currentCode || 'None'}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <input
                             type="text"
                             placeholder="Enter nursery numbers e.g. 104, 218..."
@@ -1999,11 +1999,11 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
                       {/* Live Interactive Message Ticker Dispatcher */}
                       <div className="bg-[#121317] border border-[#2a2d38] p-3 rounded-lg space-y-2.5 pt-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <span className="text-gray-300 font-semibold text-xs">Live Ticker Broadcast Dispatcher</span>
                           <span className="text-[10px] text-gray-400">Scrolls along {localOptions.mainOutput.alerts.message.location.toLowerCase()} edge</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <input
                             type="text"
                             placeholder="Type announcement message to scroll on live screen..."
@@ -2019,7 +2019,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 store.setAlert({ message: msg.trim(), active: true }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
                               }
                             }}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded text-xs transition-colors shrink-0 shadow"
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded text-xs transition-colors shrink-0 shadow"
                           >
                             Broadcast Ticker
                           </button>
@@ -2061,7 +2061,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <div className="space-y-3 pt-2 border-t border-[#292c36]">
                         {renderDisplayLayoutVisualizer()}
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex-1">
                             <label className="text-gray-400 block mb-1 font-semibold text-xs">Select Output Display</label>
                             <select
@@ -2272,7 +2272,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <div className="space-y-3 pt-2 border-t border-[#292c36]">
                         {renderDisplayLayoutVisualizer()}
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex-1">
                             <label className="text-gray-400 block mb-1 font-semibold text-xs">Select Output Display</label>
                             <select
@@ -2571,12 +2571,12 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
               {/* ================= SLIDE LABELS ================= */}
               {activeCategory === 'Slide Labels' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <div>
                       <span className="font-bold text-gray-200 block text-sm">Slide Labels Configuration</span>
                       <span className="text-[11px] text-gray-400">Labels style live slide headers and enable quick keyboard navigation</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         type="button"
                         onClick={() => {
@@ -2604,7 +2604,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             slideLabels: [...prev.slideLabels, newLabel]
                           }));
                         }}
-                        className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1 font-semibold text-xs transition-colors"
+                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center gap-1 font-semibold text-xs transition-colors"
                       >
                         <Plus size={12} />
                         <span>Add Label</span>
@@ -2810,7 +2810,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         <FolderArchive size={14} />
                         <span>Profiles & Portable Backup Package</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           type="button"
                           onClick={async () => {
@@ -2963,7 +2963,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       {[
                         { id: 'cyan', name: 'Cyan (Default)', bg: 'bg-cyan-500' },
                         { id: 'emerald', name: 'Emerald', bg: 'bg-emerald-500' },
-                        { id: 'blue', name: 'Royal Blue', bg: 'bg-blue-500' },
+                        { id: 'blue', name: 'Royal Blue', bg: 'bg-indigo-500' },
                         { id: 'purple', name: 'Purple', bg: 'bg-purple-500' },
                         { id: 'amber', name: 'Amber', bg: 'bg-amber-500' },
                       ].map((accent) => {
@@ -3075,7 +3075,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
             <button
               type="button"
               onClick={handleOk}
-              className="flex items-center gap-1 px-5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded shadow transition-colors"
+              className="flex items-center gap-1 px-5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded shadow transition-colors"
             >
               <Check size={13} />
               <span>OK</span>

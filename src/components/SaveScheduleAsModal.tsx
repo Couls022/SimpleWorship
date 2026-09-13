@@ -82,7 +82,7 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#2d313a] bg-[#16181e]">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-blue-950/80 border border-blue-700/60 text-blue-400">
+            <div className="p-1.5 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-400">
               <Save size={18} />
             </div>
             <div>
@@ -111,7 +111,7 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
               value={scheduleName}
               onChange={(e) => setScheduleName(e.target.value)}
               placeholder="e.g. Sunday Morning Service"
-              className="w-full bg-[#14161c] border border-[#3b404d] focus:border-blue-400 rounded-lg px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              className="w-full bg-[#14161c] border border-[#3b404d] focus:border-indigo-400 rounded-lg px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-400"
             />
           </div>
 
@@ -136,7 +136,7 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
             <button
               type="submit"
               disabled={isSaving}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
             >
               <Save size={13} />
               <span>{isSaving ? 'Saving...' : 'Save & Download (.sws)'}</span>

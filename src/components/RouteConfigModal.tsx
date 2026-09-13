@@ -276,7 +276,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
           </div>
         </div>
 
-        <div className="p-3 bg-[#16171c] border-t border-[#2d313d] flex justify-between gap-2 items-center">
+        <div className="p-3 bg-[#16171c] border-t border-[#2d313d] flex justify-between gap-2 items-center flex-wrap">
           <div className="flex gap-2">
             <button 
               onClick={() => {

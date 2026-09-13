@@ -240,7 +240,7 @@ export default function ScriptureLivePreview({
                 onClick={() => setSelectedPassageId(passage.id)}
                 className={`px-2 py-0.5 rounded text-[10.5px] transition-all ${
                   selectedPassageId === passage.id
-                    ? 'bg-blue-600 text-white font-bold shadow'
+                    ? 'bg-indigo-600 text-white font-bold shadow'
                     : 'bg-[#222632] hover:bg-[#2e3444] text-gray-300'
                 }`}
               >

@@ -134,30 +134,30 @@ function SettingsModal({ onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Sidebar Tabs */}
-          <div className="w-48 bg-[#181a20] border-r border-[#2d313d] flex flex-col p-2 gap-1 overflow-y-auto">
+          <div className="w-full md:w-48 bg-[#181a20] border-b md:border-b-0 md:border-r border-[#2d313d] flex flex-row md:flex-col p-2 gap-1 overflow-x-auto md:overflow-y-auto shrink-0">
             <button 
               onClick={() => setActiveTab('displays')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'displays' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors whitespace-nowrap ${activeTab === 'displays' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
             >
               <Monitor size={14} /> Output / Routers
             </button>
             <button 
               onClick={() => setActiveTab('general')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'general' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors whitespace-nowrap ${activeTab === 'general' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
             >
               <Settings size={14} /> General
             </button>
             <button 
               onClick={() => setActiveTab('songs')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'songs' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors whitespace-nowrap ${activeTab === 'songs' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
             >
               <Music size={14} /> Songs
             </button>
             <button 
               onClick={() => setActiveTab('scriptures')}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors ${activeTab === 'scriptures' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
+              className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors whitespace-nowrap ${activeTab === 'scriptures' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
             >
               <Book size={14} /> Scriptures
             </button>

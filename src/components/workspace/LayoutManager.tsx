@@ -121,7 +121,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
                 id="panel-schedule-sidebar"
                 order={1}
                 defaultSize={23} 
-                minSize={12} 
+                minSize={20} 
                 maxSize={55}
                 collapsible={true}
               >
@@ -142,7 +142,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
             id="panel-fixed-live-control"
             order={2}
             defaultSize={isScheduleDocked && !isScheduleCollapsed ? 38.5 : 50} 
-            minSize={15}
+            minSize={25}
           >
             <div className="h-full w-full overflow-hidden flex bg-[#111319]">
               <LivePanel 
@@ -161,7 +161,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
             id="panel-fixed-live-display"
             order={3}
             defaultSize={isScheduleDocked && !isScheduleCollapsed ? 38.5 : 50} 
-            minSize={15}
+            minSize={25}
           >
             <div className="h-full w-full overflow-hidden flex bg-[#111319]">
               <FixedLiveDisplay forcedGroupId={effectiveTargetGroupId} />
