@@ -2332,10 +2332,16 @@ export const useStore = create<AppState>((set, get) => ({
           serviceIntervals: {
             ...(state.systemOptions?.serviceIntervals || { countdownEnabled: false, countdownTime: '05:00', intervalType: 'Pre-Service Countdown', showOnMainDisplay: false }),
             backgroundAssetId: finalAssetId,
-            backgroundAssetUrl: finalAssetBlobUrl,
+            backgroundAssetUrl: finalAssetId,
           }
         } as SystemOptions;
-        nextSystemOptions = sysOptsForDb;
+        nextSystemOptions = {
+          ...sysOptsForDb,
+          serviceIntervals: {
+            ...sysOptsForDb.serviceIntervals,
+            backgroundAssetUrl: finalAssetBlobUrl,
+          } as any
+        };
         try {
           localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
         } catch (e) {}
@@ -2347,11 +2353,17 @@ export const useStore = create<AppState>((set, get) => ({
             ...state.systemOptions?.mainOutput,
             song: {
               ...(state.systemOptions?.mainOutput?.song || {}),
-              backdropAssetUrl: finalAssetBlobUrl,
+              backdropAssetUrl: finalAssetId,
             }
           }
         } as SystemOptions;
-        nextSystemOptions = sysOptsForDb;
+        nextSystemOptions = {
+          ...sysOptsForDb,
+          mainOutput: {
+            ...sysOptsForDb.mainOutput,
+            song: { ...sysOptsForDb.mainOutput.song, backdropAssetUrl: finalAssetBlobUrl } as any
+          }
+        };
         try {
           localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
         } catch (e) {}
@@ -2363,11 +2375,17 @@ export const useStore = create<AppState>((set, get) => ({
             ...state.systemOptions?.mainOutput,
             scripture: {
               ...(state.systemOptions?.mainOutput?.scripture || {}),
-              backdropAssetUrl: finalAssetBlobUrl,
+              backdropAssetUrl: finalAssetId,
             }
           }
         } as SystemOptions;
-        nextSystemOptions = sysOptsForDb;
+        nextSystemOptions = {
+          ...sysOptsForDb,
+          mainOutput: {
+            ...sysOptsForDb.mainOutput,
+            scripture: { ...sysOptsForDb.mainOutput.scripture, backdropAssetUrl: finalAssetBlobUrl } as any
+          }
+        };
         try {
           localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(sysOptsForDb));
         } catch (e) {}

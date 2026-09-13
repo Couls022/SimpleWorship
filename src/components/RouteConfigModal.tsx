@@ -49,12 +49,12 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
   const availableDisplays = screens;
 
   const handleToggleDisplay = (dispObj: any) => {
-    const label = dispObj.label || dispObj.name;
+    const dispId = dispObj.id;
     setSelectedDisplayIds(prev => {
-      if (prev.includes(label)) {
-        return prev.filter(id => id !== label);
+      if (prev.includes(dispId)) {
+        return prev.filter(id => id !== dispId);
       } else {
-        return [...prev, label];
+        return [...prev, dispId];
       }
     });
 
@@ -192,15 +192,19 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
             <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
               {availableDisplays.map((disp, i) => {
                 const label = disp.label || disp.name;
+                const dispId = disp.id;
                 const w = disp.width || disp.bounds?.width;
                 const h = disp.height || disp.bounds?.height;
                 const resText = w && h ? `${w}×${h}` : '';
-                const isSelected = selectedDisplayIds.includes(label);
+                
+                // For backwards compatibility, check if the label is selected (old behavior) OR the ID is selected (new behavior)
+                const isSelected = selectedDisplayIds.includes(dispId) || selectedDisplayIds.includes(label);
+                
                 const isOperatorScreen = !!disp.isPrimary;
 
                 // Check other route panels targeting this monitor
                 const otherSharingGroups = outputGroups.filter(
-                  (g) => g.id !== groupId && (g.displayIds?.includes(label) || g.targetDisplayId === label)
+                  (g) => g.id !== groupId && (g.displayIds?.includes(dispId) || g.displayIds?.includes(label) || g.targetDisplayId === dispId || g.targetDisplayId === label)
                 );
 
                 return (

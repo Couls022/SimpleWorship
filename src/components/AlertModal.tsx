@@ -56,6 +56,7 @@ function AlertModal({ onClose }: AlertModalProps) {
   const [position, setPosition] = useState<'bottom' | 'top'>(alert.position || 'bottom');
   const [bgColor, setBgColor] = useState(alert.backgroundColor || '#0F172A');
   const [textColor, setTextColor] = useState(alert.textColor || '#FACC15');
+  const [scrolling, setScrolling] = useState<boolean>(alert.scrolling ?? true);
   const [showNurseryBadge, setShowNurseryBadge] = useState(alert.showNursery || false);
   const [nurseryCode, setNurseryCode] = useState(alert.nurseryText || '#304');
   const [autoDismissSecs, setAutoDismissSecs] = useState<number>(0); // 0 = continuous
@@ -73,6 +74,7 @@ function AlertModal({ onClose }: AlertModalProps) {
     position: 'bottom' | 'top';
     backgroundColor: string;
     textColor: string;
+    scrolling: boolean;
     showNursery: boolean;
     nurseryText: string;
     autoDismissSecs: number;
@@ -83,6 +85,7 @@ function AlertModal({ onClose }: AlertModalProps) {
     position: 'bottom',
     backgroundColor: '#0F172A',
     textColor: '#FACC15',
+    scrolling: true,
     showNursery: false,
     nurseryText: '',
     autoDismissSecs: 0,
@@ -115,6 +118,7 @@ function AlertModal({ onClose }: AlertModalProps) {
       position,
       backgroundColor: bgColor,
       textColor,
+      scrolling,
       showNursery: showNurseryBadge,
       nurseryText: nurseryCode.trim(),
     };
@@ -141,6 +145,7 @@ function AlertModal({ onClose }: AlertModalProps) {
       position,
       backgroundColor: bgColor,
       textColor,
+      scrolling,
       active: true,
       showNursery: showNurseryBadge,
       nurseryText: nurseryCode.trim(),
@@ -196,6 +201,7 @@ function AlertModal({ onClose }: AlertModalProps) {
     if (preset.position) setPosition(preset.position);
     if (preset.backgroundColor) setBgColor(preset.backgroundColor);
     if (preset.textColor) setTextColor(preset.textColor);
+    if (preset.scrolling !== undefined) setScrolling(preset.scrolling);
     if (preset.showNursery !== undefined) setShowNurseryBadge(preset.showNursery);
     if (preset.nurseryText !== undefined) setNurseryCode(preset.nurseryText);
     if (preset.autoDismissSecs !== undefined) setAutoDismissSecs(preset.autoDismissSecs);
@@ -228,6 +234,7 @@ function AlertModal({ onClose }: AlertModalProps) {
       position,
       backgroundColor: bgColor,
       textColor,
+      scrolling,
       showNursery: showNurseryBadge,
       nurseryText: nurseryCode.trim(),
       targetGroup,
@@ -256,6 +263,7 @@ function AlertModal({ onClose }: AlertModalProps) {
       position: preset.position || 'bottom',
       backgroundColor: preset.backgroundColor || '#0F172A',
       textColor: preset.textColor || '#FACC15',
+      scrolling: preset.scrolling ?? true,
       showNursery: preset.showNursery || false,
       nurseryText: preset.nurseryText || '',
       autoDismissSecs: preset.autoDismissSecs || 0,
@@ -273,6 +281,7 @@ function AlertModal({ onClose }: AlertModalProps) {
       position: editForm.position,
       backgroundColor: editForm.backgroundColor,
       textColor: editForm.textColor,
+      scrolling: editForm.scrolling,
       showNursery: editForm.showNursery,
       nurseryText: editForm.nurseryText.trim(),
       autoDismissSecs: editForm.autoDismissSecs,
@@ -306,6 +315,7 @@ function AlertModal({ onClose }: AlertModalProps) {
       position,
       backgroundColor: bgColor,
       textColor,
+      scrolling,
       showNursery: showNurseryBadge,
       nurseryText: nurseryCode,
       autoDismissSecs,
@@ -580,6 +590,18 @@ function AlertModal({ onClose }: AlertModalProps) {
                         />
                       </div>
 
+
+                      <div>
+                        <label className="text-[10px] text-gray-400 font-semibold block mb-0.5">Movement:</label>
+                        <select
+                          value={editForm.scrolling ? 'marquee' : 'static'}
+                          onChange={(e) => setEditForm({ ...editForm, scrolling: e.target.value === 'marquee' })}
+                          className="w-full bg-[#11131a] border border-[#373c4e] rounded px-2 py-1 text-xs text-white"
+                        >
+                          <option value="marquee">Scrolling Marquee</option>
+                          <option value="static">Static Centered</option>
+                        </select>
+                      </div>
                       {/* Colors in Edit Form */}
                       <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-3">
@@ -777,7 +799,7 @@ function AlertModal({ onClose }: AlertModalProps) {
             </div>
 
             {/* Position & Colors */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="text-gray-400 block mb-1 font-semibold text-[11px]">Position</label>
                 <select
@@ -790,6 +812,18 @@ function AlertModal({ onClose }: AlertModalProps) {
                 </select>
               </div>
 
+
+              <div>
+                <label className="text-gray-400 block mb-1 font-semibold text-[11px]">Movement</label>
+                <select
+                  value={scrolling ? 'marquee' : 'static'}
+                  onChange={(e) => setScrolling(e.target.value === 'marquee')}
+                  className="w-full bg-[#13151b] border border-[#2f3444] rounded-lg px-2.5 py-1.5 text-xs text-gray-200 cursor-pointer"
+                >
+                  <option value="marquee">Scrolling Marquee</option>
+                  <option value="static">Static Centered</option>
+                </select>
+              </div>
               <div>
                 <label className="text-gray-400 block mb-1 font-semibold text-[11px]">Text Color</label>
                 <div className="flex items-center gap-2 bg-[#13151b] border border-[#2f3444] rounded-lg p-1">

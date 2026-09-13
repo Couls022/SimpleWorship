@@ -13,33 +13,52 @@ export default function MediaLibraryPanel() {
   const isDefaultBgFor = (asset: Asset, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers') => {
     if (!asset) return false;
     if (asset.isDefaultScope?.[scope] === true) return true;
+    
     const url = asset.url;
     const id = asset.id;
+    const so = store.systemOptions;
+    
+    const checkMatch = (target: string | undefined) => {
+      if (!target) return false;
+      return target === url || target === id;
+    };
+
     if (scope === 'songs') {
       const t = store.themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
+      return checkMatch(so.mainOutput?.song?.backdropAssetUrl) || 
+             checkMatch(t?.styles?.backgroundImageUrl) || 
+             checkMatch(t?.styles?.backgroundVideoUrl);
     }
     if (scope === 'scriptures') {
       const t = store.themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
+      return checkMatch(so.mainOutput?.scripture?.backdropAssetUrl) || 
+             checkMatch(t?.styles?.backgroundImageUrl) || 
+             checkMatch(t?.styles?.backgroundVideoUrl);
     }
     if (scope === 'presentations') {
       const t = store.themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
+      return checkMatch(t?.styles?.backgroundImageUrl) || 
+             checkMatch(t?.styles?.backgroundVideoUrl);
     }
     if (scope === 'announcements') {
       const t = store.themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
+      return checkMatch(t?.styles?.backgroundImageUrl) || 
+             checkMatch(t?.styles?.backgroundVideoUrl);
     }
     if (scope === 'logo') {
-      const sysLogo = store.systemOptions?.general?.defaultLogoUrl || store.systemOptions?.mainOutput?.general?.defaultLogoUrl;
       const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return sysLogo === url || sysLogo === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id || t?.styles?.logoUrl === id));
+      return checkMatch(so.general?.defaultLogoUrl) || 
+             checkMatch(so.mainOutput?.general?.defaultLogoUrl) ||
+             checkMatch(t?.styles?.logoUrl) ||
+             checkMatch(t?.styles?.backgroundImageUrl) || 
+             checkMatch(t?.styles?.backgroundVideoUrl);
     }
     if (scope === 'timers') {
-      const sysTimer = store.systemOptions?.serviceIntervals?.backgroundAssetId || (store.systemOptions?.serviceIntervals as any)?.backgroundAssetUrl;
       const t = store.themesList.find(th => th.type === 'timer' || th.id === 'theme-timer');
-      return sysTimer === url || sysTimer === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
+      return checkMatch(so.serviceIntervals?.backgroundAssetId) || 
+             checkMatch((so.serviceIntervals as any)?.backgroundAssetUrl) ||
+             checkMatch(t?.styles?.backgroundImageUrl) || 
+             checkMatch(t?.styles?.backgroundVideoUrl);
     }
     return false;
   };

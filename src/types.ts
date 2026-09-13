@@ -588,6 +588,7 @@ export interface AlertState {
   backgroundColor?: string;
   textColor?: string;
   speed?: number;
+  scrolling?: boolean;
   nurseryText?: string;
   showNursery?: boolean;
   targetGroupIds?: string[];
@@ -601,6 +602,7 @@ export interface AlertPreset {
   position?: 'top' | 'bottom';
   backgroundColor?: string;
   textColor?: string;
+  scrolling?: boolean;
   showNursery?: boolean;
   nurseryText?: string;
   targetGroup?: string;

@@ -1041,20 +1041,28 @@ export default function MonitorPreviewCanvas({
           {/* Marquee Alert Banner */}
           {currentAlert.active && (!currentAlert.targetGroupIds || currentAlert.targetGroupIds.length === 0 || currentAlert.targetGroupIds.includes(groupId)) && (
             <div 
-              className="absolute left-0 right-0 z-40 py-4 px-8 overflow-hidden shadow-2xl border-y-2 border-amber-400"
+              className="absolute left-0 right-0 z-40 py-10 px-12 overflow-hidden shadow-2xl border-amber-400 flex items-center"
               style={{
                 bottom: currentAlert.position === 'bottom' ? 0 : 'auto',
                 top: currentAlert.position === 'top' ? 0 : 'auto',
+                borderTopWidth: currentAlert.position === 'bottom' ? '6px' : '0px',
+                borderBottomWidth: currentAlert.position === 'top' ? '6px' : '0px',
                 backgroundColor: currentAlert.backgroundColor || 'rgba(15, 23, 42, 0.96)',
                 color: currentAlert.textColor || '#FACC15',
+                minHeight: '140px',
               }}
             >
-              <div className="text-2xl font-bold whitespace-nowrap flex items-center gap-4">
-                <span className="px-3 py-1 rounded bg-amber-500 text-black text-base font-black uppercase tracking-wider">
-                  ALERT
-                </span>
-                <span>{currentAlert.message}</span>
-              </div>
+              {(currentAlert.scrolling ?? true) ? (
+                <div className="w-full flex items-center overflow-hidden">
+                  <div className="text-7xl font-bold whitespace-nowrap flex items-center gap-8 inline-flex animate-marquee">
+                    <span>{currentAlert.message}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full text-7xl font-bold flex items-center justify-center gap-8 text-center whitespace-pre-wrap break-words">
+                  <span>{currentAlert.message}</span>
+                </div>
+              )}
             </div>
           )}
 

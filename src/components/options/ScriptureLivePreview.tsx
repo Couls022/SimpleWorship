@@ -229,10 +229,10 @@ export default function ScriptureLivePreview({
       </div>
 
       {/* Interactive Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] bg-[#171922] p-2 rounded-lg border border-[#2b303d]">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-col xl:flex-row flex-wrap items-start xl:items-center gap-3 xl:gap-4 text-[11px] bg-[#171922] p-2.5 rounded-lg border border-[#2b303d]">
+        <div className="flex items-center gap-2 shrink-0 max-w-full overflow-hidden">
           <span className="text-gray-400 font-medium">Sample Scripture:</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {SAMPLE_PASSAGES.map(passage => (
               <button
                 key={passage.id}
@@ -250,9 +250,9 @@ export default function ScriptureLivePreview({
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2 shrink-0 xl:ml-auto">
           <span className="text-gray-400 font-medium">Stage Backdrop:</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {PREVIEW_BACKGROUNDS.map((bg, idx) => (
               <button
                 key={bg.id}
@@ -270,7 +270,7 @@ export default function ScriptureLivePreview({
                     : 'bg-[#222632] hover:bg-[#2e3444] text-gray-300'
                 }`}
               >
-                <span>{bg.name}</span>
+                <span>{bg.name.split(' ')[0]}</span>
               </button>
             ))}
           </div>

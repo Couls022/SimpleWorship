@@ -900,8 +900,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <span className="text-[10px] text-cyan-400 font-mono">ATEM / vMix / OBS Feed</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
-                      <div>
+                    <div className="flex flex-wrap items-start gap-x-6 gap-y-4 text-[11px]">
+                      <div className="min-w-[200px] flex-1">
                         <label className="text-gray-400 block mb-1">Keying Method:</label>
                         <select
                           value={localOptions.mainOutput.general.alphaKeyingMode || 'none'}
@@ -960,7 +960,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2.5 border-t border-[#272b36] text-xs">
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-4 pt-2.5 border-t border-[#272b36] text-xs">
                       {/* All Caps Lyrics Toggle */}
                       <label className="flex items-center gap-2 cursor-pointer text-gray-300 hover:text-white">
                         <input
@@ -1045,9 +1045,9 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     </div>
 
                     {localOptions.mainOutput.song.showVerseChorusLabel && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2.5 border-t border-[#272b36] text-xs">
+                      <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-2.5 border-t border-[#272b36] text-xs">
                         {/* Label Position */}
-                        <div>
+                        <div className="min-w-[150px] flex-1">
                           <label className="text-gray-400 block mb-1">Label Position:</label>
                           <select
                             value={localOptions.mainOutput.song.labelLocation || 'Header'}
@@ -1063,7 +1063,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         </div>
 
                         {/* Label Style */}
-                        <div>
+                        <div className="min-w-[150px] flex-1">
                           <label className="text-gray-400 block mb-1">Label Style:</label>
                           <select
                             value={localOptions.mainOutput.song.labelStyle || 'uppercase'}
@@ -1078,7 +1078,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         </div>
 
                         {/* Optional Prefix */}
-                        <div>
+                        <div className="min-w-[150px] flex-1">
                           <label className="text-gray-400 block mb-1">Prefix / Icon:</label>
                           <input
                             type="text"
@@ -1136,9 +1136,9 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           />
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
                           {/* Display Timing Rule */}
-                          <div>
+                          <div className="min-w-[200px] flex-1">
                             <label className="text-gray-400 block mb-1">Display Rule:</label>
                             <select
                               value={
@@ -1274,8 +1274,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         <span className="font-medium">Enable Dynamic Auto-Fit Font Sizing to Canvas</span>
                       </label>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-[#252833] text-[11px]">
-                        <div>
+                      <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-1 border-t border-[#252833] text-[11px]">
+                        <div className="min-w-[200px] flex-1">
                           <label className="text-gray-400 block mb-1">Min Font Size (Floor):</label>
                           <div className="flex items-center gap-2 flex-wrap">
                             <input
@@ -1290,7 +1290,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           </div>
                         </div>
 
-                        <div>
+                        <div className="min-w-[200px] flex-1">
                           <label className="text-gray-400 block mb-1">Line Spacing / Height:</label>
                           <select
                             value={localOptions.mainOutput.song.lineSpacing || 1.15}
@@ -1337,8 +1337,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           <span className="font-medium">Automatically flow long verses/chorus to new slide (prevent text cramping)</span>
                         </label>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6 pt-1 text-[11px]">
-                          <div>
+                        <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pl-6 pt-1 text-[11px]">
+                          <div className="min-w-[200px] flex-1">
                             <label className="text-gray-400 block mb-1">Max lines per slide before auto-break:</label>
                             <select
                               value={localOptions.mainOutput.song.maxLinesPerSlide ?? 4}
@@ -1354,7 +1354,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             </select>
                           </div>
 
-                          <div>
+                          <div className="min-w-[200px] flex-1">
                             <label className="text-gray-400 block mb-1">Split Verse/Chorus Label Format:</label>
                             <select
                               value={localOptions.mainOutput.song.splitLabelStyle || 'part'}
@@ -2495,8 +2495,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       <span className="text-[11px] text-gray-400 font-mono">Foldback Monitor Sync</span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      <div>
+                    <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-1">
+                      <div className="min-w-[200px] flex-1">
                         <label className="text-gray-400 block mb-1 text-xs">Countdown Duration (mm:ss)</label>
                         <input
                           type="text"
@@ -2528,7 +2528,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         </div>
                       </div>
 
-                      <div>
+                      <div className="min-w-[200px] flex-1">
                         <label className="text-gray-400 block mb-1 text-xs">Interval Label / Header</label>
                         <input
                           type="text"

@@ -374,8 +374,8 @@ export default function SongLivePreview({
       </div>
 
       {/* Interactive Controls Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] bg-[#171922] p-2 rounded-lg border border-[#2b303d]">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-col xl:flex-row flex-wrap items-start xl:items-center gap-3 xl:gap-4 text-[11px] bg-[#171922] p-2.5 rounded-lg border border-[#2b303d]">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-gray-400 font-medium">Song:</span>
           <select
             value={selectedSongId}
@@ -383,7 +383,7 @@ export default function SongLivePreview({
               setSelectedSongId(e.target.value);
               setActiveSlideIndex(0);
             }}
-            className="w-full bg-[#202430] border border-[#3c4354] text-gray-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
+            className="w-40 bg-[#202430] border border-[#3c4354] text-gray-200 rounded px-2 py-1 text-xs outline-none focus:border-blue-500"
           >
             {SAMPLE_SONGS.map(s => (
               <option key={s.id} value={s.id}>
@@ -393,9 +393,9 @@ export default function SongLivePreview({
           </select>
         </div>
 
-        <div className="flex items-center justify-center gap-1.5">
+        <div className="flex items-center gap-2 shrink-0 max-w-full overflow-hidden">
           <span className="text-gray-400 font-medium">Slide:</span>
-          <div className="flex items-center gap-1 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {displayedSlides.map((s, idx) => (
               <button
                 key={idx}
@@ -413,9 +413,9 @@ export default function SongLivePreview({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center gap-2 shrink-0 xl:ml-auto">
           <span className="text-gray-400 font-medium">Backdrop:</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {PREVIEW_BACKGROUNDS.map((bg, idx) => (
               <button
                 key={bg.id}

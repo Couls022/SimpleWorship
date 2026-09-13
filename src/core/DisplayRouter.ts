@@ -52,9 +52,9 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
     if (isTargetStage) {
       return group.role === 'confidence' || group.id === 'group-stage';
     }
-    // For standard presentation / projector displays:
-    // Congregation presentation route and all router output panels (R1, R2, R3, R4...) target it as base or overlay
-    return true;
+    // Do not implicitly target all displays. A route must explicitly target a display, 
+    // otherwise it bleeds onto whatever display happens to be configured by other routes.
+    return false;
   }
 
   const displays = cachedDisplays || (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
@@ -112,29 +112,9 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
       }
     }
 
-    // 3. Primary display identification
-    const rawIsPrimary = isPrimaryDescriptor(raw);
-    if (targetIsPrimary && rawIsPrimary) return true;
-
-    // 4. Numbered monitor matching (strip resolutions e.g. "Monitor 2 (1920x1080)" -> "Monitor 2")
-    const cleanRaw = raw.replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '').replace(/\s*\(primary\)\s*/gi, '');
-    const cleanTarget = target.replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '').replace(/\s*\(primary\)\s*/gi, '');
-    const targetDigits = cleanTarget.match(/\d+/g);
-    const rawDigits = cleanRaw.match(/\d+/g);
-    if (targetDigits && rawDigits && targetDigits.length === 1 && rawDigits.length === 1) {
-      if (targetDigits[0] === rawDigits[0]) {
-        return true;
-      }
-    }
-
-    // 5. Fallback keyword matching for roles
-    const isTargetSecondary = target.includes('secondary') || target.includes('alternate');
-    const isRawSecondary = raw.includes('secondary') || raw.includes('alternate');
-    if (isTargetSecondary && isRawSecondary) return true;
-
-    const isTargetStage = target.includes('foldback') || target.includes('stage') || target.includes('confidence');
-    const isRawStage = raw.includes('foldback') || raw.includes('stage') || raw.includes('confidence');
-    if (isTargetStage && isRawStage) return true;
+    // User requested strictly locking route to the selected display.
+    // Removed all fuzzy matching (Primary/Secondary guessing, substring digit matching)
+    // to prevent the system from sending displays to the wrong screens.
 
     return false;
   });

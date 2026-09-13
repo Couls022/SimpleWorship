@@ -509,23 +509,9 @@ function resolveTargetDisplay(displayId, formattedDisplays) {
   );
   if (match) return match;
 
-  // 3. Normalized positional fallbacks
-  // "monitor-1", "primary-display", "primary monitor" or index 0 matches primary
-  if (idLower.includes('primary') || idLower.includes('monitor-1') || idLower === 'monitor 1') {
-    return formattedDisplays.find(fd => fd.isPrimary) || formattedDisplays[0];
-  }
-
-  // "monitor-2", "secondary" or index 1 matches the first non-primary display
-  if (idLower.includes('monitor-2') || idLower === 'monitor 2' || idLower.includes('secondary') || idLower.includes('alternate')) {
-    return formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[1] || null;
-  }
-
-  // "monitor-3", "foldback", "stage" or index 2 matches the second non-primary display
-  if (idLower.includes('monitor-3') || idLower === 'monitor 3' || idLower.includes('foldback') || idLower.includes('stage') || idLower.includes('tertiary')) {
-    const nonPrimary = formattedDisplays.filter(fd => !fd.isPrimary);
-    return nonPrimary[1] || formattedDisplays[2] || null;
-  }
-
+  // Removed fuzzy matching and positional fallbacks (index 0, index 1 guessing)
+  // to ensure strict 1:1 locking to the user's selected driver monitor.
+  
   return null;
 }
 
@@ -540,23 +526,19 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
   let selectedDisplay = resolveTargetDisplay(displayId, formattedDisplays);
 
   if (!selectedDisplay) {
-    selectedDisplay = formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[0];
-  }
-
-  // Auto-redirect to secondary display if target resolves to operator display and a secondary display exists
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    const operatorDisplay = screen.getDisplayMatching(mainWindow.getBounds());
-    if (selectedDisplay && String(selectedDisplay.displayId) === String(operatorDisplay.id)) {
-      const secondaryDisplay = formattedDisplays.find(fd => String(fd.displayId) !== String(operatorDisplay.id));
-      if (secondaryDisplay) {
-        selectedDisplay = secondaryDisplay;
-        if (selectedDisplay.bounds) {
-          targetBounds = selectedDisplay.bounds;
-        }
-      }
+    // If the targeted display cannot be resolved, we should not guess.
+    // However, if no target was provided at all, we can fallback safely.
+    if (!displayId) {
+      selectedDisplay = formattedDisplays.find(fd => !fd.isPrimary) || formattedDisplays[0];
+    } else {
+      console.warn(`[Projector] Could not strictly resolve display: ${displayId}`);
+      return { success: false, status: 'DISCONNECTED', error: 'Target display not found.' };
     }
   }
 
+  // User requested strict lock to target display - removing auto-redirect logic.
+  // The system should not guess or redirect if they explicitly target a display.
+  
   const canonicalDisplayId = selectedDisplay ? selectedDisplay.id : (displayId || `display-${primaryDisplay.id}`);
 
   // --- PROJECTOR WINDOW REUSE (DISPLAY-CENTRIC 1:1) ---

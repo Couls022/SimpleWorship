@@ -399,6 +399,14 @@ export const dbApi = {
     if (cloned.general?.defaultLogoUrl) cloned.general.defaultLogoUrl = unresolveAssetUrl(cloned.general.defaultLogoUrl);
     if (cloned.mainOutput?.general?.defaultLogoUrl) cloned.mainOutput.general.defaultLogoUrl = unresolveAssetUrl(cloned.mainOutput.general.defaultLogoUrl);
     if (cloned.mainOutput?.general?.logoUrl) cloned.mainOutput.general.logoUrl = unresolveAssetUrl(cloned.mainOutput.general.logoUrl);
+    if (cloned.mainOutput?.song?.backdropAssetUrl) cloned.mainOutput.song.backdropAssetUrl = unresolveAssetUrl(cloned.mainOutput.song.backdropAssetUrl);
+    if (cloned.mainOutput?.scripture?.backdropAssetUrl) cloned.mainOutput.scripture.backdropAssetUrl = unresolveAssetUrl(cloned.mainOutput.scripture.backdropAssetUrl);
+    if ((cloned.serviceIntervals as any)?.backgroundAssetUrl) {
+      (cloned.serviceIntervals as any).backgroundAssetUrl = unresolveAssetUrl((cloned.serviceIntervals as any).backgroundAssetUrl);
+    }
+    if (cloned.serviceIntervals?.backgroundAssetId) {
+      cloned.serviceIntervals.backgroundAssetId = unresolveAssetUrl(cloned.serviceIntervals.backgroundAssetId);
+    }
     await db.put('settings', { id: 'system_options', options: cloned });
   },
   async getSystemOptions() {

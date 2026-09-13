@@ -181,8 +181,8 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
               <span className="text-[10px] text-gray-400 font-mono">Stage Sync</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div>
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-1">
+              <div className="min-w-[200px] flex-1">
                 <label className="text-gray-400 block mb-1 text-xs">Duration (mm:ss)</label>
                 <input
                   type="text"
@@ -206,7 +206,7 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
                   ))}
                 </div>
               </div>
-              <div>
+              <div className="min-w-[200px] flex-1">
                 <label className="text-gray-400 block mb-1 text-xs">Interval Label / Header</label>
                 <input
                   type="text"
