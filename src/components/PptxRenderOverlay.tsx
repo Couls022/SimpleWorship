@@ -7,7 +7,16 @@ import { toValidPptxUint8Array, isValidPptxBinary } from '../utils/pptxValidator
 interface PptxRenderOverlayProps {
   fileBytes?: Uint8Array | ArrayBuffer | any;
   contentId?: string;
+  isThumbnail?: boolean;
+  pptxAction?: 'next' | 'prev' | null;
+  pptxActionTimestamp?: number;
+  onActiveSlideChange?: (index: number) => void;
+  pptxAction?: 'next' | 'prev' | null;
+  pptxActionTimestamp?: number;
+  onActiveSlideChange?: (index: number) => void;
   activeSlideIndex: number;
+  isThumbnail?: boolean;
+  isThumbnail?: boolean;
 }
 
 interface ErrorBoundaryProps {
@@ -36,9 +45,13 @@ interface PptxViewerInnerProps {
   bytes: Uint8Array;
   activeSlideIndex: number;
   contentId?: string;
+  isThumbnail?: boolean;
+  pptxAction?: 'next' | 'prev' | null;
+  pptxActionTimestamp?: number;
+  onActiveSlideChange?: (index: number) => void;
 }
 
-const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex }) => {
+const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex, isThumbnail, pptxAction, pptxActionTimestamp, onActiveSlideChange }) => {
   const handleRef = useRef<PowerPointViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
@@ -46,6 +59,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
   const blocks = useViewerBuildingBlocks({
     content: bytes,
     canEdit: false,
+    onActiveSlideChange,
     handle: handleRef,
   });
 
@@ -92,15 +106,41 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     };
   }, []);
 
+  const prevSlideIndexRef = useRef(activeSlideIndex);
+  
   useEffect(() => {
     if (handleRef.current && typeof handleRef.current.goTo === 'function') {
       try {
-        handleRef.current.goTo(activeSlideIndex);
+        if (isThumbnail) {
+           if (handleRef.current.getMode && handleRef.current.getMode() !== 'preview') {
+             handleRef.current.setMode('preview');
+           }
+           handleRef.current.goTo(activeSlideIndex);
+           return;
+        }
+
+        const isPresent = handleRef.current.getMode && handleRef.current.getMode() === 'present';
+        if (!isPresent) {
+          handleRef.current.setMode('present');
+        }
+        
+        const prev = prevSlideIndexRef.current;
+        prevSlideIndexRef.current = activeSlideIndex;
+        
+        // Jump directly unless there's an action
+        if (pptxAction === 'next') {
+           handleRef.current.goNext();
+        } else if (pptxAction === 'prev') {
+           handleRef.current.goPrev();
+        } else {
+           handleRef.current.goTo(activeSlideIndex);
+        }
+        
       } catch (e) {
         console.warn('[PptxViewerInner] goTo slide index error:', e);
       }
     }
-  }, [activeSlideIndex, blocks.loading]);
+  }, [activeSlideIndex, blocks.loading, isThumbnail, pptxAction, pptxActionTimestamp]);
 
   const canvasWidth = blocks.canvasProps?.canvasSize?.width || 960;
   const canvasHeight = blocks.canvasProps?.canvasSize?.height || 540;
@@ -134,7 +174,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
   return (
     <div 
       ref={containerRef} 
-      className="w-full h-full bg-black overflow-hidden relative flex items-center justify-center select-none"
+      className="w-full h-full bg-black overflow-hidden relative flex items-center justify-center select-none pptx-strict-typography"
       style={{
         contain: 'strict',
         transform: 'translateZ(0)',
@@ -153,9 +193,8 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
       >
         <SlideCanvas 
           {...blocks.canvasProps} 
-          {...(currentSlide ? { activeSlide: currentSlide } : {})}
-          activeSlideIndex={activeSlideIndex}
           zoom={customZoom || blocks.canvasProps.zoom} 
+          mode={isThumbnail ? "preview" : "present"}
           showRulers={false} 
           showGrid={false} 
           canEdit={false} 
@@ -170,7 +209,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
 const pptxBytesCache = new Map<string, Uint8Array>();
 const rawBytesCache = new WeakMap<object, Uint8Array>();
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex }) => {
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, pptxAction, pptxActionTimestamp, onActiveSlideChange }) => {
   const [localBytes, setLocalBytes] = useState<Uint8Array | null>(() => {
     if (contentId && pptxBytesCache.has(contentId)) {
       return pptxBytesCache.get(contentId)!;
@@ -224,13 +263,16 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
 
   return (
     <PptxErrorBoundary>
-      <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} contentId={contentId} />
+      <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} contentId={contentId} isThumbnail={isThumbnail} pptxAction={pptxAction} pptxActionTimestamp={pptxActionTimestamp} onActiveSlideChange={onActiveSlideChange} />
     </PptxErrorBoundary>
   );
 }, (prevProps, nextProps) => {
   return (
     prevProps.activeSlideIndex === nextProps.activeSlideIndex &&
     prevProps.contentId === nextProps.contentId &&
-    prevProps.fileBytes === nextProps.fileBytes
+    prevProps.fileBytes === nextProps.fileBytes &&
+    prevProps.isThumbnail === nextProps.isThumbnail &&
+    prevProps.pptxAction === nextProps.pptxAction &&
+    prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp
   );
 });

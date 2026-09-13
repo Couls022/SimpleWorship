@@ -1,3 +1,4 @@
+import { PptxRenderOverlay } from './PptxRenderOverlay';
 import React, { useRef, useState, useEffect } from 'react';
 import { Slide, PresentationItem, ThemeStyles } from '../types';
 import { PresentationSlideView } from './PresentationSlideView';
@@ -22,6 +23,20 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(0.2);
+  const [hasIntersected, setHasIntersected] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setHasIntersected(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -72,13 +87,25 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
           contain: 'layout size style paint',
         }}
       >
-        <PresentationSlideView 
-          slide={slide} 
-          slideIndex={slideIndex} 
-          totalSlides={totalSlides} 
-          mode="thumbnail" 
-          themeStyles={themeStyles} 
-        />
+
+        {(fileBytes || contentId) && hasIntersected ? (
+          <div className="w-full h-full pointer-events-none">
+            <PptxRenderOverlay 
+              activeSlideIndex={slideIndex} 
+              fileBytes={fileBytes} 
+              contentId={contentId} 
+              isThumbnail={true}
+            />
+          </div>
+        ) : (
+          <PresentationSlideView 
+            slide={slide} 
+            slideIndex={slideIndex} 
+            totalSlides={totalSlides} 
+            mode="thumbnail" 
+            themeStyles={themeStyles} 
+          />
+        )}
       </div>
       <div className="absolute bottom-1 right-2 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono text-amber-300 border border-amber-500/30 pointer-events-none z-20">
         Slide {slideIndex + 1}

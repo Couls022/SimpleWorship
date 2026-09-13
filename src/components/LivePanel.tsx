@@ -252,6 +252,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         useStore.getState().setStagedGroupState(groupId, {
           activeItemId: targetLiveItem.id,
           activeSlideIndex: 0,
+      pptxAction: null,
           isBlack: false,
           isClear: false,
         });
@@ -324,7 +325,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const handleSelectSlide = (idx: number) => {
     useStore.getState().setActiveControlGroupId(groupId);
     if (activeControlState?.activeItemId === liveItem?.id) {
-      useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: idx });
+      useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: idx, pptxAction: null });
     } else if (liveItem) {
       useStore.getState().goLiveItem(liveItem.id, idx, groupId, liveItem, routerId);
     }
@@ -334,14 +335,14 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     if (slides.length === 0) return;
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
-    useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev });
+    useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev, pptxAction: null });
   };
 
   const handleNextSlide = () => {
     if (slides.length === 0) return;
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
-    useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next });
+    useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next, pptxAction: null });
   };
 
   // Auto-advance timer logic (synced from source PPTX transitions)
@@ -370,7 +371,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         clearInterval(interval);
         const current = activeControlState?.activeSlideIndex || 0;
         if (current < slides.length - 1) {
-          useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: current + 1 });
+          useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: current + 1, pptxAction: null });
         }
       }
     }, 200);

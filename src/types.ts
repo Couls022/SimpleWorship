@@ -694,6 +694,8 @@ export interface PresentationState {
   timestamp: number;
   isVideoPlaying?: boolean;
   isVideoMuted?: boolean;
+  pptxAction?: 'next' | 'prev' | null;
+  pptxActionTimestamp?: number;
   isVideoLooping?: boolean;
   videoVolume?: number;
   videoCurrentTime?: number;

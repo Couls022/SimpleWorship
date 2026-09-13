@@ -490,6 +490,24 @@ html.light.high-contrast .text-gray-400 {
 
 
 /* PPTX PRESENTER & VIEWER ENTERPRISE STYLES */
+
+/* PROTECT PPTX RENDERER FROM TAILWIND GLOBAL STYLES */
+.pptx-presenter-override,
+[data-pptx-viewport],
+[data-pptx-fullscreen-stage] {
+  line-height: normal !important;
+  letter-spacing: normal !important;
+  text-align: left; /* reset tailwind defaults */
+}
+
+.pptx-presenter-override *,
+[data-pptx-viewport] *,
+[data-pptx-fullscreen-stage] * {
+  line-height: inherit;
+  letter-spacing: inherit;
+  box-sizing: border-box;
+}
+
 .pptx-presenter-override {
   background: black !important;
   width: 100% !important;
@@ -588,3 +606,13 @@ html.hw-tier-eco .motion-reduce {
   animation-duration: 0.01ms !important;
 }
 
+
+.pptx-strict-typography,
+.pptx-strict-typography * {
+  line-height: normal !important;
+  letter-spacing: normal !important;
+  font-feature-settings: normal !important;
+  font-variant: normal !important;
+  text-transform: none;
+  -webkit-font-smoothing: auto;
+}

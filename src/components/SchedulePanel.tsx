@@ -574,9 +574,10 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
             };
 
             if (newItem.type === 'presentation') {
-              if (!isValidPptxBinary(newItem.data?.fileBytes)) {
-                newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
-              }
+              // ALWAYS strip fileBytes from the schedule item payload to prevent 
+              // massive stringification lags when saving to IndexedDB! 
+              // The renderer will pull it directly via contentId.
+              newItem.data = { ...(newItem.data || {}), fileBytes: undefined };
             }
             return newItem;
           });

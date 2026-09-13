@@ -19,6 +19,7 @@ import {
   Music
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import { useMediaProgressStore } from '../../store/useMediaProgressStore';
 import MonitorPreviewCanvas from '../MonitorPreviewCanvas';
 import { resolveGroupResolution } from '../../core/RenderFrameBuilder';
 import { DisplayManager } from '../../core/DisplayManager';
@@ -422,21 +423,21 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
             {/* Seek Progress Bar */}
             <div className="flex items-center gap-2 text-[10px] font-mono text-gray-400">
-              <span className="w-9 text-right shrink-0 font-bold text-gray-300">{formatVideoTime(stagedControlState?.videoCurrentTime || 0)}</span>
+              <span className="w-9 text-right shrink-0 font-bold text-gray-300">{formatVideoTime(uiVideoCurrentTime)}</span>
               <input
                 type="range"
                 min={0}
-                max={stagedControlState?.videoDuration && stagedControlState.videoDuration > 0 ? stagedControlState.videoDuration : 100}
+                max={uiVideoDuration > 0 ? uiVideoDuration : 100}
                 step={0.1}
-                value={stagedControlState?.videoCurrentTime || 0}
+                value={uiVideoCurrentTime}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
                   setStagedGroupState(effectiveGroupId, { videoSeekTime: val, videoCurrentTime: val });
                 }}
                 className="flex-1 h-1.5 bg-[#262936] accent-cyan-400 rounded-lg cursor-pointer animate-none transition-all hover:h-2"
-                title={`Seek position: ${formatVideoTime(stagedControlState?.videoCurrentTime || 0)}`}
+                title={`Seek position: ${formatVideoTime(uiVideoCurrentTime)}`}
               />
-              <span className="w-9 shrink-0 font-bold text-gray-300">{formatVideoTime(stagedControlState?.videoDuration || 0)}</span>
+              <span className="w-9 shrink-0 font-bold text-gray-300">{formatVideoTime(uiVideoDuration)}</span>
             </div>
 
             {/* Button Controls Row */}

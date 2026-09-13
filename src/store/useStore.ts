@@ -1377,6 +1377,9 @@ export const useStore = create<AppState>((set, get) => ({
       setStagedGroupState(groupToUpdate, {
         activeItemId: itemId,
         activeSlideIndex: slideIndex,
+        pptxAction: null,
+          pptxAction: null,
+        pptxAction: null,
         directLiveItem: liveItem || null,
         isBlack: false,
         isClear: false,
@@ -1389,6 +1392,7 @@ export const useStore = create<AppState>((set, get) => ({
         setStagedGroupState(g.id, {
           activeItemId: itemId,
           activeSlideIndex: slideIndex,
+        pptxAction: null,
           directLiveItem: liveItem || null,
           isBlack: false,
           isClear: false,
@@ -1415,8 +1419,9 @@ export const useStore = create<AppState>((set, get) => ({
     const currentItemId = currentState.activeItemId || activeSchedule?.items?.[0]?.id || songsList?.[0]?.id;
 
     let totalSlides = 1;
+    let liveItem: any = null;
     if (currentItemId) {
-      const liveItem = (
+      liveItem = (
         currentState.directLiveItem 
         || activeSchedule?.items?.find(i => i.id === currentItemId)
         || (songsList.find(s => s.id === currentItemId) ? { id: currentItemId, name: '', type: 'song', contentId: currentItemId } as any : null)
@@ -1425,6 +1430,14 @@ export const useStore = create<AppState>((set, get) => ({
         const slides = PresentationCore.generateSlides(liveItem, songsList, systemOptions);
         totalSlides = Math.max(1, slides.length);
       }
+    }
+
+    if (liveItem && (liveItem.type === 'pptx' || liveItem.type === 'presentation' || liveItem.type === 'ppt')) {
+        get().setStagedGroupState(targetGroupId, { 
+          pptxAction: 'next',
+          pptxActionTimestamp: Date.now()
+        });
+        return;
     }
 
     let nextIndex = currentState.activeSlideIndex + 1;
@@ -1453,8 +1466,9 @@ export const useStore = create<AppState>((set, get) => ({
     const currentItemId = currentState.activeItemId || activeSchedule?.items?.[0]?.id || songsList?.[0]?.id;
 
     let totalSlides = 1;
+    let liveItem: any = null;
     if (currentItemId) {
-      const liveItem = (
+      liveItem = (
         currentState.directLiveItem 
         || activeSchedule?.items?.find(i => i.id === currentItemId)
         || (songsList.find(s => s.id === currentItemId) ? { id: currentItemId, name: '', type: 'song', contentId: currentItemId } as any : null)
@@ -1463,6 +1477,14 @@ export const useStore = create<AppState>((set, get) => ({
         const slides = PresentationCore.generateSlides(liveItem, songsList, systemOptions);
         totalSlides = Math.max(1, slides.length);
       }
+    }
+
+    if (liveItem && (liveItem.type === 'pptx' || liveItem.type === 'presentation' || liveItem.type === 'ppt')) {
+        get().setStagedGroupState(targetGroupId, { 
+          pptxAction: 'prev',
+          pptxActionTimestamp: Date.now()
+        });
+        return;
     }
 
     let prevIndex = currentState.activeSlideIndex - 1;

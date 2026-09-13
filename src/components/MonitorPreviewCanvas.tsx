@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
+import { useMediaProgressStore } from '../store/useMediaProgressStore';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { dbApi } from '../db';
@@ -480,7 +481,15 @@ export default function MonitorPreviewCanvas({
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const now = Date.now();
-    if (now - lastVideoTimeUpdateRef.current >= 200) {
+    
+    // Update fast UI store every 250ms (doesn't trigger massive re-renders)
+    if (now - (videoEl as any)._lastFastUpdate > 250 || !(videoEl as any)._lastFastUpdate) {
+      (videoEl as any)._lastFastUpdate = now;
+      useMediaProgressStore.getState().setProgress(groupId, videoEl.currentTime, videoEl.duration || 0);
+    }
+    
+    // Update global drift sync store only every 4 seconds
+    if (now - lastVideoTimeUpdateRef.current >= 4000) {
       lastVideoTimeUpdateRef.current = now;
       if (setStagedGroupState) {
         setStagedGroupState(groupId, {
@@ -509,7 +518,13 @@ export default function MonitorPreviewCanvas({
     const audioEl = audioRef.current;
     if (!audioEl) return;
     const now = Date.now();
-    if (now - lastAudioTimeUpdateRef.current >= 200) {
+    
+    if (now - (audioEl as any)._lastFastUpdate > 250 || !(audioEl as any)._lastFastUpdate) {
+      (audioEl as any)._lastFastUpdate = now;
+      useMediaProgressStore.getState().setProgress(groupId, audioEl.currentTime, audioEl.duration || 0);
+    }
+
+    if (now - lastAudioTimeUpdateRef.current >= 4000) {
       lastAudioTimeUpdateRef.current = now;
       if (setStagedGroupState) {
         setStagedGroupState(groupId, {
@@ -877,6 +892,17 @@ export default function MonitorPreviewCanvas({
                     fileBytes={activeItem?.data?.fileBytes}
                     contentId={activeItem?.contentId}
                     activeSlideIndex={presentationState.activeSlideIndex || 0}
+                    pptxAction={presentationState.pptxAction}
+                    pptxActionTimestamp={presentationState.pptxActionTimestamp}
+                    onActiveSlideChange={(index) => {
+                       const currentState = useStore.getState().stagedGroupStates[groupId || 'group-congregation'];
+                       if (currentState?.activeSlideIndex !== index || currentState?.pptxAction !== null) {
+                         useStore.getState().setStagedGroupState(groupId || 'group-congregation', {
+                            activeSlideIndex: index,
+                            pptxAction: null,
+                         });
+                       }
+                    }}
                   />
               </motion.div>
             )}

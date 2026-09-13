@@ -51,6 +51,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
   onSelect,
 }) => {
   const isScripture = liveContentType === 'bible';
+  console.log("Rendering LiveSlideCard", { idx });
   const isSong = liveContentType === 'song';
   const isImage = liveContentType === 'image';
   const isVideo = liveContentType === 'video';
