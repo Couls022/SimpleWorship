@@ -18,6 +18,7 @@ import { PptxSlideThumbnail } from './PptxSlideThumbnail';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
 import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 import { resolveAssetUrl } from '../db';
+import { matchSlideLabel } from '../utils/slideLabelHelper';
 
 export interface LiveSlideCardProps {
   slide: Slide;
@@ -72,15 +73,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
   // Dynamically match user-configured slide label from Options -> Slide Labels
   const matchedSlideLabel = React.useMemo(() => {
     if (!isSong || !systemOptions?.slideLabels?.length) return null;
-    const titleUpper = (slide.title || liveItem?.name || '').toUpperCase().trim();
-    for (const label of systemOptions.slideLabels) {
-      const nameUpper = (label.name || '').toUpperCase().trim();
-      if (!nameUpper || nameUpper === '<EMPTY>' || nameUpper === '<OTHER>') continue;
-      if (titleUpper === nameUpper || titleUpper.startsWith(nameUpper) || titleUpper.includes(nameUpper)) {
-        return label;
-      }
-    }
-    return null;
+    return matchSlideLabel(slide.title || liveItem?.name, systemOptions.slideLabels);
   }, [isSong, slide.title, liveItem?.name, systemOptions?.slideLabels]);
 
   const getHeaderColor = () => {

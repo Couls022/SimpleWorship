@@ -219,11 +219,20 @@ export class DisplayManager {
       } else {
         let features = 'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no';
         try {
-          if ('getScreenDetails' in window) {
+          const cached = this.getCachedDisplays();
+          const targetScreen = cached?.find((s: any) => 
+            s.label === displayId || 
+            s.name === displayId || 
+            s.id === displayId ||
+            (displayId && s.label?.toLowerCase().includes(displayId.toLowerCase()))
+          );
+          if (targetScreen?.bounds) {
+            features = `left=${targetScreen.bounds.x ?? 0},top=${targetScreen.bounds.y ?? 0},width=${targetScreen.bounds.width ?? 1920},height=${targetScreen.bounds.height ?? 1080},menubar=no,toolbar=no,location=no,status=no`;
+          } else if ('getScreenDetails' in window) {
             const screenDetails = await (window as any).getScreenDetails();
-            const targetScreen = screenDetails.screens.find((s: any) => s.label === displayId || s.id === displayId) || screenDetails.screens.find((s: any) => !s.isInternal) || screenDetails.screens[0];
-            if (targetScreen) {
-              features = `left=${targetScreen.availLeft},top=${targetScreen.availTop},width=${targetScreen.availWidth},height=${targetScreen.availHeight},menubar=no,toolbar=no,location=no,status=no`;
+            const ts = screenDetails.screens.find((s: any) => s.label === displayId || s.id === displayId) || screenDetails.screens.find((s: any) => !s.isInternal) || screenDetails.screens[0];
+            if (ts) {
+              features = `left=${ts.availLeft},top=${ts.availTop},width=${ts.availWidth},height=${ts.availHeight},menubar=no,toolbar=no,location=no,status=no`;
             }
           }
         } catch (e) {
@@ -233,6 +242,8 @@ export class DisplayManager {
         const newPopup = window.open(popupUrl, `projector_${groupId}`, features);
         if (newPopup) {
           this.browserPopups.set(groupId, newPopup);
+        } else {
+          window.open(popupUrl, '_blank');
         }
       }
 

@@ -216,9 +216,11 @@ export class PresentationCore {
   ): Slide[] {
     if (!item) return [];
 
-    const songOptsStr = JSON.stringify(systemOptions?.mainOutput?.song || {});
-    const scriptureOptsStr = JSON.stringify(systemOptions?.mainOutput?.scripture || {});
-    const cacheKey = `${item.id}_${item.contentId || ''}_${item.customBackgroundUrl || ''}_${item.data?.verses?.length || 0}_${item.data?.sections?.length || 0}_${item.data?.slides?.length || 0}_${availableSongs.length}_${songOptsStr}_${scriptureOptsStr}`;
+    const so = systemOptions?.mainOutput?.song;
+    const sc = systemOptions?.mainOutput?.scripture;
+    const songOptsSig = so ? `${so.maxLinesPerSlide}_${so.breakOnNewVerse}_${so.splitLongSections}_${so.splitLabelStyle}_${so.showVerseChorusLabel}_${so.labelLocation}_${so.backdropAssetUrl || ''}` : '';
+    const scriptureOptsSig = sc ? `${sc.breakOnNewVerse}_${sc.showVerseNumbers}_${sc.backdropAssetUrl || ''}` : '';
+    const cacheKey = `${item.id}_${item.contentId || ''}_${item.customBackgroundUrl || ''}_${item.data?.verses?.length || 0}_${item.data?.sections?.length || 0}_${item.data?.slides?.length || 0}_${availableSongs.length}_${songOptsSig}_${scriptureOptsSig}`;
     const cached = PresentationCore.slideCache.get(item.id);
     if (cached && cached.cacheKey === cacheKey) {
       return cached.slides;

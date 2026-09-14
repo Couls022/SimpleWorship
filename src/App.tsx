@@ -30,10 +30,19 @@ export default function App() {
 
   const hashParams = new URLSearchParams(hashQueryString);
 
+  const isStage =
+    searchParams.get('stage') === 'true' ||
+    hashParams.get('stage') === 'true' ||
+    window.location.hash.includes('stage') ||
+    searchParams.get('foldback') === 'true' ||
+    hashParams.get('foldback') === 'true' ||
+    window.location.hash.includes('foldback');
+
   const isProjector =
     searchParams.get('projector') === 'true' ||
     hashParams.get('projector') === 'true' ||
-    window.location.hash.includes('projector');
+    window.location.hash.includes('projector') ||
+    isStage;
 
   const isRemote =
     searchParams.get('remote') === 'true' ||
@@ -46,14 +55,15 @@ export default function App() {
     searchParams.get('groupId') ||
     searchParams.get('group') ||
     hashParams.get('groupId') ||
-    hashParams.get('group');
+    hashParams.get('group') ||
+    (isStage ? 'group-stage' : undefined);
 
   const displayId =
     searchParams.get('displayId') ||
     hashParams.get('displayId') ||
     undefined;
 
-  const groupId = rawGroupId || (isProjector ? 'group-congregation' : undefined);
+  const groupId = rawGroupId || (isProjector ? (isStage ? 'group-stage' : 'group-congregation') : undefined);
 
   useEffect(() => {
     // 1. Init IndexedDB in background

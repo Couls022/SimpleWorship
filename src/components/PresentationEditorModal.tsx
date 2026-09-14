@@ -220,7 +220,8 @@ export function PresentationEditorModal({
   onClose,
   onSaved,
 }: PresentationEditorModalProps) {
-  const { addScheduleItem, goLiveItem } = useStore();
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
 
   const [deckName, setDeckName] = useState(presentation?.name || 'New Presentation Deck');
   const [activeRibbonTab, setActiveRibbonTab] = useState<RibbonTab>('home');

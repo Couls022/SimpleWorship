@@ -31,7 +31,14 @@ interface RemoteViewProps {
 }
 
 export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
-  const store = useStore();
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const outputGroups = useStore(state => state.outputGroups);
+  const groupStates = useStore(state => state.groupStates);
+  const stagedGroupStates = useStore(state => state.stagedGroupStates);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const alert = useStore(state => state.alert);
+  const alertPresets = useStore(state => state.alertPresets);
+
   const [pinInput, setPinInput] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [pinError, setPinError] = useState(false);
@@ -180,10 +187,9 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
   };
 
   // Extract active slide and active item details
-  const activeGroupId = store.activeControlGroupId || (store.outputGroups[0]?.id) || 'group-congregation';
-  const groupState = store.groupStates[activeGroupId];
-  const stagedState = store.stagedGroupStates[activeGroupId];
-  const activeSchedule = store.activeSchedule;
+  const activeGroupId = activeControlGroupId || (outputGroups[0]?.id) || 'group-congregation';
+  const groupState = groupStates[activeGroupId];
+  const stagedState = stagedGroupStates[activeGroupId];
   
   // Staged item & slide (operator preview)
   const stagedItem = activeSchedule?.items.find(item => item.id === stagedState?.activeItemId) || (stagedState?.directLiveItem as PresentationItem | undefined);
@@ -241,7 +247,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
 
     if (!alertData.message) return;
 
-    store.setAlert(alertData);
+    useStore.getState().setAlert(alertData);
     sendRemoteCommand('set_alert', alertData);
 
     setAlertText('');
@@ -249,7 +255,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
   };
 
   const handleClearAlert = () => {
-    store.setAlert({ active: false });
+    useStore.getState().setAlert({ active: false });
     sendRemoteCommand('clear_alert');
     if (navigator.vibrate) navigator.vibrate(30);
   };
@@ -432,9 +438,9 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 </div>
               ) : null}
 
-              {store.alert?.active && (
+              {alert?.active && (
                 <div className="w-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 rounded-lg text-amber-300 text-[10px] font-bold mb-2 flex items-center justify-between">
-                  <span className="truncate">ALERT: {store.alert.message}</span>
+                  <span className="truncate">ALERT: {alert.message}</span>
                   <span className="text-[8px] bg-amber-500 text-black px-1 rounded font-black">LIVE</span>
                 </div>
               )}
@@ -462,7 +468,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                     key={s.id || idx}
                     type="button"
                     onClick={() => {
-                      store.goLiveSlide(idx, activeGroupId);
+                      useStore.getState().goLiveSlide(idx, activeGroupId);
                       sendRemoteCommand('go_live_slide', { slideIndex: idx });
                     }}
                     className={`px-3 py-1.5 rounded-lg text-[11px] font-bold shrink-0 transition-all cursor-pointer ${
@@ -482,7 +488,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               <button
                 type="button"
                 onClick={() => {
-                  store.toggleBlack(activeGroupId);
+                  useStore.getState().toggleBlack(activeGroupId);
                   sendRemoteCommand('toggle_black');
                 }}
                 className={`py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-1 active:scale-95 ${
@@ -497,7 +503,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               <button
                 type="button"
                 onClick={() => {
-                  store.toggleClear(activeGroupId);
+                  useStore.getState().toggleClear(activeGroupId);
                   sendRemoteCommand('toggle_clear');
                 }}
                 className={`py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-1 active:scale-95 ${
@@ -512,7 +518,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               <button
                 type="button"
                 onClick={() => {
-                  store.toggleLogo(activeGroupId);
+                  useStore.getState().toggleLogo(activeGroupId);
                   sendRemoteCommand('toggle_logo');
                 }}
                 className={`py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center gap-1 active:scale-95 ${
@@ -530,7 +536,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
             <button
               type="button"
               onClick={() => {
-                store.toggleMasterLive(activeGroupId);
+                useStore.getState().toggleMasterLive(activeGroupId);
                 sendRemoteCommand('toggle_live', { groupId: activeGroupId });
               }}
               className={`w-full py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2.5 text-white font-black tracking-wider text-xs sm:text-sm cursor-pointer border active:scale-98 transition-all shrink-0 shadow-lg ${
@@ -548,7 +554,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               <button
                 type="button"
                 onClick={() => {
-                  store.goLivePrev();
+                  useStore.getState().goLivePrev();
                   sendRemoteCommand('go_prev');
                 }}
                 className="bg-[#141722] active:bg-[#1f2434] border border-[#23293a] rounded-2xl flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-gray-200 cursor-pointer shadow-sm"
@@ -560,7 +566,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               <button
                 type="button"
                 onClick={() => {
-                  store.goLiveNext();
+                  useStore.getState().goLiveNext();
                   sendRemoteCommand('go_next');
                 }}
                 className="bg-purple-600 active:bg-purple-500 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all text-white shadow-lg shadow-purple-600/20 cursor-pointer"
@@ -598,7 +604,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        store.goLiveItem(item.id, 0, activeGroupId);
+                        useStore.getState().goLiveItem(item.id, 0, activeGroupId);
                         sendRemoteCommand('go_live_item', { itemId: item.id, slideIndex: 0 });
                       }}
                       className="w-full px-3.5 py-2.5 text-left flex items-center justify-between cursor-pointer"
@@ -633,7 +639,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                               key={slide.id || sIdx}
                               type="button"
                               onClick={() => {
-                                store.goLiveSlide(sIdx, activeGroupId);
+                                useStore.getState().goLiveSlide(sIdx, activeGroupId);
                                 sendRemoteCommand('go_live_slide', { slideIndex: sIdx });
                               }}
                               className={`w-full px-2.5 py-1.5 rounded-lg text-left text-[11px] flex justify-between items-center transition-all cursor-pointer ${
@@ -668,14 +674,14 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
         {activeTab === 'alert' && (
           <div className="flex-1 flex flex-col gap-3.5 overflow-y-auto">
             {/* Active Alert Banner */}
-            {store.alert?.active && (
+            {alert?.active && (
               <div className="bg-amber-500/15 border border-amber-500/40 p-3 rounded-xl flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider block">
                     ACTIVE LIVE ALERT
                   </span>
                   <p className="text-xs text-amber-200 font-bold mt-0.5">
-                    {store.alert.message}
+                    {alert.message}
                   </p>
                 </div>
                 <button
@@ -730,7 +736,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                 Quick Alert Presets (Tap to send)
               </span>
               <div className="space-y-1.5">
-                {(store.alertPresets || []).map((preset: any) => (
+                {(alertPresets || []).map((preset: any) => (
                   <button
                     key={preset.id || preset.message}
                     type="button"
@@ -756,7 +762,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
                     <ChevronRight size={13} className="text-gray-500 group-hover:text-amber-400 shrink-0" />
                   </button>
                 ))}
-                {(store.alertPresets || []).length === 0 && (
+                {(alertPresets || []).length === 0 && (
                   <div className="py-2.5 text-center text-gray-500 text-[11px] bg-[#12141c] border border-[#202430] rounded-lg">
                     No presets saved.
                   </div>

@@ -52,6 +52,10 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
     if (isTargetStage) {
       return group.role === 'confidence' || group.id === 'group-stage';
     }
+    const isTargetAlt = target.includes('alternate') || target.includes('foyer') || target.includes('stream') || target.includes('overflow') || target.includes('lobby');
+    if (isTargetAlt) {
+      return group.id === 'group-alternate' || group.role === 'lobby';
+    }
     // Do not implicitly target all displays. A route must explicitly target a display, 
     // otherwise it bleeds onto whatever display happens to be configured by other routes.
     return false;

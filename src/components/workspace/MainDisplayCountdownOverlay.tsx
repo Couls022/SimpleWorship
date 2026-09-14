@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { Asset } from '../../types';
 import { resolveAssetUrl } from '../../db';
@@ -8,50 +8,54 @@ interface MainDisplayCountdownOverlayProps {
 }
 
 export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayProps> = ({ isBlack }) => {
-  const store = useStore();
-  const opts = store.systemOptions?.serviceIntervals;
+  const opts = useStore(state => state.systemOptions?.serviceIntervals);
+  const assetsList = useStore(state => state.assetsList);
+  const themesList = useStore(state => state.themesList);
+
   const enabled = opts?.showOnMainDisplay ?? false;
   const isRunning = opts?.isRunning ?? false;
   const targetTimestamp = opts?.targetTimestamp || null;
+  const pausedRemainingSecs = opts?.pausedRemainingSecs ?? null;
   const initialTimeStr = opts?.countdownTime || '05:00';
   const backgroundAssetId = opts?.backgroundAssetId || '';
   const backgroundAssetUrl = (opts as any)?.backgroundAssetUrl;
   const fontFamily = opts?.fontFamily || 'monospace';
   const fontColor = opts?.fontColor || '#ffffff';
 
-  // 1. Resolve background asset or URL
+  // 1. Resolve background asset or URL via useMemo to prevent unnecessary re-render loops
   // Hierarchy: Explicit selected asset -> Default timer asset from assetsList -> Stored background URL -> Theme timer styles
-  const [bgInfo, setBgInfo] = useState<{ url: string; isVideo: boolean } | null>(null);
+  const bgInfo = useMemo<{ url: string; isVideo: boolean } | null>(() => {
+    if (!enabled || isBlack) {
+      return null;
+    }
 
-  useEffect(() => {
     let candidateAsset: Asset | undefined;
 
     if (backgroundAssetId) {
-      candidateAsset = store.assetsList.find(a => a.id === backgroundAssetId || a.url === backgroundAssetId);
+      candidateAsset = assetsList.find(a => a.id === backgroundAssetId || a.url === backgroundAssetId);
     }
 
     if (!candidateAsset) {
-      candidateAsset = store.assetsList.find(a => a.isDefaultScope?.timers === true);
+      candidateAsset = assetsList.find(a => a.isDefaultScope?.timers === true);
     }
 
     if (candidateAsset) {
       const url = resolveAssetUrl(candidateAsset.url) || candidateAsset.url;
       const isVideo = candidateAsset.type === 'video' || candidateAsset.type === 'motion' || /\.(mp4|webm|mov|mkv)(\?.*)?$/i.test(url);
-      setBgInfo({ url, isVideo });
-      return;
+      return { url, isVideo };
     }
 
     // Check direct stored URL or theme
-    const fallbackUrl = backgroundAssetUrl || store.themesList.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundImageUrl || store.themesList.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundVideoUrl;
+    const timerTheme = themesList.find(t => t.type === 'timer' || t.id === 'theme-timer');
+    const fallbackUrl = backgroundAssetUrl || timerTheme?.styles?.backgroundImageUrl || timerTheme?.styles?.backgroundVideoUrl;
     if (fallbackUrl) {
       const resolved = resolveAssetUrl(fallbackUrl) || fallbackUrl;
       const isVideo = /\.(mp4|webm|mov|mkv)(\?.*)?$/i.test(resolved);
-      setBgInfo({ url: resolved, isVideo });
-      return;
+      return { url: resolved, isVideo };
     }
 
-    setBgInfo(null);
-  }, [backgroundAssetId, backgroundAssetUrl, store.assetsList, store.themesList]);
+    return null;
+  }, [enabled, isBlack, backgroundAssetId, backgroundAssetUrl, assetsList, themesList]);
 
   const parseSeconds = (timeStr: string): number => {
     if (!timeStr) return 300;
@@ -66,36 +70,40 @@ export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayPr
   };
 
   const calculateRemaining = () => {
-    if (!targetTimestamp) return parseSeconds(initialTimeStr);
+    if (pausedRemainingSecs !== null && pausedRemainingSecs !== undefined) {
+      return Math.max(0, pausedRemainingSecs);
+    }
+    if (!targetTimestamp || !isRunning) {
+      return parseSeconds(initialTimeStr);
+    }
     const diff = targetTimestamp - Date.now();
     return diff > 0 ? Math.ceil(diff / 1000) : 0;
   };
 
-  const [remainingSecs, setRemainingSecs] = useState<number>(calculateRemaining());
+  const [remainingSecs, setRemainingSecs] = useState<number>(() => calculateRemaining());
 
   useEffect(() => {
-    setRemainingSecs(calculateRemaining());
+    const current = calculateRemaining();
+    setRemainingSecs(current);
     if (!enabled || !isRunning || !targetTimestamp || isBlack) return;
 
     const timer = setInterval(() => {
-      setRemainingSecs((prev) => {
-        const current = calculateRemaining();
-        if (current <= 0) {
-          clearInterval(timer);
-          return 0;
-        }
-        return current;
-      });
-    }, 100);
+      const nowRemaining = calculateRemaining();
+      setRemainingSecs(nowRemaining);
+      if (nowRemaining <= 0) {
+        clearInterval(timer);
+      }
+    }, 250);
+
     return () => clearInterval(timer);
-  }, [enabled, isRunning, targetTimestamp, isBlack, initialTimeStr]);
+  }, [enabled, isRunning, targetTimestamp, pausedRemainingSecs, initialTimeStr, isBlack]);
 
   if (!enabled || isBlack) return null;
 
   const mins = Math.floor(remainingSecs / 60);
   const secs = remainingSecs % 60;
   const formattedTime = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  const isExpired = remainingSecs === 0 && targetTimestamp !== null;
+  const isExpired = remainingSecs === 0 && (targetTimestamp !== null || isRunning);
 
   return (
     <div 

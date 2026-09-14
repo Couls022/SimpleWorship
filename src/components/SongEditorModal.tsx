@@ -246,8 +246,11 @@ function SongEditorModal({
   onClose,
   onSaveScheduleItem
 }: SongEditorModalProps) {
-  const store = useStore();
-  const { assetsList, songsList, themesList } = store;
+  const assetsList = useStore(state => state.assetsList);
+  const songsList = useStore(state => state.songsList);
+  const themesList = useStore(state => state.themesList);
+  const systemOptions = useStore(state => state.systemOptions);
+  const activeSchedule = useStore(state => state.activeSchedule);
 
   // Match master song if editing schedule item
   const matchedMasterSong = useMemo(() => {
@@ -691,7 +694,7 @@ function SongEditorModal({
       if (onSaveScheduleItem) {
         onSaveScheduleItem(updatedFields, updateMasterToo);
       } else {
-        store.updateScheduleItem(scheduleItem.id, updatedFields);
+        useStore.getState().updateScheduleItem(scheduleItem.id, updatedFields);
       }
 
       if (updateMasterToo && matchedMasterSong) {
@@ -709,7 +712,7 @@ function SongEditorModal({
           defaultBackgroundUrl: backgroundUrl,
           themeOverride
         };
-        await store.addSong(updatedMaster);
+        await useStore.getState().addSong(updatedMaster);
       }
 
       window.dispatchEvent(
@@ -739,10 +742,10 @@ function SongEditorModal({
       themeOverride
     };
 
-    await store.addSong(updatedSong);
+    await useStore.getState().addSong(updatedSong);
 
-    if (applyToSchedule && store.activeSchedule) {
-      const currentSched = store.activeSchedule;
+    if (applyToSchedule && activeSchedule) {
+      const currentSched = activeSchedule;
       const updatedItems = currentSched.items.map(item => {
         if (item.type === 'song' && (item.contentId === updatedSong.id || item.name === updatedSong.title)) {
           return {
@@ -754,7 +757,7 @@ function SongEditorModal({
         }
         return item;
       });
-      store.setActiveSchedule({
+      useStore.getState().setActiveSchedule({
         ...currentSched,
         items: updatedItems
       });
@@ -797,10 +800,10 @@ function SongEditorModal({
 
   // Active theme styles object for preview canvas
     const itemContentType = mode === 'library' ? 'song' : (scheduleItem?.type || 'song');
-  const systemFontOverride = ThemeEngine.getSystemFontForContent(store.systemOptions, itemContentType);
-  const typeTheme = store.themesList?.find(t => t.type === itemContentType || (itemContentType === 'song' && t.id === 'theme-song'));
+  const systemFontOverride = ThemeEngine.getSystemFontForContent(systemOptions, itemContentType);
+  const typeTheme = themesList?.find(t => t.type === itemContentType || (itemContentType === 'song' && t.id === 'theme-song'));
   const baseThemeStyles = ThemeEngine.resolveStyles(
-    store.themesList?.find(t => t.type === 'global')?.styles || ThemeEngine.getDefaultGlobalTheme(),
+    themesList?.find(t => t.type === 'global')?.styles || ThemeEngine.getDefaultGlobalTheme(),
     undefined,
     typeTheme?.styles,
     systemFontOverride,
@@ -1554,9 +1557,9 @@ function SongEditorModal({
                             lineSpacing: previewThemeStyles.lineHeight || lineHeight,
                             widthPercent: previewThemeStyles.widthPercent || widthPercent,
                             isUppercase: previewThemeStyles.textTransform === 'uppercase' || textTransform === 'uppercase',
-                            margins: store.systemOptions.mainOutput.general.margins,
-                            containerWidth: aspectRatio === '16:9' ? (store.systemOptions.mainOutput.general.position.width || 1920) : 1024,
-                            containerHeight: aspectRatio === '16:9' ? (store.systemOptions.mainOutput.general.position.height || 1080) : 768,
+                            margins: systemOptions.mainOutput.general.margins,
+                            containerWidth: aspectRatio === '16:9' ? (systemOptions.mainOutput.general.position.width || 1920) : 1024,
+                            containerHeight: aspectRatio === '16:9' ? (systemOptions.mainOutput.general.position.height || 1080) : 768,
                           })}px`,
                         }}
                         title="Double-click to edit text directly on slide"

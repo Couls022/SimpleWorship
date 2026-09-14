@@ -21,62 +21,29 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  const { 
-    getAnnotationState,
-    addAnnotationStroke, 
-    updateLaserPointer,
-    clearAnnotations,
-    undoAnnotation,
-    redoAnnotation
-  } = useStore();
+  const annotationState = useStore(state => {
+    const targetGroup = groupId || state.activeControlGroupId || 'group-congregation';
+    return state.groupAnnotations?.[targetGroup] || state.annotationState;
+  });
+  const addAnnotationStroke = useStore(state => state.addAnnotationStroke);
+  const updateLaserPointer = useStore(state => state.updateLaserPointer);
+  const clearAnnotations = useStore(state => state.clearAnnotations);
+  const undoAnnotation = useStore(state => state.undoAnnotation);
+  const redoAnnotation = useStore(state => state.redoAnnotation);
 
-  const annotationState = getAnnotationState(groupId);
-
   const { 
-    enabled, 
-    activeTool, 
-    activeColor, 
-    strokeSize, 
-    opacity, 
-    strokes, 
-    laserPointer 
-  } = annotationState;
+    enabled = false, 
+    activeTool = 'pen', 
+    activeColor = '#FF2A4D', 
+    strokeSize = 6, 
+    opacity = 1, 
+    strokes = [], 
+    laserPointer = null 
+  } = annotationState || {};
 
   // Active in-progress stroke
   const [currentStroke, setCurrentStroke] = useState<AnnotationStroke | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [containerBounds, setContainerBounds] = useState<{ width: number; height: number; left: number; top: number }>({
-    width: stageWidth,
-    height: stageHeight,
-    left: 0,
-    top: 0,
-  });
-
-  // Keep track of container bounds for normalized coordinate calculation
-  const updateBounds = useCallback(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setContainerBounds({
-          width: rect.width,
-          height: rect.height,
-          left: rect.left,
-          top: rect.top,
-        });
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    updateBounds();
-    const handleResize = () => updateBounds();
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('scroll', handleResize, true);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', handleResize, true);
-    };
-  }, [updateBounds]);
 
   const getNormalizedPoint = useCallback((e: React.PointerEvent | PointerEvent): AnnotationPoint => {
     const el = containerRef.current;
@@ -84,8 +51,8 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
     const rect = el.getBoundingClientRect();
     const clientX = e.clientX;
     const clientY = e.clientY;
-    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1)));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1)));
     return { x, y };
   }, []);
 
@@ -101,15 +68,27 @@ export const SlideAnnotationLayer: React.FC<SlideAnnotationLayerProps> = ({
     });
 
     if (remainingStrokes.length !== strokes.length) {
-      useStore.setState((prev) => ({
-        annotationState: {
-          ...prev.annotationState,
-          strokes: remainingStrokes,
-          redoStack: []
-        }
-      }));
+      useStore.setState((prev) => {
+        const targetGroup = groupId || prev.activeControlGroupId || 'group-congregation';
+        const currentGroupAnn = prev.groupAnnotations?.[targetGroup] || prev.annotationState;
+        return {
+          annotationState: {
+            ...prev.annotationState,
+            strokes: remainingStrokes,
+            redoStack: []
+          },
+          groupAnnotations: {
+            ...prev.groupAnnotations,
+            [targetGroup]: {
+              ...currentGroupAnn,
+              strokes: remainingStrokes,
+              redoStack: []
+            }
+          }
+        };
+      });
     }
-  }, [strokes]);
+  }, [strokes, groupId]);
 
   // Pointer event handlers for drawing
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {

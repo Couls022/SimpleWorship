@@ -12,7 +12,10 @@ interface AboutModalProps {
 }
 
 function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalProps) {
-  const store = useStore();
+  const activeScheduleName = useStore(state => state.activeSchedule?.name || 'Untitled');
+  const scheduleItemsCount = useStore(state => state.activeSchedule?.items.length || 0);
+  const songsCount = useStore(state => state.songsList.length);
+  const outputGroupsCount = useStore(state => state.outputGroups.length);
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
@@ -81,10 +84,10 @@ function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalP
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-400">
-              <div>Active Schedule: <span className="text-white font-medium">{store.activeSchedule?.name || 'Untitled'}</span></div>
-              <div>Schedule Items: <span className="text-cyan-300 font-mono">{store.activeSchedule?.items.length || 0} items</span></div>
-              <div>Songs in Library: <span className="text-emerald-300 font-mono">{store.songsList.length} hymns</span></div>
-              <div>Output Displays: <span className="text-purple-300 font-mono">{store.outputGroups.length} configured</span></div>
+              <div>Active Schedule: <span className="text-white font-medium">{activeScheduleName}</span></div>
+              <div>Schedule Items: <span className="text-cyan-300 font-mono">{scheduleItemsCount} items</span></div>
+              <div>Songs in Library: <span className="text-emerald-300 font-mono">{songsCount} hymns</span></div>
+              <div>Output Displays: <span className="text-purple-300 font-mono">{outputGroupsCount} configured</span></div>
             </div>
           </div>
 

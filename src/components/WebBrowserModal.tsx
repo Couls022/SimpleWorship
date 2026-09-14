@@ -14,7 +14,6 @@ const POPULAR_WORSHIP_WEB_LINKS = [
 ];
 
 export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
-  const store = useStore();
   const [targetUrl, setTargetUrl] = useState('https://www.biblegateway.com');
   const [activeIframeUrl, setActiveIframeUrl] = useState('https://www.biblegateway.com');
   const [customTitle, setCustomTitle] = useState('Online Web Stream / Asset');
@@ -30,7 +29,7 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
 
   const handleAddToSchedule = () => {
     const title = customTitle || 'Web Media Stream';
-    store.addScheduleItem({
+    useStore.getState().addScheduleItem({
       type: 'presentation',
       name: `[Web] ${title}`,
       notes: `Target URL: ${activeIframeUrl}`,

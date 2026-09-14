@@ -156,6 +156,12 @@ export interface SystemOptions {
     position: { left: number; top: number; width: number; height: number };
     margins: { left: number; top: number; right: number; bottom: number };
     defaultFont: FontStyleOptions;
+    feedMode?: 'mirror' | 'lower_third' | 'foyer_announcements';
+    alphaChannel?: 'Disabled' | 'Transparent' | 'Custom';
+    backgroundColor?: string;
+    backgroundOpacity?: number;
+    showClock?: boolean;
+    showCountdown?: boolean;
   };
   foldback: {
     enabled: boolean;
@@ -173,6 +179,7 @@ export interface SystemOptions {
     backgroundAssetId?: string;
     isRunning?: boolean;
     targetTimestamp?: number | null;
+    pausedRemainingSecs?: number | null;
     fontFamily?: string;
     fontColor?: string;
   };

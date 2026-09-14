@@ -126,8 +126,10 @@ const PRESET_TEMPLATES: { name: string; type: ThemeType; styles: ThemeStyles }[]
 ];
 
 function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps) {
-  const store = useStore();
-  const { themesList, saveTheme, deleteTheme, activeSchedule } = store;
+  const themesList = useStore(state => state.themesList);
+  const saveTheme = useStore(state => state.saveTheme);
+  const deleteTheme = useStore(state => state.deleteTheme);
+  const activeSchedule = useStore(state => state.activeSchedule);
 
   const [selectedThemeId, setSelectedThemeId] = useState<string>(() => {
     if (initialThemeId && themesList.some(t => t.id === initialThemeId)) {
@@ -227,7 +229,7 @@ function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps
       themeId: selectedThemeId
     }));
 
-    store.setActiveSchedule({
+    useStore.getState().setActiveSchedule({
       ...activeSchedule,
       items: updatedItems
     });

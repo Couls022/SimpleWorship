@@ -10,8 +10,7 @@ interface QuickSongSearchModalProps {
 }
 
 function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
-  const store = useStore();
-  const { songsList, addScheduleItem } = store;
+  const songsList = useStore(state => state.songsList);
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +65,7 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
   }, [selectedIndex]);
 
   const handleAddToSchedule = (song: Song) => {
-    store.addScheduleItem({
+    useStore.getState().addScheduleItem({
       type: 'song',
       contentId: song.id,
       name: song.title,
@@ -91,8 +90,8 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
       notes: song.author ? `Key of ${song.key || 'G'} • By ${song.author}` : undefined,
       customBackgroundUrl: undefined
     };
-    store.setPreviewItem(item.id, 0);
-    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
+    useStore.getState().setPreviewItem(item.id, 0);
+    useStore.getState().goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Broadcasting "${song.title}" directly to Live Output!` }));
     onClose();
   };

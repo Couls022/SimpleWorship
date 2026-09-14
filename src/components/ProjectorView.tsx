@@ -160,7 +160,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     
     const assignment = assignments.get(displayId);
 
-    if (assignment) {
+    if (assignment && assignment.candidateGroupIds && assignment.candidateGroupIds.length > 0) {
       return {
         winningGroupId: assignment.assignedGroupId,
         isLiveActive: Boolean(assignment.assignedGroupId && assignment.liveGroupIds.includes(assignment.assignedGroupId)),
@@ -169,11 +169,18 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       };
     }
 
+    // Direct Group Routing Fallback (e.g., dedicated Stage/Foldback popups, secondary windows or unassigned physical screens)
+    const effectiveGroupId = routedGroupId || (
+      (displayId && (displayId.toLowerCase().includes('stage') || displayId.toLowerCase().includes('foldback') || displayId.toLowerCase().includes('confidence'))) 
+        ? 'group-stage' 
+        : 'group-congregation'
+    );
+    const isLive = Boolean(groupStates[effectiveGroupId]?.isLiveEnabled ?? true);
     return {
-      winningGroupId: null,
-      isLiveActive: false,
-      candidateGroupIds: [],
-      liveGroupIds: []
+      winningGroupId: effectiveGroupId,
+      isLiveActive: isLive,
+      candidateGroupIds: [effectiveGroupId],
+      liveGroupIds: isLive ? [effectiveGroupId] : []
     };
   }, [displayId, outputGroups, groupStates, activeControlGroupId]);
 

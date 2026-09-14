@@ -29,16 +29,14 @@ interface ProfilesManagerModalProps {
 }
 
 function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesManagerModalProps) {
-  const { 
-    profiles, 
-    activeProfileId, 
-    addProfile, 
-    updateProfile, 
-    removeProfile, 
-    setActiveProfile,
-    activeSchedule,
-    shortcutSettings
-  } = useStore();
+  const profiles = useStore(state => state.profiles);
+  const activeProfileId = useStore(state => state.activeProfileId);
+  const addProfile = useStore(state => state.addProfile);
+  const updateProfile = useStore(state => state.updateProfile);
+  const removeProfile = useStore(state => state.removeProfile);
+  const setActiveProfile = useStore(state => state.setActiveProfile);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const shortcutSettings = useStore(state => state.shortcutSettings);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');

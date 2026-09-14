@@ -17,7 +17,8 @@ export default function PresentationsTab() {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingPresentation, setEditingPresentation] = useState<Asset | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
-  const { addScheduleItem, goLiveItem } = useStore();
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

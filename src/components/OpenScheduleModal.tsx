@@ -11,7 +11,7 @@ interface OpenScheduleModalProps {
 }
 
 export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
-  const store = useStore();
+  const activeSchedule = useStore(state => state.activeSchedule);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -28,8 +28,9 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
     try {
       const list = await dbApi.getAllSchedules();
       // Also include active store schedule if not saved yet
-      if (store.activeSchedule && !list.find(s => s.id === store.activeSchedule?.id)) {
-        list.push(store.activeSchedule);
+      const currentActive = useStore.getState().activeSchedule;
+      if (currentActive && !list.find(s => s.id === currentActive.id)) {
+        list.push(currentActive);
       }
       setSchedules(list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     } catch (e) {
@@ -40,7 +41,7 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
   };
 
   const handleSelectSchedule = async (schedule: Schedule) => {
-    store.setActiveSchedule(schedule);
+    useStore.getState().setActiveSchedule(schedule);
     await dbApi.addSchedule(schedule).catch(() => {});
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', {
@@ -58,8 +59,8 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
       const db = await (await import('../db')).getDB();
       await db.delete('schedules', id);
       setSchedules(prev => prev.filter(s => s.id !== id));
-      if (store.activeSchedule?.id === id) {
-        store.setActiveSchedule({
+      if (useStore.getState().activeSchedule?.id === id) {
+        useStore.getState().setActiveSchedule({
           id: `sched-${Date.now()}`,
           name: 'Blank Schedule',
           createdAt: Date.now(),
@@ -100,15 +101,15 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
       }
       
       if (systemOptions) {
-        store.updateSystemOptions(systemOptions);
+        useStore.getState().updateSystemOptions(systemOptions);
       }
       
       if (outputGroups && outputGroups.length > 0) {
-        store.setOutputGroups(outputGroups);
+        useStore.getState().setOutputGroups(outputGroups);
       }
 
       await dbApi.addSchedule(schedule);
-      store.setActiveSchedule(schedule);
+      useStore.getState().setActiveSchedule(schedule);
       window.dispatchEvent(
         new CustomEvent('simpleworship:notify', {
           detail: `Successfully imported .sws schedule "${schedule.name}" (${schedule.items.length} items)!`
@@ -243,7 +244,7 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
             </div>
           ) : (
             filtered.map((sched) => {
-              const isActive = store.activeSchedule?.id === sched.id;
+              const isActive = activeSchedule?.id === sched.id;
               const dateStr = sched.createdAt 
                 ? new Date(sched.createdAt).toLocaleDateString(undefined, { 
                     month: 'short', 

@@ -20,7 +20,7 @@ const PRESETS = [
 ];
 
 export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
-  const store = useStore();
+  const activeScheduleName = useStore(state => state.activeSchedule?.name);
   const [scheduleName, setScheduleName] = useState('Sunday Morning Service');
   const [selectedPreset, setSelectedPreset] = useState('blank');
 
@@ -34,7 +34,7 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
       items: []
     };
 
-    store.setActiveSchedule(newSchedule);
+    useStore.getState().setActiveSchedule(newSchedule);
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', {
         detail: `Created new schedule "${newSchedule.name}"!`
@@ -126,7 +126,7 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-[#2d313c] bg-[#17191f]">
           <span className="text-xs text-gray-400">
-            Current Schedule: <strong className="text-gray-200">{store.activeSchedule?.name || 'Untitled'}</strong>
+            Current Schedule: <strong className="text-gray-200">{activeScheduleName || 'Untitled'}</strong>
           </span>
           <div className="flex items-center gap-2">
             <button

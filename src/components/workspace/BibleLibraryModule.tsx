@@ -46,8 +46,11 @@ interface BibleLibraryModuleProps {
 }
 
 export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibraryModuleProps) {
-  const store = useStore();
-  const { addScheduleItem, setPreviewItem, goLiveItem } = store;
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const setPreviewItem = useStore(state => state.setPreviewItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
+  const themesList = useStore(state => state.themesList);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
 
   // View options state with operator preference persistence
   const [viewOptions, setViewOptions] = useState<ScriptureViewOptions>(() => {
@@ -265,7 +268,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
     }
 
     const fullText = sorted.map(v => v.text.trim()).join('  ');
-    const bibleTheme = store.themesList?.find(t => t.type === 'bible');
+    const bibleTheme = themesList?.find(t => t.type === 'bible');
     
     // We intentionally do not bake the default background into customBackgroundUrl
     // so that if the default theme changes, the item automatically updates.
@@ -336,7 +339,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
   const handleGoLiveNow = (verses: ScriptureVerse[]) => {
     const item = createPresentationItem(verses);
     setPreviewItem(item.id, 0);
-    goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
+    goLiveItem(item.id, 0, activeControlGroupId || undefined, item);
   };
 
   const handleCopy = (verse: ScriptureVerse) => {

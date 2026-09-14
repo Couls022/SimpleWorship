@@ -32,16 +32,13 @@ const ClockDisplay = React.memo(() => {
 });
 
 export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarProps) {
-  const store = useStore();
-  const { 
-    outputGroups, 
-    groupStates, 
-    routerPanels,
-    activeRouterId,
-    setActiveRouterId,
-    addRouterPanel,
-    removeRouterPanel
-  } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const groupStates = useStore(state => state.groupStates);
+  const routerPanels = useStore(state => state.routerPanels);
+  const activeRouterId = useStore(state => state.activeRouterId);
+  const setActiveRouterId = useStore(state => state.setActiveRouterId);
+  const addRouterPanel = useStore(state => state.addRouterPanel);
+  const removeRouterPanel = useStore(state => state.removeRouterPanel);
 
   const handleSelectRouter = (routerId: string, routerName: string) => {
     setActiveRouterId(routerId);

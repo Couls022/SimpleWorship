@@ -9,8 +9,7 @@ interface PrintScheduleModalProps {
 }
 
 function PrintScheduleModal({ onClose }: PrintScheduleModalProps) {
-  const store = useStore();
-  const schedule = store.activeSchedule;
+  const schedule = useStore(state => state.activeSchedule);
   const printAreaRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = () => {

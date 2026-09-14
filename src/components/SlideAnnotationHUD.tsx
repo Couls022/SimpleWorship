@@ -46,18 +46,16 @@ export const SlideAnnotationHUD: React.FC<SlideAnnotationHUDProps> = ({
   className = '',
   onClose,
 }) => {
-  const { 
-    annotationState, 
-    setAnnotationTool, 
-    setAnnotationColor, 
-    setAnnotationSize, 
-    setAnnotationOpacity, 
-    setAnnotationPersist,
-    toggleAnnotationMode,
-    clearAnnotations, 
-    undoAnnotation, 
-    redoAnnotation 
-  } = useStore();
+  const annotationState = useStore(state => state.annotationState);
+  const setAnnotationTool = useStore(state => state.setAnnotationTool);
+  const setAnnotationColor = useStore(state => state.setAnnotationColor);
+  const setAnnotationSize = useStore(state => state.setAnnotationSize);
+  const setAnnotationOpacity = useStore(state => state.setAnnotationOpacity);
+  const setAnnotationPersist = useStore(state => state.setAnnotationPersist);
+  const toggleAnnotationMode = useStore(state => state.toggleAnnotationMode);
+  const clearAnnotations = useStore(state => state.clearAnnotations);
+  const undoAnnotation = useStore(state => state.undoAnnotation);
+  const redoAnnotation = useStore(state => state.redoAnnotation);
 
   const {
     enabled,

@@ -36,10 +36,13 @@ import RemoteControlModal from './RemoteControlModal';
 import { Song, PresentationItem, Asset } from '../types';
 import { PresentationEditorModal } from './PresentationEditorModal';
 import { matchesShortcut, DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
+import { PresentationCore } from '../core/PresentationCore';
+import { getSlideForShortcut } from '../utils/slideLabelHelper';
 
 export default function ModeratorView() {
-  const store = useStore();
-  const { loadAllData, shortcutSettings, outputGroups } = store;
+  const shortcutSettings = useStore(state => state.shortcutSettings);
+  const outputGroups = useStore(state => state.outputGroups);
+  const routerPanels = useStore(state => state.routerPanels);
   const workspace = useWorkspace();
   const { resetLayout } = workspace;
 
@@ -83,12 +86,9 @@ export default function ModeratorView() {
   // Proactive Caching Mechanism for PPTX Binary Data
   // Removed proactive PPTX hydration to prevent heavy binary data in the global state.
   // PptxRenderOverlay now dynamically fetches binaries when needed.
-  useEffect(() => {
-    // Keep the dependency array but no-op, or just remove the effect contents.
-  }, [store.activeSchedule?.items]);
 
   useEffect(() => {
-    loadAllData();
+    useStore.getState().loadAllData();
 
     // Listen to custom notify events
     const handleNotification = (e: any) => {
@@ -167,7 +167,7 @@ export default function ModeratorView() {
       window.removeEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
       window.removeEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
     };
-  }, [loadAllData, resetLayout]);
+  }, [resetLayout]);
 
   // Global Keyboard Shortcuts (Dynamic based on shortcutSettings)
   useEffect(() => {
@@ -182,6 +182,7 @@ export default function ModeratorView() {
 
       const isInputActive = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName);
       const mappings = shortcutSettings?.keyMappings || DEFAULT_SIMPLEWORSHIP_MAPPINGS;
+      const currentStore = useStore.getState();
 
       // F1 or Ctrl+/ opens Center Shortcuts settings dialog from anywhere (unless F1 is mapped to clearOutput)
       if (((e.key === 'F1' && mappings?.clearOutput !== 'F1') || ((e.ctrlKey || e.metaKey) && e.key === '/'))) {
@@ -206,8 +207,39 @@ export default function ModeratorView() {
         (e.key === 'Enter' && (e.ctrlKey || e.metaKey))
       ) {
         e.preventDefault();
-        store.goLive();
+        currentStore.goLive();
         return;
+      }
+
+      // 1.5 Slide Label Quick Navigation (e.g. C for Chorus, V for Verse, B for Bridge, E for Ending, etc.)
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key && e.key.length <= 8) {
+        const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
+        const groupState = currentStore.groupStates[targetId] || currentStore.stagedGroupStates[targetId];
+
+        const activeItem = PresentationCore.getActiveContent(
+          currentStore.activeSchedule,
+          groupState,
+          groupState?.directLiveItem
+        );
+
+        if (activeItem) {
+          const slides = PresentationCore.generateSlides(activeItem, currentStore.songsList, currentStore.systemOptions);
+          if (slides && slides.length > 0) {
+            const currentIdx = groupState?.activeSlideIndex ?? 0;
+            const navResult = getSlideForShortcut(e.key, slides, currentIdx, currentStore.systemOptions?.slideLabels);
+
+            if (navResult) {
+              e.preventDefault();
+              currentStore.goLiveSlide(navResult.slideIndex, targetId);
+              window.dispatchEvent(
+                new CustomEvent('simpleworship:notify', {
+                  detail: `Jumped to ${navResult.slideTitle} (${navResult.matchedLabel.name}) [Key: ${navResult.matchedLabel.shortcut}]`
+                })
+              );
+              return;
+            }
+          }
+        }
       }
 
       // 2. Clear Output controls
@@ -217,8 +249,8 @@ export default function ModeratorView() {
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'c' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-        store.toggleClear(targetId);
+        const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
+        currentStore.toggleClear(targetId);
         return;
       }
 
@@ -230,7 +262,7 @@ export default function ModeratorView() {
         e.key === 'PageDown'
       ) {
         e.preventDefault();
-        store.goLiveNext();
+        currentStore.goLiveNext();
         return;
       }
 
@@ -241,7 +273,7 @@ export default function ModeratorView() {
         e.key === 'PageUp'
       ) {
         e.preventDefault();
-        store.goLivePrev();
+        currentStore.goLivePrev();
         return;
       }
 
@@ -251,7 +283,7 @@ export default function ModeratorView() {
         (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === 'n' || e.key === 'ArrowRight'))
       ) {
         e.preventDefault();
-        store.goNextScheduleItem();
+        currentStore.goNextScheduleItem();
         return;
       }
       if (
@@ -259,7 +291,7 @@ export default function ModeratorView() {
         (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === 'p' || e.key === 'ArrowLeft'))
       ) {
         e.preventDefault();
-        store.goPrevScheduleItem();
+        currentStore.goPrevScheduleItem();
         return;
       }
 
@@ -270,8 +302,8 @@ export default function ModeratorView() {
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'b' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-        store.toggleBlack(targetId);
+        const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
+        currentStore.toggleBlack(targetId);
         return;
       }
       if (
@@ -280,32 +312,32 @@ export default function ModeratorView() {
         (shortcutSettings?.quickKeysBcl && e.key.toLowerCase() === 'l' && !e.altKey && !e.ctrlKey && !e.metaKey)
       ) {
         e.preventDefault();
-        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-        store.toggleLogo(targetId);
+        const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
+        currentStore.toggleLogo(targetId);
         return;
       }
 
       // Slide Annotation Shortcuts
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        store.toggleAnnotationMode();
+        currentStore.toggleAnnotationMode();
         return;
       }
 
-      if (store.annotationState?.enabled) {
+      if (currentStore.annotationState?.enabled) {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
           e.preventDefault();
-          store.undoAnnotation();
+          currentStore.undoAnnotation();
           return;
         }
         if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
           e.preventDefault();
-          store.redoAnnotation();
+          currentStore.redoAnnotation();
           return;
         }
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
           e.preventDefault();
-          store.clearAnnotations();
+          currentStore.clearAnnotations();
           return;
         }
       }
@@ -319,12 +351,12 @@ export default function ModeratorView() {
 
       // Escape Key (Restore normal presentation or close popups)
       if (e.key === 'Escape') {
-        const activeGroup = store.activeControlGroupId ? store.groupStates[store.activeControlGroupId] : null;
+        const activeGroup = currentStore.activeControlGroupId ? currentStore.groupStates[currentStore.activeControlGroupId] : null;
         if (activeGroup && (activeGroup.isBlack || activeGroup.isClear || activeGroup.showLogo)) {
-          const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-          if (activeGroup.isBlack) store.toggleBlack(targetId);
-          if (activeGroup.isClear) store.toggleClear(targetId);
-          if (activeGroup.showLogo) store.toggleLogo(targetId);
+          const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
+          if (activeGroup.isBlack) currentStore.toggleBlack(targetId);
+          if (activeGroup.isClear) currentStore.toggleClear(targetId);
+          if (activeGroup.showLogo) currentStore.toggleLogo(targetId);
         }
         setIsShortcutsOpen(false);
         setIsQuickSearchOpen(false);
@@ -336,9 +368,9 @@ export default function ModeratorView() {
       // 7. Numeric Direct Verse Jump (1-9)
       if (shortcutSettings?.numericQuickJump && ['1','2','3','4','5','6','7','8','9'].includes(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const num = parseInt(e.key, 10);
-        const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
+        const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
         e.preventDefault();
-        store.goLiveSlide(num - 1, targetId);
+        currentStore.goLiveSlide(num - 1, targetId);
         window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Jumped directly to Slide / Verse #${num}` }));
         return;
       }
@@ -368,7 +400,7 @@ export default function ModeratorView() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store, shortcutSettings, isShortcutsOpen]);
+  }, [shortcutSettings, isShortcutsOpen]);
 
   return (
     <div className="enterprise-workspace bg-[#141519] text-gray-200 overflow-hidden font-sans select-none relative">
@@ -456,11 +488,11 @@ export default function ModeratorView() {
       {/* Fixed primary Live panel via Workspace Layout (if floating, LayoutManager hides its fixed one) */}
       <FloatingPanel id="live" icon={<Tv size={13} />}>
         <div className="flex h-full w-full">
-          {store.routerPanels[0] ? (
+          {routerPanels[0] ? (
             <div className="flex-1 h-full overflow-hidden">
               <LivePanel 
-                groupId={store.routerPanels[0].targetOutputGroupId || outputGroups[0]?.id} 
-                routerId={store.routerPanels[0].routerId}
+                groupId={routerPanels[0].targetOutputGroupId || outputGroups[0]?.id} 
+                routerId={routerPanels[0].routerId}
               />
             </div>
           ) : (
@@ -472,7 +504,7 @@ export default function ModeratorView() {
       </FloatingPanel>
 
       {/* Dynamic Additional Router Panels */}
-      {store.routerPanels.slice(1).map(router => (
+      {routerPanels.slice(1).map(router => (
         <FloatingPanel key={router.routerId} id={`live-${router.routerId}`} icon={<Tv size={13} />}>
           <div className="flex h-full w-full">
             <div className="flex-1 h-full overflow-hidden">
@@ -562,9 +594,9 @@ export default function ModeratorView() {
             setEditingSchedulePresentationItem(null);
           }}
           onSaved={(savedAsset) => {
-            store.loadAllData();
+            useStore.getState().loadAllData();
             if (editingSchedulePresentationItem) {
-              store.updateScheduleItem(editingSchedulePresentationItem.id, {
+              useStore.getState().updateScheduleItem(editingSchedulePresentationItem.id, {
                 name: savedAsset.name,
                 data: savedAsset.data
               });
@@ -580,8 +612,8 @@ export default function ModeratorView() {
           onClose={() => {
             setEditingScheduleItem(null);
           }}
-          onSaveScheduleItem={(updatedFields, updateMasterToo) => {
-            store.updateScheduleItem(editingScheduleItem.id, updatedFields);
+          onSaveScheduleItem={(updatedFields) => {
+            useStore.getState().updateScheduleItem(editingScheduleItem.id, updatedFields);
           }}
         />
       )}

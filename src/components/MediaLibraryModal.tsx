@@ -28,8 +28,9 @@ interface MediaLibraryModalProps {
 }
 
 export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryModalProps) {
-  const store = useStore();
-  const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem, themesList, systemOptions } = store;
+  const assetsList = useStore(state => state.assetsList);
+  const themesList = useStore(state => state.themesList);
+  const systemOptions = useStore(state => state.systemOptions);
 
   const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'image' | 'audio' | 'video'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -157,7 +158,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
       try {
         const { processAssetFile } = await import('../db/assets');
         const newAsset = await processAssetFile(file);
-        addAsset(newAsset);
+        useStore.getState().addAsset(newAsset);
         window.dispatchEvent(
           new CustomEvent('simpleworship:notify', { 
             detail: `Imported "${newAsset.name}" successfully!` 
@@ -193,7 +194,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
     const isVid = asset.type === 'video' || asset.type === 'motion';
     const isAud = asset.type === 'audio';
     const itemType = isVid ? ('video' as const) : (isAud ? ('audio' as const) : ('image' as const));
-    addScheduleItem({
+    useStore.getState().addScheduleItem({
       type: itemType,
       contentId: asset.id,
       name: asset.name,
@@ -231,8 +232,8 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
         type: asset.type
       }
     };
-    store.setPreviewItem(item.id, 0);
-    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
+    useStore.getState().setPreviewItem(item.id, 0);
+    useStore.getState().goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);
     onClose();
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
@@ -255,7 +256,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
   const handleSetDefaultBg = (asset: Asset, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers', e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
-    setDefaultBackground(asset.url, category, isVideo);
+    useStore.getState().setDefaultBackground(asset.url, category, isVideo);
     setContextMenu(null);
     const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
     window.dispatchEvent(
@@ -271,7 +272,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
       audioRef.current.pause();
       setPlayingAudioId(null);
     }
-    deleteAsset(asset.id);
+    useStore.getState().deleteAsset(asset.id);
     if (selectedAssetId === asset.id) {
       setSelectedAssetId(null);
     }

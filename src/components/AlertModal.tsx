@@ -35,19 +35,11 @@ interface AlertModalProps {
 }
 
 function AlertModal({ onClose }: AlertModalProps) {
-  const store = useStore();
-  const { 
-    alert: globalAlert, 
-    groupAlerts, 
-    setAlert, 
-    activeControlGroupId, 
-    outputGroups,
-    alertPresets = [],
-    addAlertPreset,
-    updateAlertPreset,
-    deleteAlertPreset,
-    resetAlertPresets
-  } = store;
+  const globalAlert = useStore(state => state.alert);
+  const groupAlerts = useStore(state => state.groupAlerts);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const outputGroups = useStore(state => state.outputGroups);
+  const alertPresets = useStore(state => state.alertPresets);
   
   const currentActiveGroup = activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
   const alert = (currentActiveGroup && groupAlerts[currentActiveGroup]) || globalAlert;
@@ -124,9 +116,9 @@ function AlertModal({ onClose }: AlertModalProps) {
     };
 
     if (targetGroup === 'all') {
-      setAlert(alertData);
+      useStore.getState().setAlert(alertData);
     } else {
-      setAlert(alertData, targetGroup);
+      useStore.getState().setAlert(alertData, targetGroup);
     }
 
     dispatchAlertToBackend(alertData);
@@ -152,9 +144,9 @@ function AlertModal({ onClose }: AlertModalProps) {
     };
 
     if (targetGroup === 'all') {
-      setAlert(alertData);
+      useStore.getState().setAlert(alertData);
     } else {
-      setAlert(alertData, targetGroup);
+      useStore.getState().setAlert(alertData, targetGroup);
     }
 
     dispatchAlertToBackend(alertData);
@@ -164,9 +156,9 @@ function AlertModal({ onClose }: AlertModalProps) {
       setTimeout(() => {
         const clearData = { active: false };
         if (targetGroup === 'all') {
-          setAlert(clearData);
+          useStore.getState().setAlert(clearData);
         } else {
-          setAlert(clearData, targetGroup);
+          useStore.getState().setAlert(clearData, targetGroup);
         }
         dispatchAlertToBackend(clearData);
       }, autoDismissSecs * 1000);
@@ -183,9 +175,9 @@ function AlertModal({ onClose }: AlertModalProps) {
   const handleClearAlert = () => {
     const clearData = { active: false, showNursery: false };
     if (targetGroup === 'all') {
-      setAlert(clearData);
+      useStore.getState().setAlert(clearData);
     } else {
-      setAlert(clearData, targetGroup);
+      useStore.getState().setAlert(clearData, targetGroup);
     }
     dispatchAlertToBackend(clearData);
     window.dispatchEvent(
@@ -228,7 +220,7 @@ function AlertModal({ onClose }: AlertModalProps) {
     e.preventDefault();
     if (!message.trim()) return;
 
-    const created = addAlertPreset({
+    const created = useStore.getState().addAlertPreset({
       title: newPresetTitle.trim() || message.trim().slice(0, 25),
       message: message.trim(),
       position,
@@ -275,7 +267,7 @@ function AlertModal({ onClose }: AlertModalProps) {
     e.preventDefault();
     if (!editingPresetId) return;
 
-    updateAlertPreset(editingPresetId, {
+    useStore.getState().updateAlertPreset(editingPresetId, {
       title: editForm.title.trim() || editForm.message.slice(0, 25),
       message: editForm.message.trim(),
       position: editForm.position,
@@ -330,7 +322,7 @@ function AlertModal({ onClose }: AlertModalProps) {
 
   const handleDeletePreset = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteAlertPreset(id);
+    useStore.getState().deleteAlertPreset(id);
     if (activePresetId === id) setActivePresetId(null);
     if (editingPresetId === id) setEditingPresetId(null);
     setDeleteConfirmId(null);
@@ -344,7 +336,7 @@ function AlertModal({ onClose }: AlertModalProps) {
 
   const handleResetDefaults = () => {
     if (window.confirm('Reset all alert presets to system defaults?')) {
-      resetAlertPresets();
+      useStore.getState().resetAlertPresets();
       setActivePresetId(null);
       setEditingPresetId(null);
       setIsCreatingPreset(false);

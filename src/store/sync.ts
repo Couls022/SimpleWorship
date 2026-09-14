@@ -1,5 +1,6 @@
+import { useState, useEffect, useCallback } from 'react';
 import { useStore } from './useStore';
-import { broadcastStateChange, subscribeToBroadcast } from '../utils/broadcastSync';
+import { broadcastStateChange, subscribeToBroadcast, reconnectBroadcastChannel, sanitizeForSync } from '../utils/broadcastSync';
 import { dbApi } from '../db';
 
 export interface SyncTelemetry {
@@ -13,6 +14,176 @@ export interface SyncTelemetry {
   backendStatus: 'connected' | 'disconnected' | 'syncing';
   latency?: number;
   lastCommandReceived?: string | null;
+}
+
+export interface StageConnectionState {
+  status: 'connected' | 'reconnecting' | 'disconnected';
+  lastHeartbeat: number | null;
+  reconnectAttempts: number;
+  lastReconnectTime: number | null;
+  latency: number;
+  error?: string | null;
+}
+
+export const stageConnectionState: StageConnectionState = {
+  status: 'connected',
+  lastHeartbeat: typeof window !== 'undefined' ? Date.now() : null,
+  reconnectAttempts: 0,
+  lastReconnectTime: null,
+  latency: 12,
+  error: null
+};
+
+export function dispatchStageConnectionUpdate() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('simpleworship:stage-connection-status', {
+      detail: { ...stageConnectionState }
+    }));
+  }
+}
+
+export async function attemptStageReconnect(isManual = false): Promise<boolean> {
+  stageConnectionState.status = 'reconnecting';
+  stageConnectionState.reconnectAttempts = isManual ? 1 : stageConnectionState.reconnectAttempts + 1;
+  stageConnectionState.lastReconnectTime = Date.now();
+  dispatchStageConnectionUpdate();
+
+  // 1. Re-initialize / re-establish the underlying BroadcastChannel
+  reconnectBroadcastChannel();
+
+  // 2. Transmit high-priority state recovery request across IPC & storage channels
+  broadcastStateChange({
+    type: 'REQUEST_STATE',
+    data: {
+      origin: 'stage_display_reconnect',
+      isManual,
+      attempt: stageConnectionState.reconnectAttempts,
+      timestamp: Date.now()
+    }
+  });
+
+  // 3. Resilient fallback hydration from localStorage
+  try {
+    const cachedStates = localStorage.getItem('simpleworship_group_states_v1');
+    if (cachedStates) {
+      const parsed = JSON.parse(cachedStates);
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        useStore.setState((prev) => ({
+          groupStates: { ...prev.groupStates, ...parsed }
+        }));
+      }
+    }
+  } catch (e) {}
+
+  // 4. Query Express backend sync REST endpoint as fallback
+  if (isHttpServerAvailable()) {
+    try {
+      const res = await fetch('/api/sync/state');
+      if (res.ok) {
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          const payload = await res.json();
+          if (payload && payload.success && payload.data) {
+            useStore.setState((prev) => ({
+              groupStates: { ...prev.groupStates, ...(payload.data.groupStates || {}) },
+              alert: payload.data.alert || prev.alert,
+              ...(payload.data.activeSchedule ? { activeSchedule: payload.data.activeSchedule } : {})
+            }));
+            stageConnectionState.status = 'connected';
+            stageConnectionState.lastHeartbeat = Date.now();
+            stageConnectionState.reconnectAttempts = 0;
+            stageConnectionState.error = null;
+            dispatchStageConnectionUpdate();
+            return true;
+          }
+        }
+      }
+    } catch (err) {}
+  }
+
+  return false;
+}
+
+let stageWatchdogTimer: any = null;
+let watchdogRefCount = 0;
+
+export function startStageConnectionWatchdog(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  watchdogRefCount++;
+
+  if (!stageWatchdogTimer) {
+    stageWatchdogTimer = setInterval(() => {
+      const now = Date.now();
+      const lastSeen = stageConnectionState.lastHeartbeat || now;
+      const silentDuration = now - lastSeen;
+
+      // If no broadcast packet or heartbeat has arrived in > 5000ms, flag as interrupted / reconnecting
+      if (silentDuration > 5000) {
+        if (stageConnectionState.status === 'connected') {
+          stageConnectionState.status = 'reconnecting';
+          dispatchStageConnectionUpdate();
+        }
+
+        // Throttle auto-reconnection attempts with progressive backoff (2s up to 5s)
+        const timeSinceLastAttempt = now - (stageConnectionState.lastReconnectTime || 0);
+        const backoffInterval = Math.min(2000 * Math.pow(1.2, Math.min(stageConnectionState.reconnectAttempts, 4)), 5000);
+
+        if (timeSinceLastAttempt >= backoffInterval) {
+          attemptStageReconnect(false);
+        }
+      }
+    }, 1000);
+  }
+
+  const handleWake = () => {
+    const silent = Date.now() - (stageConnectionState.lastHeartbeat || 0);
+    if (silent > 3500) {
+      attemptStageReconnect(true);
+    }
+  };
+
+  window.addEventListener('online', handleWake);
+  window.addEventListener('focus', handleWake);
+
+  return () => {
+    watchdogRefCount--;
+    window.removeEventListener('online', handleWake);
+    window.removeEventListener('focus', handleWake);
+    if (watchdogRefCount <= 0 && stageWatchdogTimer) {
+      clearInterval(stageWatchdogTimer);
+      stageWatchdogTimer = null;
+      watchdogRefCount = 0;
+    }
+  };
+}
+
+export function useStageConnection() {
+  const [connection, setConnection] = useState<StageConnectionState>({ ...stageConnectionState });
+
+  useEffect(() => {
+    const cleanupWatchdog = startStageConnectionWatchdog();
+
+    const handleUpdate = (e: any) => {
+      if (e?.detail) {
+        setConnection({ ...e.detail });
+      }
+    };
+
+    window.addEventListener('simpleworship:stage-connection-status', handleUpdate);
+    return () => {
+      cleanupWatchdog();
+      window.removeEventListener('simpleworship:stage-connection-status', handleUpdate);
+    };
+  }, []);
+
+  const reconnect = useCallback(() => {
+    return attemptStageReconnect(true);
+  }, []);
+
+  return {
+    ...connection,
+    reconnect
+  };
 }
 
 export const syncTelemetry: SyncTelemetry = {
@@ -175,7 +346,7 @@ async function syncStateToBackend() {
   const startTime = performance.now();
   try {
     const store = useStore.getState();
-    const payload = {
+    const payload = sanitizeForSync({
       groupStates: store.groupStates,
       alert: store.alert,
       activeSchedule: store.activeSchedule,
@@ -183,7 +354,7 @@ async function syncStateToBackend() {
       outputGroups: store.outputGroups,
       themesList: store.themesList,
       systemOptions: store.systemOptions
-    };
+    });
     
     syncTelemetry.backendStatus = 'syncing';
     window.dispatchEvent(new CustomEvent('simpleworship:sync-update', { detail: { ...syncTelemetry } }));
@@ -223,9 +394,30 @@ export function initSync(isProjector: boolean = false) {
   initialized = true;
 
   if (isProjector) {
+    // Start connection watchdog for projector and stage displays
+    startStageConnectionWatchdog();
+
     // Projector listens for real-time state updates across all channel message types
     subscribeToBroadcast((payload) => {
-      if (!payload || !payload.data) return;
+      if (!payload) return;
+
+      // Track connection health
+      stageConnectionState.lastHeartbeat = Date.now();
+      if (payload.timestamp) {
+        stageConnectionState.latency = Math.max(1, Math.min(999, Date.now() - payload.timestamp));
+      }
+      if (stageConnectionState.status !== 'connected') {
+        stageConnectionState.status = 'connected';
+        stageConnectionState.reconnectAttempts = 0;
+        stageConnectionState.error = null;
+        dispatchStageConnectionUpdate();
+      }
+
+      if (payload.type === 'HEARTBEAT') {
+        return;
+      }
+
+      if (!payload.data) return;
       syncTelemetry.lastReceivedTime = Date.now();
       syncTelemetry.messageCount++;
 
@@ -333,6 +525,20 @@ export function initSync(isProjector: boolean = false) {
         .catch(() => {});
     }
   } else {
+    // Moderator broadcasts a periodic heartbeat so stage display can verify active engine connectivity
+    const sendHeartbeat = () => {
+      broadcastStateChange({
+        type: 'HEARTBEAT',
+        data: {
+          timestamp: Date.now(),
+          engine: 'simpleworship_master',
+          uptime: performance.now()
+        }
+      });
+    };
+    sendHeartbeat();
+    setInterval(sendHeartbeat, 2500);
+
     // Moderator listens for requests and broadcasts updates
     subscribeToBroadcast((payload) => {
       if (payload.type === 'REQUEST_STATE') {

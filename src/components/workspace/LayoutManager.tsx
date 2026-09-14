@@ -26,8 +26,11 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
     layoutKey, 
     updatePanelCollapsed
   } = useWorkspaceLayout();
-  const store = useStore();
-  const { outputGroups, activeControlGroupId, setActiveControlGroupId } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const setActiveControlGroupId = useStore(state => state.setActiveControlGroupId);
+  const activeRouterId = useStore(state => state.activeRouterId);
+  const routerPanels = useStore(state => state.routerPanels);
 
   const schedulePanelRef = useRef<ImperativePanelHandle>(null);
 
@@ -37,8 +40,8 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
 
   // Determine active target route for the Fixed Live Output Panel (Without Display)
   const effectiveTargetGroupId = (() => {
-    if (store.activeRouterId && store.routerPanels.length > 0) {
-      const activeRouter = store.routerPanels.find(p => p.routerId === store.activeRouterId);
+    if (activeRouterId && routerPanels.length > 0) {
+      const activeRouter = routerPanels.find(p => p.routerId === activeRouterId);
       if (activeRouter?.targetOutputGroupId && outputGroups.some(g => g.id === activeRouter.targetOutputGroupId)) {
         return activeRouter.targetOutputGroupId;
       }
@@ -148,7 +151,7 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
               <LivePanel 
                 key={`live-control-${effectiveTargetGroupId}`}
                 groupId={effectiveTargetGroupId} 
-                routerId={store.activeRouterId || undefined}
+                routerId={activeRouterId || undefined}
                 showPreviewDisplay={false} 
               />
             </div>

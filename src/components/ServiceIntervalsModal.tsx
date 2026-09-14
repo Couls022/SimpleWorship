@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { X, Clock, Settings, Save, Image as ImageIcon, Check, Play, Pause, RotateCcw } from 'lucide-react';
+import { X, Clock, Save, Image as ImageIcon, Check, Play, Pause, RotateCcw } from 'lucide-react';
 import MediaLibraryModal from './MediaLibraryModal';
 import { Asset } from '../types';
 
@@ -9,8 +9,7 @@ interface ServiceIntervalsModalProps {
 }
 
 export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModalProps) {
-  const store = useStore();
-  const { systemOptions, updateSystemOptions } = store;
+  const systemOptions = useStore(state => state.systemOptions);
 
   const currentOpts = systemOptions?.serviceIntervals || {
     countdownEnabled: false,
@@ -20,6 +19,7 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
     backgroundAssetId: '',
     isRunning: false,
     targetTimestamp: null,
+    pausedRemainingSecs: null,
     fontFamily: 'monospace',
     fontColor: '#ffffff',
   };
@@ -34,6 +34,25 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
   
   const [isMediaBrowserOpen, setIsMediaBrowserOpen] = useState(false);
 
+  // Sync state if options change outside this modal (e.g. from OptionsDialog or BroadcastChannel)
+  useEffect(() => {
+    setEnabled(currentOpts.countdownEnabled ?? false);
+    setDuration(currentOpts.countdownTime || '05:00');
+    setLabel(currentOpts.intervalType || 'Pre-Service Countdown');
+    setShowMain(currentOpts.showOnMainDisplay ?? false);
+    setBgAssetId(currentOpts.backgroundAssetId || '');
+    setFontFamily(currentOpts.fontFamily || 'monospace');
+    setFontColor(currentOpts.fontColor || '#ffffff');
+  }, [
+    currentOpts.countdownEnabled,
+    currentOpts.countdownTime,
+    currentOpts.intervalType,
+    currentOpts.showOnMainDisplay,
+    currentOpts.backgroundAssetId,
+    currentOpts.fontFamily,
+    currentOpts.fontColor,
+  ]);
+
   const parseSeconds = (timeStr: string): number => {
     if (!timeStr) return 300;
     const parts = timeStr.trim().split(':');
@@ -46,79 +65,52 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
     return isNaN(num) ? 300 : num * 60;
   };
 
-  const handleStartPause = () => {
-    const isRunning = currentOpts.isRunning;
-    
-    // Auto-save changes when interacting with playback
-    updateSystemOptions((prev) => {
-      const baseOptions = {
-        countdownEnabled: enabled,
-        countdownTime: duration,
-        intervalType: label,
-        showOnMainDisplay: showMain,
-        backgroundAssetId: bgAssetId,
-        fontFamily,
-        fontColor,
-      };
-      
-      let newTargetTimestamp = prev.serviceIntervals?.targetTimestamp;
-      if (!isRunning) {
-        // Compute new target if it wasn't running
-        if (!newTargetTimestamp) {
-          const totalSecs = parseSeconds(duration);
-          newTargetTimestamp = Date.now() + totalSecs * 1000;
-        } else {
-           // It was paused, resume it based on whatever remaining time there was
-           // (if we wanted to be perfectly precise, we'd store remainingTime, but targetTimestamp is simpler.
-           // Actually, if it's paused we should update the target to Date.now() + remainingTime.
-           // For simplicity, we just set targetTimestamp anew from current duration if we pause/play.
-           const totalSecs = parseSeconds(duration);
-           newTargetTimestamp = Date.now() + totalSecs * 1000;
-        }
-      }
+  const [, setTimerNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!currentOpts.isRunning) return;
+    const interval = setInterval(() => setTimerNow(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [currentOpts.isRunning, currentOpts.targetTimestamp]);
 
-      return {
-        ...prev,
-        serviceIntervals: {
-          ...baseOptions,
-          isRunning: !isRunning,
-          targetTimestamp: !isRunning ? newTargetTimestamp : prev.serviceIntervals?.targetTimestamp
-        }
-      };
-    });
+  const calcCurrentRemaining = () => {
+    if (currentOpts.pausedRemainingSecs !== null && currentOpts.pausedRemainingSecs !== undefined) {
+      return Math.max(0, currentOpts.pausedRemainingSecs);
+    }
+    if (!currentOpts.isRunning || !currentOpts.targetTimestamp) {
+      return parseSeconds(duration);
+    }
+    const diff = currentOpts.targetTimestamp - Date.now();
+    return diff > 0 ? Math.ceil(diff / 1000) : 0;
   };
 
-  const handleReset = () => {
-    updateSystemOptions((prev) => ({
-      ...prev,
-      serviceIntervals: {
-        countdownEnabled: enabled,
-        countdownTime: duration,
-        intervalType: label,
-        showOnMainDisplay: showMain,
-        backgroundAssetId: bgAssetId,
-        fontFamily,
-        fontColor,
-        isRunning: false,
-        targetTimestamp: null
-      }
-    }));
+  const liveSecs = calcCurrentRemaining();
+  const liveMins = Math.floor(liveSecs / 60);
+  const liveRemainSecs = liveSecs % 60;
+  const liveFormatted = `${liveMins < 10 ? '0' : ''}${liveMins}:${liveRemainSecs < 10 ? '0' : ''}${liveRemainSecs}`;
+
+  const handleStartPause = () => {
+    if (currentOpts.isRunning) {
+      useStore.getState().pauseServiceTimer();
+    } else {
+      useStore.getState().startServiceTimer(duration, label);
+    }
+  };
+
+  const handleReset = (overrideDuration?: string) => {
+    useStore.getState().resetServiceTimer(overrideDuration || duration);
   };
 
   const handleApply = () => {
-    updateSystemOptions((prev) => ({
-      ...prev,
-      serviceIntervals: {
-        ...prev.serviceIntervals,
-        countdownEnabled: enabled,
-        countdownTime: duration,
-        intervalType: label,
-        showOnMainDisplay: showMain,
-        backgroundAssetId: bgAssetId,
-        fontFamily,
-        fontColor,
-      }
-    }));
+    useStore.getState().setServiceIntervalConfig({
+      countdownEnabled: enabled,
+      countdownTime: duration,
+      intervalType: label,
+      showOnMainDisplay: showMain,
+      backgroundAssetId: bgAssetId,
+      fontFamily,
+      fontColor,
+    });
+    window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Service interval timer settings saved' }));
     onClose();
   };
 
@@ -144,21 +136,42 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
         <div className="p-4 space-y-4 text-sm bg-[#121317] overflow-y-auto">
           {/* Main Controls */}
           <div className="flex justify-between items-center bg-[#18191f] border border-[#323642] p-3 rounded-md">
-             <div className="flex flex-col">
-               <span className="font-bold text-gray-200">Timer Status: {currentOpts.isRunning ? 'Running' : 'Paused / Stopped'}</span>
+             <div className="flex flex-col gap-1">
+               <div className="flex items-center gap-2 text-sm font-bold text-gray-200">
+                 <span>Timer Status:</span>
+                 {currentOpts.isRunning ? (
+                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 font-mono text-xs">
+                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                     Running ({liveFormatted})
+                   </span>
+                 ) : currentOpts.pausedRemainingSecs !== null ? (
+                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-950/90 border border-amber-500/60 text-amber-300 font-mono text-xs">
+                     <span className="w-2 h-2 rounded-full bg-amber-400" />
+                     Paused ({liveFormatted})
+                   </span>
+                 ) : (
+                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xs">
+                     Stopped ({duration})
+                   </span>
+                 )}
+               </div>
                <span className="text-xs text-gray-400">Controls sync instantly to all projectors</span>
              </div>
              <div className="flex items-center gap-2">
                <button 
                  onClick={handleStartPause}
-                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-colors ${currentOpts.isRunning ? 'bg-amber-600/30 text-amber-400 hover:bg-amber-600/50' : 'bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50'}`}
+                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-sm ${
+                   currentOpts.isRunning 
+                     ? 'bg-amber-600/30 border border-amber-500/60 text-amber-400 hover:bg-amber-600/50' 
+                     : 'bg-emerald-600/30 border border-emerald-500/60 text-emerald-400 hover:bg-emerald-600/50'
+                 }`}
                >
                  {currentOpts.isRunning ? <Pause size={12} /> : <Play size={12} />}
                  {currentOpts.isRunning ? 'Pause' : 'Start Timer'}
                </button>
                <button 
-                 onClick={handleReset}
-                 className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold bg-rose-600/30 text-rose-400 hover:bg-rose-600/50 transition-colors"
+                 onClick={() => handleReset()}
+                 className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold bg-rose-600/30 border border-rose-500/60 text-rose-400 hover:bg-rose-600/50 transition-colors"
                >
                  <RotateCcw size={12} />
                  Reset
@@ -198,8 +211,17 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
                     <button
                       key={time}
                       type="button"
-                      onClick={() => { setDuration(time); handleReset(); }}
-                      className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
+                      onClick={() => {
+                        setDuration(time);
+                        if (!currentOpts.isRunning) {
+                          handleReset(time);
+                        }
+                      }}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all ${
+                        duration === time 
+                          ? 'bg-amber-600/30 text-amber-300 border-amber-500/60 font-bold'
+                          : 'bg-[#252833] hover:bg-[#353949] text-gray-300 border-[#383c4b]'
+                      }`}
                     >
                       {time}
                     </button>
@@ -223,7 +245,11 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
                       key={lbl}
                       type="button"
                       onClick={() => setLabel(lbl)}
-                      className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
+                      className={`px-2 py-0.5 rounded text-[10px] border transition-all ${
+                        label === lbl 
+                          ? 'bg-amber-600/30 text-amber-300 border-amber-500/60 font-semibold' 
+                          : 'bg-[#252833] hover:bg-[#353949] text-gray-300 border-[#383c4b]'
+                      }`}
                     >
                       {lbl}
                     </button>

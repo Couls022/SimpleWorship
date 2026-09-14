@@ -1,6 +1,7 @@
 import { PresentationState, Schedule, OutputGroup, SystemOptions, RenderFrame, PresentationItem, Slide } from '../types';
 import { PresentationCore } from './PresentationCore';
 import { ThemeEngine } from './ThemeEngine';
+import { matchSlideLabel } from '../utils/slideLabelHelper';
 
 export function resolveGroupResolution(
   group: OutputGroup | undefined,
@@ -22,22 +23,38 @@ export function resolveGroupResolution(
 
   let physicalWidth = systemOptions?.mainOutput?.general?.position?.width || 1920;
   let physicalHeight = systemOptions?.mainOutput?.general?.position?.height || 1080;
+  let baseMargins = {
+    left: systemOptions.mainOutput?.general?.margins?.left || 0,
+    top: systemOptions.mainOutput?.general?.margins?.top || 0,
+    right: systemOptions.mainOutput?.general?.margins?.right || 0,
+    bottom: systemOptions.mainOutput?.general?.margins?.bottom || 0,
+  };
+
+  if (group?.id === 'group-alternate' || group?.role === 'lobby') {
+    if (systemOptions.alternateOutput?.position) {
+      physicalWidth = systemOptions.alternateOutput.position.width || 1920;
+      physicalHeight = systemOptions.alternateOutput.position.height || 1080;
+    }
+    if (systemOptions.alternateOutput?.margins) {
+      baseMargins = { ...systemOptions.alternateOutput.margins };
+    }
+  } else if (group?.id === 'group-stage' || group?.role === 'confidence') {
+    if (systemOptions.foldback?.position) {
+      physicalWidth = systemOptions.foldback.position.width || 1920;
+      physicalHeight = systemOptions.foldback.position.height || 1080;
+    }
+    if (systemOptions.foldback?.margins) {
+      baseMargins = { ...systemOptions.foldback.margins };
+    }
+  }
 
   if (availableDisplays && availableDisplays.length > 0 && group?.targetDisplayId && group.targetDisplayId !== 'window') {
-    const d = availableDisplays.find(x => x.id.toString() === group.targetDisplayId);
-    if (d) {
+    const d = availableDisplays.find(x => x.id?.toString() === group.targetDisplayId || x.label === group.targetDisplayId || x.name === group.targetDisplayId);
+    if (d?.bounds) {
       physicalWidth = d.bounds.width;
       physicalHeight = d.bounds.height;
     }
   }
-
-  const isSong = true; // simplifying margins based on system options
-  const baseMargins = {
-    left: systemOptions.mainOutput.general.margins?.left || 0,
-    top: systemOptions.mainOutput.general.margins?.top || 0,
-    right: systemOptions.mainOutput.general.margins?.right || 0,
-    bottom: systemOptions.mainOutput.general.margins?.bottom || 0,
-  };
 
   const ratio = physicalWidth / physicalHeight;
   const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${physicalWidth}×${physicalHeight}`;
@@ -70,9 +87,13 @@ export function buildRenderFrame(
   const isMedia = activeItem.type === 'image' || activeItem.type === 'video' || activeItem.type === 'audio';
   if (isMedia) return undefined;
 
-  const songFontStr = JSON.stringify(systemOptions?.mainOutput?.song || {});
-  const scriptureFontStr = JSON.stringify(systemOptions?.mainOutput?.scripture || {});
-  const cacheKey = `${groupId}_${activeItem.id}_${state.activeSlideIndex || 0}_${group?.themeId || ''}_${activeItem.themeId || ''}_${group?.customResolution?.width || 0}_${availableDisplays?.length || 0}_${songFontStr}_${scriptureFontStr}`;
+  const so = systemOptions?.mainOutput?.song;
+  const sc = systemOptions?.mainOutput?.scripture;
+  const ao = systemOptions?.alternateOutput;
+  const songFontSig = so ? `${so.labelFont?.family}_${so.labelFont?.maxSize}_${so.backdropAssetUrl || ''}` : '';
+  const scriptureFontSig = sc ? `${sc.referenceFont?.family}_${sc.verseFont?.family}_${sc.backdropAssetUrl || ''}` : '';
+  const altOutputSig = ao ? `${ao.feedMode}_${ao.defaultFont?.family}` : '';
+  const cacheKey = `${groupId}_${activeItem.id}_${state.activeSlideIndex || 0}_${group?.themeId || ''}_${activeItem.themeId || ''}_${group?.customResolution?.width || 0}_${availableDisplays?.length || 0}_${songFontSig}_${scriptureFontSig}_${altOutputSig}`;
   const cached = frameCache.get(cacheKey);
   if (cached) {
     return { ...cached.frame, timestamp: state.timestamp };
@@ -103,6 +124,17 @@ export function buildRenderFrame(
     typeThemeId = 'theme-presentation';
     systemFontOverride = ThemeEngine.getSystemFontForContent(systemOptions, 'presentation');
   }
+
+  const isAltGroup = groupId === 'group-alternate' || group?.id === 'group-alternate' || group?.role === 'lobby';
+  if (isAltGroup && systemOptions?.alternateOutput?.defaultFont) {
+    const altFontStyles = ThemeEngine.fontStyleToThemeStyles(systemOptions.alternateOutput.defaultFont);
+    if (altFontStyles) {
+      systemFontOverride = {
+        ...systemFontOverride,
+        ...altFontStyles
+      };
+    }
+  }
   
   const typeTheme = themesList.find((t: any) => t.id === typeThemeId)?.styles;
   const itemTheme = activeItem.themeId ? themesList.find((t: any) => t.id === activeItem.themeId)?.styles : undefined;
@@ -123,17 +155,30 @@ export function buildRenderFrame(
     elementOverride
   );
 
-  const songOpts = systemOptions.mainOutput.song;
-  const scriptureOpts = systemOptions.mainOutput.scripture;
+  const songOpts = systemOptions?.mainOutput?.song;
+  const scriptureOpts = systemOptions?.mainOutput?.scripture;
 
   const isSongContent = activeItem.type === 'song';
   const isBibleContent = activeItem.type === 'bible';
 
-  const effectiveMargins = isSongContent && songOpts?.margins
+  let effectiveMargins = isAltGroup && systemOptions?.alternateOutput?.margins
+    ? systemOptions.alternateOutput.margins
+    : isSongContent && songOpts?.margins
     ? songOpts.margins
     : isBibleContent && scriptureOpts?.margins
     ? scriptureOpts.margins
     : res.margins;
+
+  // Handle broadcast lower third mode for alternate output
+  if (isAltGroup && systemOptions?.alternateOutput?.feedMode === 'lower_third') {
+    resolvedStyles.alignVertical = 'bottom';
+    resolvedStyles.widthPercent = 92;
+    effectiveMargins = {
+      ...effectiveMargins,
+      top: Math.round(res.height * 0.65),
+      bottom: Math.max(effectiveMargins.bottom || 0, Math.round(res.height * 0.05)),
+    };
+  }
   
   const showVerseChorusLabel = songOpts?.showVerseChorusLabel ?? true;
   const songLabelLoc = songOpts?.labelLocation || 'Header';
@@ -212,7 +257,15 @@ export function buildRenderFrame(
     baseFontSize: baseSize,
     hasHeader,
     headerText,
-    headerStyles: {},
+    headerStyles: (() => {
+      const matched = matchSlideLabel(currentSlide?.title, systemOptions?.slideLabels);
+      if (matched && matched.textColor) {
+        return {
+          color: matched.textColor,
+        };
+      }
+      return {};
+    })(),
     hasFooter,
     footerText: '',
     footerStyles: {},

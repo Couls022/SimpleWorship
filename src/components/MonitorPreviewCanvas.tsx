@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
 import { useMediaProgressStore } from '../store/useMediaProgressStore';
@@ -20,6 +20,7 @@ import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 import { MainDisplayCountdownOverlay } from './workspace/MainDisplayCountdownOverlay';
 import { PresentationCanvas } from './presentation/PresentationCanvas';
 import { resolveGroupResolution, buildRenderFrame } from '../core/RenderFrameBuilder';
+import StageMonitorContent from './workspace/StageMonitorContent';
 
 interface MonitorPreviewCanvasProps {
   groupId: string;
@@ -55,6 +56,26 @@ export default function MonitorPreviewCanvas({
   const currentAlert = (groupId && groupAlerts?.[groupId]) || alert || { active: false, showNursery: false, message: '', nurseryText: '' };
 
   const group = customGroup || outputGroups.find(g => g.id === groupId) || outputGroups[0];
+
+  const handlePptxSlideChange = useCallback((index: number) => {
+    const currentState = useStore.getState().stagedGroupStates[groupId || 'group-congregation'];
+    if (currentState?.activeSlideIndex !== index || currentState?.pptxAction !== null) {
+      useStore.getState().setStagedGroupState(groupId || 'group-congregation', {
+        activeSlideIndex: index,
+        pptxAction: null,
+      });
+    }
+  }, [groupId]);
+
+  // If this group is a confidence / foldback stage monitor, render the specialized high-contrast Stage Display UI
+  if (group?.role === 'confidence' || groupId === 'group-stage') {
+    return (
+      <div className={`w-full h-full bg-black overflow-hidden flex flex-col ${className}`}>
+        <StageMonitorContent isProjectorMode={isProjectorMode} />
+      </div>
+    );
+  }
+
   const presentationState = customState || stagedGroupStates[groupId] || ({
     activeScheduleId: null,
     activeItemId: null,
@@ -108,22 +129,30 @@ export default function MonitorPreviewCanvas({
   const aspectRatio = (isPptx && templateAspectRatio && templateAspectRatio > 0) ? templateAspectRatio : groupAspectRatio;
   const aspectLabel = (isPptx && currentSlide?.aspectRatioLabel) ? currentSlide.aspectRatioLabel : groupAspectLabel;
 
-  // Track parent container dimensions via ResizeObserver
+  // Track parent container dimensions via ResizeObserver with rAF throttling & size equality check
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
+    let rafId: number | null = null;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          setContainerSize({ width, height });
+        const w = Math.round(entry.contentRect.width);
+        const h = Math.round(entry.contentRect.height);
+        if (w > 0 && h > 0) {
+          if (rafId) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(() => {
+            setContainerSize(prev => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+          });
         }
       }
     });
 
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, []);
 
   // Compute fitted box dimensions with letterbox/pillarbox
@@ -149,27 +178,29 @@ export default function MonitorPreviewCanvas({
 
   const scale = fittedWidth / targetWidth;
 
-  const globalTheme = themesList.find(t => t.type === 'global') || themesList[0];
-  const groupTheme = themesList.find(t => t.id === group?.themeId);
+  const globalTheme = React.useMemo(() => themesList.find(t => t.type === 'global') || themesList[0], [themesList]);
+  const groupTheme = React.useMemo(() => themesList.find(t => t.id === group?.themeId), [themesList, group?.themeId]);
   const itemContentType = (activeItem?.type as any) === 'ppt' ? 'presentation' : ((activeItem?.type as any) === 'scripture' ? 'bible' : activeItem?.type);
-  const typeTheme = themesList.find(t => t.type === itemContentType || t.type === activeItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement'));
+  const typeTheme = React.useMemo(() => themesList.find(t => t.type === itemContentType || t.type === activeItem?.type || (itemContentType === 'presentation' && t.id === 'theme-presentation') || (itemContentType === 'bible' && t.id === 'theme-scripture') || (itemContentType === 'song' && t.id === 'theme-song') || (itemContentType === 'announcement' && t.id === 'theme-announcement')), [themesList, itemContentType, activeItem?.type]);
 
-  const baseSong = activeItem?.type === 'song' 
-    ? songsList.find(s => s.id === activeItem.contentId || s.id === activeItem.data?.songId || s.title?.toLowerCase() === activeItem.name?.toLowerCase()) 
-    : null;
-  const itemTheme = themesList.find(t => t.id === (activeItem?.themeId || baseSong?.themeId));
+  const baseSong = React.useMemo(() => {
+    if (activeItem?.type !== 'song') return null;
+    return songsList.find(s => s.id === activeItem.contentId || s.id === activeItem.data?.songId || s.title?.toLowerCase() === activeItem.name?.toLowerCase()) || null;
+  }, [activeItem, songsList]);
+
+  const itemTheme = React.useMemo(() => themesList.find(t => t.id === (activeItem?.themeId || baseSong?.themeId)), [themesList, activeItem?.themeId, baseSong?.themeId]);
   const elementOverride = activeItem?.themeOverride || baseSong?.themeOverride;
 
   const systemFontOverride = ThemeEngine.getSystemFontForContent(systemOptions, activeItem?.type);
 
-  const resolvedStyles = ThemeEngine.resolveStyles(
+  const resolvedStyles = React.useMemo(() => ThemeEngine.resolveStyles(
     globalTheme?.styles || ThemeEngine.getDefaultGlobalTheme(),
     groupTheme?.styles,
     typeTheme?.styles,
     systemFontOverride,
     itemTheme?.styles,
     elementOverride
-  );
+  ), [globalTheme, groupTheme, typeTheme, systemFontOverride, itemTheme, elementOverride]);
 
   const songOpts = systemOptions?.mainOutput?.song;
   const showVerseChorusLabel = activeItem?.type === 'song' ? (songOpts?.showVerseChorusLabel ?? true) : true;
@@ -899,15 +930,7 @@ export default function MonitorPreviewCanvas({
                     activeSlideIndex={presentationState.activeSlideIndex || 0}
                     pptxAction={presentationState.pptxAction}
                     pptxActionTimestamp={presentationState.pptxActionTimestamp}
-                    onActiveSlideChange={(index) => {
-                       const currentState = useStore.getState().stagedGroupStates[groupId || 'group-congregation'];
-                       if (currentState?.activeSlideIndex !== index || currentState?.pptxAction !== null) {
-                         useStore.getState().setStagedGroupState(groupId || 'group-congregation', {
-                            activeSlideIndex: index,
-                            pptxAction: null,
-                         });
-                       }
-                    }}
+                    onActiveSlideChange={handlePptxSlideChange}
                   />
               </motion.div>
             )}

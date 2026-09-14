@@ -1,5 +1,5 @@
 import { withPortal } from '../common/withPortal';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Monitor, 
@@ -19,6 +19,8 @@ import {
   ChevronDown,
   Keyboard,
   Play,
+  Pause,
+  Timer,
   Database,
   BookOpen,
   Music,
@@ -30,7 +32,9 @@ import {
   Palette,
   FolderArchive,
   Download,
-  Upload
+  Upload,
+  ExternalLink,
+  MonitorPlay
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { dbApi } from '../../db';
@@ -40,9 +44,11 @@ import { applyAppearanceSettings } from '../../utils/themeManager';
 import { useScreens } from '../../hooks/useScreens';
 import { broadcastStateChange } from '../../utils/broadcastSync';
 import { exportPortableProfile, downloadPortableProfilePackage } from '../../utils/profileManager';
+import { DisplayManager } from '../../core/DisplayManager';
 import FontInspectorPopup from './FontInspectorPopup';
 import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
+import StageMonitorContent from '../workspace/StageMonitorContent';
 
 interface OptionsDialogProps {
   onClose: () => void;
@@ -52,8 +58,16 @@ type MainCategory = 'Main Output' | 'Alternate Output' | 'Foldback' | 'Service I
 type OutputTab = 'General' | 'Song' | 'Scripture' | 'Transitions' | 'Alerts';
 
 function OptionsDialog({ onClose }: OptionsDialogProps) {
-  const store = useStore();
-  const { systemOptions, updateSystemOptions, resetSystemOptions, shortcutSettings, updateShortcutSettings } = store;
+  const systemOptions = useStore(state => state.systemOptions);
+  const updateSystemOptions = useStore(state => state.updateSystemOptions);
+  const resetSystemOptions = useStore(state => state.resetSystemOptions);
+  const shortcutSettings = useStore(state => state.shortcutSettings);
+  const updateShortcutSettings = useStore(state => state.updateShortcutSettings);
+  const outputGroups = useStore(state => state.outputGroups);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const profiles = useStore(state => state.profiles);
+  const activeProfileId = useStore(state => state.activeProfileId);
+  const activeSchedule = useStore(state => state.activeSchedule);
 
   // Local working state clone
   const [localOptions, setLocalOptions] = useState<SystemOptions>(JSON.parse(JSON.stringify(systemOptions)));
@@ -74,6 +88,21 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
   const [seedingProgress, setSeedingProgress] = useState<string>('');
   const [isSeeding, setIsSeeding] = useState<boolean>(false);
 
+  // Slide Labels Action State
+  const [slideLabelFeedback, setSlideLabelFeedback] = useState<string | null>(null);
+  const [highlightedLabelId, setHighlightedLabelId] = useState<string | null>(null);
+  const [resetConfirmSuccess, setResetConfirmSuccess] = useState<boolean>(false);
+  const [addLabelSuccess, setAddLabelSuccess] = useState<boolean>(false);
+
+  const [timerNow, setTimerNow] = useState<number>(Date.now());
+  useEffect(() => {
+    if (activeCategory !== 'Service Intervals') return;
+    const interval = setInterval(() => {
+      setTimerNow(Date.now());
+    }, 500);
+    return () => clearInterval(interval);
+  }, [activeCategory]);
+
   const handleRunSeeder = async () => {
     setIsSeeding(true);
     setSeedingProgress('Initializing database seeder...');
@@ -82,7 +111,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
     });
     setIsSeeding(false);
     setSeedingProgress(res.message);
-    await store.loadAllData();
+    await useStore.getState().loadAllData();
   };
 
   const categories: { id: MainCategory; label: string; icon: React.ReactNode }[] = [
@@ -325,10 +354,11 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
     // Bi-directionally sync with active output group(s)
     const pos = localOptions.mainOutput?.general?.position;
+    const currentGroups = useStore.getState().outputGroups;
     if (pos && pos.width > 0 && pos.height > 0) {
-      const primaryGroup = store.outputGroups.find(g => g.id === 'group-congregation') || store.outputGroups[0];
+      const primaryGroup = currentGroups.find(g => g.id === 'group-congregation') || currentGroups[0];
       if (primaryGroup) {
-        store.updateOutputGroup(primaryGroup.id, {
+        useStore.getState().updateOutputGroup(primaryGroup.id, {
           aspectRatio: `${pos.width}x${pos.height}`,
           customResolution: { width: pos.width, height: pos.height },
           displayIds: localOptions.mainOutput.general.outputMonitor ? [localOptions.mainOutput.general.outputMonitor] : primaryGroup.displayIds,
@@ -337,20 +367,61 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
       }
     }
 
-    const stageGroup = store.outputGroups.find(g => g.id === 'group-stage');
+    const stageGroup = currentGroups.find(g => g.id === 'group-stage');
     if (stageGroup) {
-      store.updateOutputGroup(stageGroup.id, {
+      useStore.getState().updateOutputGroup(stageGroup.id, {
         displayIds: localOptions.foldback.outputMonitor ? [localOptions.foldback.outputMonitor] : stageGroup.displayIds,
         targetDisplayId: localOptions.foldback.outputMonitor || ''
       });
     }
 
-    const altGroup = store.outputGroups.find(g => g.id === 'group-alternate');
-    if (altGroup && localOptions.alternateOutput.enabled) {
-      store.updateOutputGroup(altGroup.id, {
-        displayIds: localOptions.alternateOutput.outputMonitor ? [localOptions.alternateOutput.outputMonitor] : altGroup.displayIds,
-        targetDisplayId: localOptions.alternateOutput.outputMonitor || ''
+    const altGroup = currentGroups.find(g => g.id === 'group-alternate');
+    if (localOptions.alternateOutput.enabled) {
+      const altRole = localOptions.alternateOutput.feedMode === 'foyer_announcements' ? 'lobby' : 'broadcast';
+      const altWidth = localOptions.alternateOutput.position?.width || 1920;
+      const altHeight = localOptions.alternateOutput.position?.height || 1080;
+      const altRatio = `${altWidth}x${altHeight}`;
+
+      if (altGroup) {
+        useStore.getState().updateOutputGroup(altGroup.id, {
+          displayIds: localOptions.alternateOutput.outputMonitor ? [localOptions.alternateOutput.outputMonitor] : altGroup.displayIds,
+          targetDisplayId: localOptions.alternateOutput.outputMonitor || '',
+          role: altRole,
+          aspectRatio: altRatio,
+          customResolution: { width: altWidth, height: altHeight }
+        });
+      } else {
+        useStore.getState().addOutputGroup({
+          id: 'group-alternate',
+          name: 'Alternate Output (Foyer / Stream)',
+          themeId: 'theme-global',
+          role: altRole,
+          displayIds: localOptions.alternateOutput.outputMonitor ? [localOptions.alternateOutput.outputMonitor] : [],
+          targetDisplayId: localOptions.alternateOutput.outputMonitor || '',
+          aspectRatio: altRatio,
+          customResolution: { width: altWidth, height: altHeight },
+          isBlack: false,
+          isClear: false,
+          showLogo: false
+        });
+      }
+    } else if (altGroup) {
+      useStore.getState().updateOutputGroup(altGroup.id, {
+        displayIds: [],
+        targetDisplayId: ''
       });
+    }
+
+    if (localOptions.serviceIntervals) {
+      useStore.getState().setServiceIntervalConfig(localOptions.serviceIntervals);
+    }
+
+    // Sync physical displays and broadcast immediately
+    try {
+      const stateNow = useStore.getState();
+      DisplayManager.syncPhysicalDisplays(stateNow.outputGroups, stateNow.groupStates, stateNow.activeControlGroupId);
+    } catch (e) {
+      console.warn('Display sync non-critical warning:', e);
     }
 
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Options saved successfully' }));
@@ -1382,7 +1453,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     songOptions={localOptions.mainOutput.song}
                     onUpdateGeneral={updateMainGeneral}
                     onUpdateSong={updateMainSong}
-                    onUpdateBackdrop={(bg) => store.setDefaultBackground(bg, 'songs', false)}
+                    onUpdateBackdrop={(bg) => useStore.getState().setDefaultBackground(bg, 'songs', false)}
                   />
                 </div>
               )}
@@ -1738,7 +1809,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     scriptureOptions={localOptions.mainOutput.scripture}
                     onUpdateGeneral={updateMainGeneral}
                     onUpdateScripture={updateMainScripture}
-                    onUpdateBackdrop={(bg) => store.setDefaultBackground(bg, 'scriptures', false)}
+                    onUpdateBackdrop={(bg) => useStore.getState().setDefaultBackground(bg, 'scriptures', false)}
                   />
                 </div>
               )}
@@ -1920,7 +1991,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             onClick={() => {
                               const code = localOptions.mainOutput.alerts.nursery.currentCode || '';
                               if (code.trim()) {
-                                store.setAlert({ nurseryText: code.trim(), showNursery: true }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                                const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || "";
+                                useStore.getState().setAlert({ nurseryText: code.trim(), showNursery: true }, targetId);
                               }
                             }}
                             className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded text-xs transition-colors shrink-0 shadow"
@@ -1931,7 +2003,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             type="button"
                             onClick={() => {
                               updateMainAlertsNursery({ currentCode: '' });
-                              store.setAlert({ nurseryText: '', showNursery: false }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                              const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || "";
+                              useStore.getState().setAlert({ nurseryText: '', showNursery: false }, targetId);
                             }}
                             className="px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-300 rounded text-xs transition-colors shrink-0"
                           >
@@ -2016,7 +2089,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             onClick={() => {
                               const msg = localOptions.mainOutput.alerts.message.currentMessage || '';
                               if (msg.trim()) {
-                                store.setAlert({ message: msg.trim(), active: true }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                                const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || "";
+                                useStore.getState().setAlert({ message: msg.trim(), active: true }, targetId);
                               }
                             }}
                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded text-xs transition-colors shrink-0 shadow"
@@ -2027,7 +2101,8 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             type="button"
                             onClick={() => {
                               updateMainAlertsMessage({ currentMessage: '' });
-                              store.setAlert({ message: '', active: false }, store.activeControlGroupId || store.outputGroups[0]?.id || "");
+                              const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || "";
+                              useStore.getState().setAlert({ message: '', active: false }, targetId);
                             }}
                             className="px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-300 rounded text-xs transition-colors shrink-0"
                           >
@@ -2043,8 +2118,25 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
               {/* ================= ALTERNATE OUTPUT ================= */}
               {activeCategory === 'Alternate Output' && (
                 <div className="space-y-4">
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-3">
-                    <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200">
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-4 shadow-sm">
+                    {/* Header Banner */}
+                    <div className="flex items-center justify-between border-b border-[#292c36] pb-2.5">
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-100 flex items-center gap-2">
+                          <MonitorPlay size={16} className="text-purple-400" />
+                          <span>Alternate Output Configuration (Foyer, Overflow & Stream)</span>
+                        </h3>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          Independent auxiliary video feed for foyer displays, overflow halls, and livestream lower-thirds
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono uppercase bg-purple-500/10 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded font-bold">
+                        Auxiliary Feed
+                      </span>
+                    </div>
+
+                    {/* Enable Checkbox */}
+                    <label className="flex items-center gap-2.5 cursor-pointer font-bold text-gray-200 select-none">
                       <input
                         type="checkbox"
                         checked={localOptions.alternateOutput.enabled}
@@ -2052,18 +2144,29 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                           ...prev,
                           alternateOutput: { ...prev.alternateOutput, enabled: e.target.checked }
                         }))}
-                        className="rounded accent-blue-500"
+                        className="rounded accent-purple-500 w-4 h-4 cursor-pointer"
                       />
-                      <span>Enable Alternate Output (Foyer / Lobby / Broadcast Stream)</span>
+                      <span className="text-sm">Enable Alternate Output (Foyer / Lobby / Broadcast Stream)</span>
                     </label>
 
+                    {!localOptions.alternateOutput.enabled && (
+                      <div className="p-3 bg-[#131418] border border-dashed border-[#2d313c] rounded text-center text-gray-400 text-xs">
+                        Alternate Output routing is currently disabled. Check the box above to route content to secondary screens, foyer TVs, or livestream software (OBS / vMix / ATEM).
+                      </div>
+                    )}
+
                     {localOptions.alternateOutput.enabled && (
-                      <div className="space-y-3 pt-2 border-t border-[#292c36]">
+                      <div className="space-y-4 pt-1 border-t border-[#292c36]">
+                        {/* Windows Display Layout Visualizer */}
                         {renderDisplayLayoutVisualizer()}
 
+                        {/* Output Monitor Selection & Action Buttons */}
                         <div className="flex items-center gap-3 flex-wrap">
-                          <div className="flex-1">
-                            <label className="text-gray-400 block mb-1 font-semibold text-xs">Select Output Display</label>
+                          <div className="flex-1 min-w-[220px]">
+                            <label className="text-gray-300 block mb-1 font-semibold text-xs flex items-center gap-1.5">
+                              <Tv size={12} className="text-purple-400" />
+                              <span>Select Output Target Display</span>
+                            </label>
                             <select
                               value={localOptions.alternateOutput.outputMonitor}
                               onChange={(e) => {
@@ -2089,7 +2192,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                   }));
                                 }
                               }}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white"
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
                             >
                               {screens.length > 0 ? (
                                 screens.map((scr: any, idx: number) => {
@@ -2104,34 +2207,176 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 })
                               ) : (
                                 <>
-                                  <option value="Monitor 2">Monitor 2 (Secondary Display / HDMI - 1920×1080)</option>
-                                  <option value="Monitor 3">Monitor 3 (Lobby / Overflow - 1366×768)</option>
+                                  <option value="Monitor 2">Monitor 2 (Secondary Screen / HDMI - 1920×1080)</option>
+                                  <option value="Monitor 3">Monitor 3 (Foyer / Lobby TV - 1366×768)</option>
                                   <option value="NDI Broadcast">NDI Broadcast Feed (1920×1080)</option>
                                 </>
                               )}
                             </select>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => setLocalOptions((prev) => ({
-                              ...prev,
-                              alternateOutput: {
-                                ...prev.alternateOutput,
-                                position: { left: 1920, top: 0, width: 1920, height: 1080 },
-                                margins: { left: 0, top: 0, right: 0, bottom: 0 }
-                              }
-                            }))}
-                            className="mt-5 px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350] text-xs font-semibold"
-                          >
-                            Reset Position
-                          </button>
+                          <div className="flex items-center gap-2 mt-5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                DisplayManager.openProjector('group-alternate', localOptions.alternateOutput.outputMonitor);
+                                window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
+                                  detail: `Launched Alternate Output on ${localOptions.alternateOutput.outputMonitor || 'Secondary Screen'}` 
+                                }));
+                              }}
+                              className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded shadow-md border border-purple-500 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <ExternalLink size={13} />
+                              <span>Test / Open Alternate Output</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const matched = screens.find((s: any) => (s.label || s.name) === localOptions.alternateOutput.outputMonitor);
+                                const x = matched?.bounds?.x ?? (screens[1]?.bounds?.x ?? 1920);
+                                const y = matched?.bounds?.y ?? (screens[1]?.bounds?.y ?? 0);
+                                const w = matched?.bounds?.width ?? (screens[1]?.bounds?.width ?? 1920);
+                                const h = matched?.bounds?.height ?? (screens[1]?.bounds?.height ?? 1080);
+                                setLocalOptions((prev) => ({
+                                  ...prev,
+                                  alternateOutput: {
+                                    ...prev.alternateOutput,
+                                    position: { left: x, top: y, width: w, height: h },
+                                    margins: { left: 0, top: 0, right: 0, bottom: 0 }
+                                  }
+                                }));
+                              }}
+                              className="px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350] text-xs font-semibold"
+                            >
+                              Reset Position
+                            </button>
+                          </div>
                         </div>
 
+                        {/* Feed Mode & Output Role Selector */}
+                        <div className="bg-[#121317] border border-[#2d313c] rounded-md p-3 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
+                              <Sliders size={13} className="text-purple-400" />
+                              <span>Feed Mode & Broadcast Role</span>
+                            </span>
+                            <span className="text-[10px] text-purple-400 font-mono font-bold">
+                              {localOptions.alternateOutput.feedMode === 'lower_third'
+                                ? 'LOWER THIRD (BROADCAST STREAM)'
+                                : localOptions.alternateOutput.feedMode === 'foyer_announcements'
+                                ? 'FOYER / OVERFLOW HALL'
+                                : 'FULL SLIDE (MIRROR MAIN)'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                alternateOutput: { ...prev.alternateOutput, feedMode: 'mirror' }
+                              }))}
+                              className={`p-2.5 rounded text-left border transition-all cursor-pointer ${
+                                (localOptions.alternateOutput.feedMode || 'mirror') === 'mirror'
+                                  ? 'border-purple-500 bg-purple-950/30 text-white ring-1 ring-purple-500/40'
+                                  : 'border-[#2d313c] bg-[#16171d] text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                              }`}
+                            >
+                              <div className="text-xs font-bold flex items-center gap-1.5">
+                                <Tv size={13} className="text-purple-400" />
+                                <span>Mirror Main Live</span>
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                                Mirrors auditorium slides and songs with independent resolution & custom font styling
+                              </p>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                alternateOutput: { ...prev.alternateOutput, feedMode: 'lower_third' }
+                              }))}
+                              className={`p-2.5 rounded text-left border transition-all cursor-pointer ${
+                                localOptions.alternateOutput.feedMode === 'lower_third'
+                                  ? 'border-purple-500 bg-purple-950/30 text-white ring-1 ring-purple-500/40'
+                                  : 'border-[#2d313c] bg-[#16171d] text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                              }`}
+                            >
+                              <div className="text-xs font-bold flex items-center gap-1.5">
+                                <Radio size={13} className="text-cyan-400" />
+                                <span>Lower Third Stream</span>
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                                Broadcast subtitle overlay with alpha channel keying for OBS, vMix, and ATEM switchers
+                              </p>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                alternateOutput: { ...prev.alternateOutput, feedMode: 'foyer_announcements' }
+                              }))}
+                              className={`p-2.5 rounded text-left border transition-all cursor-pointer ${
+                                localOptions.alternateOutput.feedMode === 'foyer_announcements'
+                                  ? 'border-purple-500 bg-purple-950/30 text-white ring-1 ring-purple-500/40'
+                                  : 'border-[#2d313c] bg-[#16171d] text-gray-400 hover:text-gray-200 hover:border-gray-600'
+                              }`}
+                            >
+                              <div className="text-xs font-bold flex items-center gap-1.5">
+                                <MonitorPlay size={13} className="text-emerald-400" />
+                                <span>Foyer & Overflow</span>
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-1 leading-relaxed">
+                                Foyer TV feed with church welcome banner, live lyrics, and pre-service countdown timer
+                              </p>
+                            </button>
+                          </div>
+
+                          {localOptions.alternateOutput.feedMode === 'lower_third' && (
+                            <div className="flex items-center justify-between pt-2 border-t border-[#222530] text-xs">
+                              <span className="text-gray-300 font-semibold">Livestream Alpha Channel Mode:</span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setLocalOptions(prev => ({
+                                    ...prev,
+                                    alternateOutput: { ...prev.alternateOutput, alphaChannel: 'Transparent' }
+                                  }))}
+                                  className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-all cursor-pointer ${
+                                    (localOptions.alternateOutput.alphaChannel || 'Transparent') === 'Transparent'
+                                      ? 'border-cyan-500 bg-cyan-950/40 text-cyan-300'
+                                      : 'border-[#3b404d] bg-[#1a1c24] text-gray-400 hover:text-gray-200'
+                                  }`}
+                                >
+                                  Transparent (OBS / ATEM Alpha Key)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setLocalOptions(prev => ({
+                                    ...prev,
+                                    alternateOutput: { ...prev.alternateOutput, alphaChannel: 'Disabled' }
+                                  }))}
+                                  className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-all cursor-pointer ${
+                                    localOptions.alternateOutput.alphaChannel === 'Disabled'
+                                      ? 'border-cyan-500 bg-cyan-950/40 text-cyan-300'
+                                      : 'border-[#3b404d] bg-[#1a1c24] text-gray-400 hover:text-gray-200'
+                                  }`}
+                                >
+                                  Dark Opaque Banner
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Resolution Preset & Aspect Ratio */}
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[11px] font-semibold text-gray-300">Resolution Preset / Aspect Ratio</span>
-                            <span className="text-[10px] text-indigo-400 font-mono">
+                            <span className="text-[10px] text-purple-400 font-mono font-bold">
                               {localOptions.alternateOutput.position?.width || 1920} × {localOptions.alternateOutput.position?.height || 1080}
                             </span>
                           </div>
@@ -2139,23 +2384,26 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             value={
                               (localOptions.alternateOutput.position?.width === 1920 && localOptions.alternateOutput.position?.height === 1080)
                                 ? '1920x1080'
+                                : (localOptions.alternateOutput.position?.width === 1280 && localOptions.alternateOutput.position?.height === 720)
+                                ? '1280x720'
                                 : (localOptions.alternateOutput.position?.width === 1024 && localOptions.alternateOutput.position?.height === 768)
                                 ? '1024x768'
                                 : (localOptions.alternateOutput.position?.width === 1366 && localOptions.alternateOutput.position?.height === 768)
                                 ? '1366x768'
-                                : (localOptions.alternateOutput.position?.width === 1280 && localOptions.alternateOutput.position?.height === 720)
-                                ? '1280x720'
                                 : (localOptions.alternateOutput.position?.width === 1920 && localOptions.alternateOutput.position?.height === 1200)
                                 ? '1920x1200'
+                                : (localOptions.alternateOutput.position?.width === 3840 && localOptions.alternateOutput.position?.height === 2160)
+                                ? '3840x2160'
                                 : 'custom'
                             }
                             onChange={(e) => {
                               const val = e.target.value;
                               let w = 1920, h = 1080;
-                              if (val === '1024x768') { w = 1024; h = 768; }
+                              if (val === '1280x720') { w = 1280; h = 720; }
+                              else if (val === '1024x768') { w = 1024; h = 768; }
                               else if (val === '1366x768') { w = 1366; h = 768; }
-                              else if (val === '1280x720') { w = 1280; h = 720; }
                               else if (val === '1920x1200') { w = 1920; h = 1200; }
+                              else if (val === '3840x2160') { w = 3840; h = 2160; }
                               setLocalOptions((prev) => ({
                                 ...prev,
                                 alternateOutput: {
@@ -2164,20 +2412,22 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 }
                               }));
                             }}
-                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white"
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
                           >
-                            <option value="1920x1080">1920 × 1080 (16:9 Full HD - Recommended)</option>
-                            <option value="1024x768">1024 × 768 (4:3 Standard Projector / Monitor)</option>
-                            <option value="1366x768">1366 × 768 (16:9 HD Display)</option>
-                            <option value="1280x720">1280 × 720 (16:9 720p HD)</option>
+                            <option value="1920x1080">1920 × 1080 (16:9 Full HD - Recommended for OBS & Monitors)</option>
+                            <option value="1280x720">1280 × 720 (16:9 720p HD Stream)</option>
+                            <option value="1024x768">1024 × 768 (4:3 Standard Projector)</option>
+                            <option value="1366x768">1366 × 768 (16:9 Foyer / TV Display)</option>
                             <option value="1920x1200">1920 × 1200 (16:10 WUXGA)</option>
+                            <option value="3840x2160">3840 × 2160 (16:9 4K UHD Broadcast)</option>
                             <option value="custom">Custom Dimensions</option>
                           </select>
                         </div>
 
+                        {/* Coordinate Inputs */}
                         <div className="grid grid-cols-4 gap-2 text-[11px]">
                           <div>
-                            <span className="text-gray-400 block mb-0.5">Left:</span>
+                            <span className="text-gray-400 block mb-0.5">Left (X):</span>
                             <input
                               type="number"
                               value={localOptions.alternateOutput.position?.left ?? 0}
@@ -2185,11 +2435,11 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 ...prev,
                                 alternateOutput: { ...prev.alternateOutput, position: { ...(prev.alternateOutput.position || { top: 0, width: 1920, height: 1080 }), left: Number(e.target.value) } }
                               }))}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white focus:border-purple-500 focus:outline-none"
                             />
                           </div>
                           <div>
-                            <span className="text-gray-400 block mb-0.5">Top:</span>
+                            <span className="text-gray-400 block mb-0.5">Top (Y):</span>
                             <input
                               type="number"
                               value={localOptions.alternateOutput.position?.top ?? 0}
@@ -2197,7 +2447,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 ...prev,
                                 alternateOutput: { ...prev.alternateOutput, position: { ...(prev.alternateOutput.position || { left: 0, width: 1920, height: 1080 }), top: Number(e.target.value) } }
                               }))}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white focus:border-purple-500 focus:outline-none"
                             />
                           </div>
                           <div>
@@ -2209,7 +2459,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 ...prev,
                                 alternateOutput: { ...prev.alternateOutput, position: { ...(prev.alternateOutput.position || { left: 0, top: 0, height: 1080 }), width: Number(e.target.value) } }
                               }))}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white focus:border-purple-500 focus:outline-none"
                             />
                           </div>
                           <div>
@@ -2221,13 +2471,102 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 ...prev,
                                 alternateOutput: { ...prev.alternateOutput, position: { ...(prev.alternateOutput.position || { left: 0, top: 0, width: 1920 }), height: Number(e.target.value) } }
                               }))}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white focus:border-purple-500 focus:outline-none"
                             />
                           </div>
                         </div>
 
+                        {/* Broadcast Safe Area Margins */}
+                        <div className="space-y-1.5 pt-2 border-t border-[#292c36]">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-gray-300">Broadcast Safe Area Margins (Pixels)</span>
+                            <button
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                alternateOutput: {
+                                  ...prev.alternateOutput,
+                                  margins: { left: 0, top: 0, right: 0, bottom: 0 }
+                                }
+                              }))}
+                              className="text-[10px] text-gray-400 hover:text-purple-300 underline cursor-pointer"
+                            >
+                              Reset Margins
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 text-[11px]">
+                            <div>
+                              <span className="text-gray-400 block mb-0.5">Left:</span>
+                              <input
+                                type="number"
+                                value={localOptions.alternateOutput.margins?.left ?? 0}
+                                onChange={(e) => setLocalOptions((prev) => ({
+                                  ...prev,
+                                  alternateOutput: {
+                                    ...prev.alternateOutput,
+                                    margins: { ...(prev.alternateOutput.margins || { top: 0, right: 0, bottom: 0 }), left: Number(e.target.value) }
+                                  }
+                                }))}
+                                className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-gray-400 block mb-0.5">Top:</span>
+                              <input
+                                type="number"
+                                value={localOptions.alternateOutput.margins?.top ?? 0}
+                                onChange={(e) => setLocalOptions((prev) => ({
+                                  ...prev,
+                                  alternateOutput: {
+                                    ...prev.alternateOutput,
+                                    margins: { ...(prev.alternateOutput.margins || { left: 0, right: 0, bottom: 0 }), top: Number(e.target.value) }
+                                  }
+                                }))}
+                                className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-gray-400 block mb-0.5">Right:</span>
+                              <input
+                                type="number"
+                                value={localOptions.alternateOutput.margins?.right ?? 0}
+                                onChange={(e) => setLocalOptions((prev) => ({
+                                  ...prev,
+                                  alternateOutput: {
+                                    ...prev.alternateOutput,
+                                    margins: { ...(prev.alternateOutput.margins || { left: 0, top: 0, bottom: 0 }), right: Number(e.target.value) }
+                                  }
+                                }))}
+                                className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-gray-400 block mb-0.5">Bottom:</span>
+                              <input
+                                type="number"
+                                value={localOptions.alternateOutput.margins?.bottom ?? 0}
+                                onChange={(e) => setLocalOptions((prev) => ({
+                                  ...prev,
+                                  alternateOutput: {
+                                    ...prev.alternateOutput,
+                                    margins: { ...(prev.alternateOutput.margins || { left: 0, top: 0, right: 0 }), bottom: Number(e.target.value) }
+                                  }
+                                }))}
+                                className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Alternate Output Font Configuration */}
                         <div className="flex items-center justify-between pt-2 border-t border-[#292c36]">
-                          <span className="text-xs text-gray-300 font-semibold">Alternate Output Font</span>
+                          <div>
+                            <span className="text-xs text-gray-200 font-semibold block">Alternate Output Font</span>
+                            <span className="text-[10px] text-gray-400">
+                              {localOptions.alternateOutput.defaultFont?.family || 'Arial'}, {localOptions.alternateOutput.defaultFont?.maxSize || 48}pt
+                              {localOptions.alternateOutput.defaultFont?.bold ? ' Bold' : ''}
+                            </span>
+                          </div>
                           <button
                             type="button"
                             onClick={() => {
@@ -2240,10 +2579,89 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                                 }))
                               });
                             }}
-                            className="px-3 py-1 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350] text-xs"
+                            className="px-3 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350] text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                           >
-                            Default Font ▾
+                            <Sliders size={12} className="text-purple-400" />
+                            <span>Edit Font Style ▾</span>
                           </button>
+                        </div>
+
+                        {/* Interactive Real-Time Alternate Output Monitor Preview */}
+                        <div className="pt-3 border-t border-[#292c36] space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
+                              <MonitorPlay size={13} className="text-purple-400" />
+                              <span>Alternate Output Real-Time Visualizer</span>
+                            </span>
+                            <span className="text-[10px] text-purple-400 font-mono flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+                              Active Feed Preview
+                            </span>
+                          </div>
+
+                          <div className="h-44 w-full bg-[#0a0a0d] border border-[#3e4350] rounded overflow-hidden relative shadow-inner flex flex-col justify-end">
+                            {/* Visual background simulation */}
+                            {localOptions.alternateOutput.feedMode === 'lower_third' ? (
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none">
+                                <div className="absolute top-2 left-2 flex items-center gap-1.5 bg-black/60 px-2 py-0.5 rounded text-[10px] text-cyan-300 font-mono border border-cyan-500/30">
+                                  <Radio size={10} />
+                                  <span>OBS / LIVE BROADCAST FEED (ALPHA KEY READY)</span>
+                                </div>
+                                <div className="absolute bottom-3 inset-x-4 bg-black/75 backdrop-blur-sm border-l-4 border-purple-500 rounded p-2.5 shadow-2xl">
+                                  <div className="text-[9px] text-purple-400 font-bold uppercase tracking-wider mb-0.5">
+                                    AMAZING GRACE • VERSE 1
+                                  </div>
+                                  <div 
+                                    className="text-white text-xs font-semibold leading-tight drop-shadow"
+                                    style={{
+                                      fontFamily: localOptions.alternateOutput.defaultFont?.family || 'sans-serif',
+                                      color: localOptions.alternateOutput.defaultFont?.color || '#ffffff'
+                                    }}
+                                  >
+                                    Amazing grace, how sweet the sound, that saved a wretch like me.
+                                  </div>
+                                </div>
+                              </div>
+                            ) : localOptions.alternateOutput.feedMode === 'foyer_announcements' ? (
+                              <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/40 via-purple-950/30 to-black flex flex-col items-center justify-center p-4 text-center">
+                                <div className="text-amber-400 text-[10px] font-bold tracking-widest uppercase mb-1">
+                                  WELCOME TO SIMPLEWORSHIP
+                                </div>
+                                <div 
+                                  className="text-white text-sm font-bold drop-shadow"
+                                  style={{
+                                    fontFamily: localOptions.alternateOutput.defaultFont?.family || 'sans-serif',
+                                    color: localOptions.alternateOutput.defaultFont?.color || '#ffffff'
+                                  }}
+                                >
+                                  Amazing grace, how sweet the sound
+                                </div>
+                                <div className="mt-3 flex items-center gap-2 bg-black/60 px-3 py-1 rounded-full border border-purple-500/30 text-[10px] text-purple-300 font-mono">
+                                  <Clock size={10} />
+                                  <span>SERVICE STARTS IN: 04:32</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black flex flex-col items-center justify-center p-4 text-center">
+                                <div className="text-[9px] text-purple-400 font-mono uppercase mb-2">
+                                  FULL SLIDE (MIRROR MAIN)
+                                </div>
+                                <div 
+                                  className="text-white text-sm font-bold drop-shadow max-w-md"
+                                  style={{
+                                    fontFamily: localOptions.alternateOutput.defaultFont?.family || 'sans-serif',
+                                    color: localOptions.alternateOutput.defaultFont?.color || '#ffffff'
+                                  }}
+                                >
+                                  Amazing grace, how sweet the sound<br />
+                                  That saved a wretch like me!
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-400 leading-relaxed">
+                            Alternate Output provides an independent output channel that will not interrupt main sanctuary cues. Click <strong>Test / Open Alternate Output</strong> above to launch the pop-out window.
+                          </p>
                         </div>
                       </div>
                     )}
@@ -2323,20 +2741,33 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             </select>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => setLocalOptions((prev) => ({
-                              ...prev,
-                              foldback: {
-                                ...prev.foldback,
-                                position: { left: 1920, top: 0, width: 1920, height: 1080 },
-                                margins: { left: 0, top: 0, right: 0, bottom: 0 }
-                              }
-                            }))}
-                            className="mt-5 px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350] text-xs font-semibold"
-                          >
-                            Reset Position
-                          </button>
+                          <div className="flex items-center gap-2 mt-5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                DisplayManager.openProjector('group-stage', localOptions.foldback.outputMonitor);
+                              }}
+                              className="px-3 py-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white rounded shadow-md border border-amber-500 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ExternalLink size={13} />
+                              <span>Test / Open Stage Display</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setLocalOptions((prev) => ({
+                                ...prev,
+                                foldback: {
+                                  ...prev.foldback,
+                                  position: { left: 1920, top: 0, width: 1920, height: 1080 },
+                                  margins: { left: 0, top: 0, right: 0, bottom: 0 }
+                                }
+                              }))}
+                              className="px-2.5 py-1.5 bg-[#2a2d36] hover:bg-[#383d47] text-gray-200 rounded border border-[#3e4350] text-xs font-semibold"
+                            >
+                              Reset Position
+                            </button>
+                          </div>
                         </div>
 
                         <div>
@@ -2469,6 +2900,23 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                             Foldback Font ▾
                           </button>
                         </div>
+
+                        {/* Live Foldback Stage Display Preview */}
+                        <div className="pt-3 border-t border-[#292c36] space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-300">Stage Display Real-Time Monitor Preview</span>
+                            <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                              Active Stage Feed
+                            </span>
+                          </div>
+                          <div className="h-44 w-full bg-black border border-[#3e4350] rounded overflow-hidden relative shadow-inner">
+                            <StageMonitorContent isProjectorMode={false} />
+                          </div>
+                          <p className="text-[11px] text-gray-400">
+                            Confidence monitor displays current slide in yellow/high-contrast, next slide preview, real-time clock, service countdown timers, and nursery alerts for stage personnel.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2476,235 +2924,539 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
               )}
 
               {/* ================= SERVICE INTERVALS ================= */}
-              {activeCategory === 'Service Intervals' && (
-                <div className="space-y-4">
-                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-3">
-                    <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
-                      <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={localOptions.serviceIntervals.countdownEnabled}
-                          onChange={(e) => setLocalOptions((prev) => ({
-                            ...prev,
-                            serviceIntervals: { ...prev.serviceIntervals, countdownEnabled: e.target.checked }
-                          }))}
-                          className="rounded accent-blue-500 w-4 h-4"
-                        />
-                        <span>Enable Service Interval Countdowns on Stage Display</span>
-                      </label>
-                      <span className="text-[11px] text-gray-400 font-mono">Foldback Monitor Sync</span>
-                    </div>
+              {activeCategory === 'Service Intervals' && (() => {
+                const liveIntervals = systemOptions.serviceIntervals;
+                const isRunning = Boolean(
+                  liveIntervals?.isRunning &&
+                  (!liveIntervals.targetTimestamp || liveIntervals.targetTimestamp > timerNow)
+                );
+                const isPaused = Boolean(
+                  !liveIntervals?.isRunning &&
+                  liveIntervals?.pausedRemainingSecs !== null &&
+                  liveIntervals?.pausedRemainingSecs !== undefined &&
+                  liveIntervals.pausedRemainingSecs > 0
+                );
 
-                    <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-1">
-                      <div className="min-w-[200px] flex-1">
-                        <label className="text-gray-400 block mb-1 text-xs">Countdown Duration (mm:ss)</label>
-                        <input
-                          type="text"
-                          value={localOptions.serviceIntervals.countdownTime}
-                          onChange={(e) => setLocalOptions((prev) => ({
-                            ...prev,
-                            serviceIntervals: { ...prev.serviceIntervals, countdownTime: e.target.value }
-                          }))}
-                          placeholder="05:00"
-                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white font-mono text-sm focus:border-blue-500 outline-none"
-                        />
-                        
-                        {/* Quick Presets */}
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <span className="text-[10px] text-gray-400">Presets:</span>
-                          {['03:00', '05:00', '10:00', '15:00', '30:00'].map((time) => (
-                            <button
-                              key={time}
-                              type="button"
-                              onClick={() => setLocalOptions((prev) => ({
-                                ...prev,
-                                serviceIntervals: { ...prev.serviceIntervals, countdownTime: time }
-                              }))}
-                              className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
-                            >
-                              {time}
-                            </button>
-                          ))}
+                let currentSecs = 0;
+                if (isRunning && liveIntervals?.targetTimestamp) {
+                  currentSecs = Math.max(0, Math.ceil((liveIntervals.targetTimestamp - timerNow) / 1000));
+                } else if (isPaused && liveIntervals?.pausedRemainingSecs) {
+                  currentSecs = liveIntervals.pausedRemainingSecs;
+                } else {
+                  const parts = (localOptions.serviceIntervals.countdownTime || '05:00').split(':');
+                  currentSecs = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+                }
+
+                const m = Math.floor(currentSecs / 60);
+                const s = currentSecs % 60;
+                const displayTime = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+
+                return (
+                  <div className="space-y-4">
+                    {/* Live Timer Control Bar */}
+                    <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center border font-mono text-base font-bold shadow-inner ${
+                          isRunning
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-emerald-500/10'
+                            : isPaused
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-amber-500/10'
+                            : 'bg-zinc-800 text-gray-400 border-zinc-700'
+                        }`}>
+                          <Timer size={20} className={isRunning ? 'animate-pulse text-emerald-400' : ''} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-white font-mono tracking-wide">{displayTime}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
+                              isRunning
+                                ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 animate-pulse'
+                                : isPaused
+                                ? 'bg-amber-600/30 text-amber-300 border-amber-500/50'
+                                : 'bg-gray-800 text-gray-400 border-gray-700'
+                            }`}>
+                              {isRunning ? 'Running' : isPaused ? 'Paused' : 'Ready'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-gray-400 block mt-0.5">
+                            {isRunning
+                              ? `Live countdown active on connected stage foldback & main displays`
+                              : isPaused
+                              ? `Timer is paused at current service interval`
+                              : `Configured to start at ${localOptions.serviceIntervals.countdownTime}`}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="min-w-[200px] flex-1">
-                        <label className="text-gray-400 block mb-1 text-xs">Interval Label / Header</label>
-                        <input
-                          type="text"
-                          value={localOptions.serviceIntervals.intervalType}
-                          onChange={(e) => setLocalOptions((prev) => ({
-                            ...prev,
-                            serviceIntervals: { ...prev.serviceIntervals, intervalType: e.target.value }
-                          }))}
-                          placeholder="Pre-Service Countdown"
-                          className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white text-xs focus:border-blue-500 outline-none"
-                        />
-
-                        {/* Label Presets */}
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          <span className="text-[10px] text-gray-400">Quick Labels:</span>
-                          {['Pre-Service Countdown', 'Sermon Timer', 'Offering Interval', 'Worship Transition'].map((lbl) => (
-                            <button
-                              key={lbl}
-                              type="button"
-                              onClick={() => setLocalOptions((prev) => ({
-                                ...prev,
-                                serviceIntervals: { ...prev.serviceIntervals, intervalType: lbl }
-                              }))}
-                              className="px-2 py-0.5 bg-[#252833] hover:bg-[#353949] rounded text-[10px] text-gray-300 border border-[#383c4b]"
-                            >
-                              {lbl}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex items-center gap-2">
+                        {isRunning ? (
+                          <button
+                            type="button"
+                            onClick={() => useStore.getState().pauseServiceTimer()}
+                            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+                          >
+                            <Pause size={13} />
+                            Pause Timer
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => useStore.getState().startServiceTimer(localOptions.serviceIntervals.countdownTime, localOptions.serviceIntervals.intervalType)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold transition-all flex items-center gap-1.5 shadow"
+                          >
+                            <Play size={13} className="fill-current" />
+                            {isPaused ? 'Resume Timer' : 'Start Countdown'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => useStore.getState().resetServiceTimer(localOptions.serviceIntervals.countdownTime)}
+                          className="px-2.5 py-1.5 bg-[#252833] hover:bg-[#353949] text-gray-300 hover:text-white rounded text-xs border border-[#383c4b] transition-all flex items-center gap-1.5"
+                          title="Reset Timer to Duration"
+                        >
+                          <RotateCcw size={12} />
+                          Reset
+                        </button>
                       </div>
                     </div>
 
-                    <div className="bg-[#121317] border border-[#2b2e3a] p-2.5 rounded flex items-center justify-between text-xs text-gray-400 mt-2">
-                      <span>Preview: <strong className="text-white">{localOptions.serviceIntervals.intervalType}</strong> will count down from <strong className="text-amber-400 font-mono">{localOptions.serviceIntervals.countdownTime}</strong> on the stage confidence monitor.</span>
+                    {/* Stage Display (Foldback Confidence Monitor) Configuration */}
+                    <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
+                        <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={localOptions.serviceIntervals.countdownEnabled}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, countdownEnabled: checked }
+                              }));
+                              useStore.getState().setServiceIntervalConfig({ countdownEnabled: checked });
+                            }}
+                            className="rounded accent-blue-500 w-4 h-4"
+                          />
+                          <span>Enable Service Interval Countdowns on Stage Display</span>
+                        </label>
+                        <span className="text-[11px] text-gray-400 font-mono">Foldback Monitor Sync</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-1">
+                        <div className="min-w-[200px] flex-1">
+                          <label className="text-gray-400 block mb-1 text-xs">Countdown Duration (mm:ss)</label>
+                          <input
+                            type="text"
+                            value={localOptions.serviceIntervals.countdownTime}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, countdownTime: val }
+                              }));
+                              useStore.getState().setServiceIntervalConfig({ countdownTime: val });
+                            }}
+                            placeholder="05:00"
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white font-mono text-sm focus:border-blue-500 outline-none"
+                          />
+                          
+                          {/* Quick Presets */}
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <span className="text-[10px] text-gray-400">Presets:</span>
+                            {['03:00', '05:00', '10:00', '15:00', '30:00'].map((time) => (
+                              <button
+                                key={time}
+                                type="button"
+                                onClick={() => {
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    serviceIntervals: { ...prev.serviceIntervals, countdownTime: time }
+                                  }));
+                                  useStore.getState().setServiceIntervalConfig({ countdownTime: time });
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] border transition-all ${
+                                  localOptions.serviceIntervals.countdownTime === time
+                                    ? 'bg-amber-600/30 text-amber-300 border-amber-500/60 font-semibold'
+                                    : 'bg-[#252833] hover:bg-[#353949] text-gray-300 border-[#383c4b]'
+                                }`}
+                              >
+                                {time}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="min-w-[200px] flex-1">
+                          <label className="text-gray-400 block mb-1 text-xs">Interval Label / Header</label>
+                          <input
+                            type="text"
+                            value={localOptions.serviceIntervals.intervalType}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, intervalType: val }
+                              }));
+                              useStore.getState().setServiceIntervalConfig({ intervalType: val });
+                            }}
+                            placeholder="Pre-Service Countdown"
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white text-xs focus:border-blue-500 outline-none"
+                          />
+
+                          {/* Label Presets */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            <span className="text-[10px] text-gray-400">Quick Labels:</span>
+                            {['Pre-Service Countdown', 'Sermon Timer', 'Offering Interval', 'Worship Transition'].map((lbl) => (
+                              <button
+                                key={lbl}
+                                type="button"
+                                onClick={() => {
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    serviceIntervals: { ...prev.serviceIntervals, intervalType: lbl }
+                                  }));
+                                  useStore.getState().setServiceIntervalConfig({ intervalType: lbl });
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] border transition-all ${
+                                  localOptions.serviceIntervals.intervalType === lbl
+                                    ? 'bg-amber-600/30 text-amber-300 border-amber-500/60 font-semibold'
+                                    : 'bg-[#252833] hover:bg-[#353949] text-gray-300 border-[#383c4b]'
+                                }`}
+                              >
+                                {lbl}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-[#121317] border border-[#2b2e3a] p-2.5 rounded flex items-center justify-between text-xs text-gray-400 mt-2">
+                        <span>
+                          Preview: <strong className="text-white">{localOptions.serviceIntervals.intervalType || 'Countdown'}</strong> will count down from <strong className="text-amber-400 font-mono">{localOptions.serviceIntervals.countdownTime || '05:00'}</strong> on the stage confidence monitor.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Main Target Monitors Live Display Overlay Configuration */}
+                    <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
+                        <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(localOptions.serviceIntervals.showOnMainDisplay)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, showOnMainDisplay: checked }
+                              }));
+                              useStore.getState().setServiceIntervalConfig({ showOnMainDisplay: checked });
+                            }}
+                            className="rounded accent-amber-500 w-4 h-4"
+                          />
+                          <span>Render Countdown on Live Display Canvas (Main Target Monitors)</span>
+                        </label>
+                        <span className="text-[11px] text-gray-400 font-mono">Main Sync</span>
+                      </div>
+
+                      {localOptions.serviceIntervals.showOnMainDisplay && (
+                        <div className="grid grid-cols-2 gap-4 pt-1">
+                          <div>
+                            <label className="text-gray-400 block mb-1 text-xs">Font Family</label>
+                            <select
+                              value={localOptions.serviceIntervals.fontFamily || 'monospace'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setLocalOptions((prev) => ({
+                                  ...prev,
+                                  serviceIntervals: { ...prev.serviceIntervals, fontFamily: val }
+                                }));
+                                useStore.getState().setServiceIntervalConfig({ fontFamily: val });
+                              }}
+                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white text-xs focus:border-amber-500 outline-none"
+                            >
+                              <option value="monospace">Monospace</option>
+                              <option value="sans-serif">Sans-serif</option>
+                              <option value="serif">Serif</option>
+                              <option value="Inter">Inter</option>
+                              <option value="Roboto">Roboto</option>
+                              <option value="Montserrat">Montserrat</option>
+                              <option value="Oswald">Oswald</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-gray-400 block mb-1 text-xs">Text Color</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={localOptions.serviceIntervals.fontColor || '#ffffff'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    serviceIntervals: { ...prev.serviceIntervals, fontColor: val }
+                                  }));
+                                  useStore.getState().setServiceIntervalConfig({ fontColor: val });
+                                }}
+                                className="w-8 h-8 rounded border border-[#3b404d] bg-transparent cursor-pointer"
+                              />
+                              <span className="font-mono text-xs text-gray-400">{localOptions.serviceIntervals.fontColor || '#ffffff'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ================= SLIDE LABELS ================= */}
-              {activeCategory === 'Slide Labels' && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div>
-                      <span className="font-bold text-gray-200 block text-sm">Slide Labels Configuration</span>
-                      <span className="text-[11px] text-gray-400">Labels style live slide headers and enable quick keyboard navigation</span>
+              {activeCategory === 'Slide Labels' && (() => {
+                const handleResetSlideLabels = () => {
+                  const freshDefaults: SlideLabelConfig[] = JSON.parse(JSON.stringify(defaultSystemOptions.slideLabels || []));
+                  setLocalOptions((prev) => ({
+                    ...prev,
+                    slideLabels: freshDefaults
+                  }));
+                  setResetConfirmSuccess(true);
+                  setSlideLabelFeedback(`Reset to ${freshDefaults.length} default slide labels (Chorus, Bridge, Verse, Intro, Ending, etc.)`);
+                  setTimeout(() => setResetConfirmSuccess(false), 2500);
+                  setTimeout(() => setSlideLabelFeedback(null), 4500);
+                };
+
+                const handleAddSlideLabel = (suggestedName = 'NEW LABEL', suggestedShortcut = 'N', suggestedBg = '#2E384D') => {
+                  const newId = `lbl-${Date.now()}`;
+                  const newLabel: SlideLabelConfig = {
+                    id: newId,
+                    name: suggestedName.toUpperCase(),
+                    bgColor: suggestedBg,
+                    textColor: '#FFFFFF',
+                    shortcut: suggestedShortcut.toUpperCase()
+                  };
+
+                  setLocalOptions((prev) => {
+                    const existing = Array.isArray(prev?.slideLabels) ? prev.slideLabels : (defaultSystemOptions.slideLabels || []);
+                    return {
+                      ...prev,
+                      slideLabels: [newLabel, ...existing]
+                    };
+                  });
+
+                  setHighlightedLabelId(newId);
+                  setAddLabelSuccess(true);
+                  setSlideLabelFeedback(`Added "${suggestedName.toUpperCase()}" at the top of the list. You can edit its name, shortcut, and colors.`);
+                  setTimeout(() => setAddLabelSuccess(false), 2000);
+                  setTimeout(() => setHighlightedLabelId(null), 3500);
+                  setTimeout(() => setSlideLabelFeedback(null), 5000);
+                };
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <span className="font-bold text-gray-200 block text-sm">Slide Labels Configuration</span>
+                        <span className="text-[11px] text-gray-400">Labels style live slide headers and enable quick keyboard navigation</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          id="btn-reset-slide-labels"
+                          onClick={handleResetSlideLabels}
+                          className={`px-3 py-1.5 rounded border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer select-none active:scale-95 shadow-sm ${
+                            resetConfirmSuccess
+                              ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500/50'
+                              : 'bg-[#282b35] hover:bg-[#343846] text-gray-200 border-[#3e4456] hover:border-gray-400'
+                          }`}
+                          title="Restore factory preset labels (Chorus, Bridge, Verse, Intro, etc.)"
+                        >
+                          {resetConfirmSuccess ? (
+                            <>
+                              <Check size={13} className="text-emerald-400 stroke-[2.5]" />
+                              <span>Defaults Restored!</span>
+                            </>
+                          ) : (
+                            <>
+                              <RotateCcw size={13} className="text-gray-400 group-hover:text-gray-200" />
+                              <span>Reset Defaults</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          id="btn-add-slide-label"
+                          onClick={() => handleAddSlideLabel()}
+                          className={`px-3 py-1.5 rounded flex items-center gap-1.5 font-bold text-xs transition-all cursor-pointer select-none active:scale-95 shadow-md ${
+                            addLabelSuccess
+                              ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                              : 'bg-indigo-600 hover:bg-indigo-500 text-white hover:shadow-indigo-500/25'
+                          }`}
+                          title="Create and insert a new custom slide label at the top"
+                        >
+                          {addLabelSuccess ? (
+                            <>
+                              <Check size={14} className="stroke-[2.5]" />
+                              <span>Label Added!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={14} className="stroke-[2.5]" />
+                              <span>Add Label</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalOptions((prev) => ({
-                            ...prev,
-                            slideLabels: defaultSystemOptions.slideLabels
-                          }));
-                        }}
-                        className="px-2.5 py-1 bg-[#282b35] hover:bg-[#343846] text-gray-300 text-xs rounded border border-[#3e4456] transition-colors"
-                      >
-                        Reset Defaults
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newLabel: SlideLabelConfig = {
-                            id: `lbl-${Date.now()}`,
-                            name: 'NEW LABEL',
-                            bgColor: '#2E384D',
-                            textColor: '#FFFFFF',
-                            shortcut: 'N'
-                          };
-                          setLocalOptions((prev) => ({
-                            ...prev,
-                            slideLabels: [...prev.slideLabels, newLabel]
-                          }));
-                        }}
-                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center gap-1 font-semibold text-xs transition-colors"
-                      >
-                        <Plus size={12} />
-                        <span>Add Label</span>
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Slide Labels Table matching EasyWorship screenshot */}
-                  <div className="border border-[#323642] rounded-md overflow-hidden bg-[#18191f]">
-                    <div className="grid grid-cols-12 bg-[#252833] border-b border-[#303440] px-3 py-1.5 font-bold text-gray-400 text-[11px]">
-                      <div className="col-span-4">Label Name</div>
-                      <div className="col-span-2">Key</div>
-                      <div className="col-span-2">Background</div>
-                      <div className="col-span-2">Text Color</div>
-                      <div className="col-span-2 text-right">Badge & Action</div>
-                    </div>
-
-                    <div className="max-h-80 overflow-y-auto divide-y divide-[#222530] custom-scrollbar">
-                      {localOptions.slideLabels.map((lbl, index) => (
-                        <div key={lbl.id} className="grid grid-cols-12 px-3 py-1.5 items-center hover:bg-[#1f2129] gap-2">
-                          <div className="col-span-4">
-                            <input
-                              type="text"
-                              value={lbl.name}
-                              onChange={(e) => {
-                                const updated = [...localOptions.slideLabels];
-                                updated[index].name = e.target.value;
-                                setLocalOptions({ ...localOptions, slideLabels: updated });
-                              }}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-white text-xs font-semibold uppercase"
-                            />
-                          </div>
-
-                          <div className="col-span-2">
-                            <input
-                              type="text"
-                              maxLength={3}
-                              value={lbl.shortcut}
-                              onChange={(e) => {
-                                const updated = [...localOptions.slideLabels];
-                                updated[index].shortcut = e.target.value.toUpperCase();
-                                setLocalOptions({ ...localOptions, slideLabels: updated });
-                              }}
-                              className="w-12 bg-[#121317] border border-[#3b404d] rounded px-1.5 py-1 text-white text-xs font-mono text-center uppercase"
-                            />
-                          </div>
-
-                          <div className="col-span-2 flex items-center gap-1.5">
-                            <input
-                              type="color"
-                              value={lbl.bgColor}
-                              onChange={(e) => {
-                                const updated = [...localOptions.slideLabels];
-                                updated[index].bgColor = e.target.value;
-                                setLocalOptions({ ...localOptions, slideLabels: updated });
-                              }}
-                              className="w-6 h-6 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
-                            />
-                            <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{lbl.bgColor}</span>
-                          </div>
-
-                          <div className="col-span-2 flex items-center gap-1.5">
-                            <input
-                              type="color"
-                              value={lbl.textColor}
-                              onChange={(e) => {
-                                const updated = [...localOptions.slideLabels];
-                                updated[index].textColor = e.target.value;
-                                setLocalOptions({ ...localOptions, slideLabels: updated });
-                              }}
-                              className="w-6 h-6 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
-                            />
-                            <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{lbl.textColor}</span>
-                          </div>
-
-                          <div className="col-span-2 flex items-center justify-end gap-2">
-                            <span
-                              className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-black/30 truncate max-w-[70px]"
-                              style={{ backgroundColor: lbl.bgColor, color: lbl.textColor }}
-                            >
-                              {lbl.name}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const filtered = localOptions.slideLabels.filter((_, i) => i !== index);
-                                setLocalOptions({ ...localOptions, slideLabels: filtered });
-                              }}
-                              className="p-1 text-gray-400 hover:text-rose-400 rounded transition-colors"
-                              title="Delete label"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
+                    {/* Quick Preset Add Buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap bg-[#1a1c24] border border-[#2d313d] rounded-md px-3 py-1.5">
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Quick Presets:</span>
+                      {[
+                        { name: 'REFRAIN', key: 'R', bg: '#4A1D54' },
+                        { name: 'OUTRO', key: 'O', bg: '#541A1A' },
+                        { name: 'CODA', key: 'D', bg: '#1A2456' },
+                        { name: 'SOLO', key: 'S', bg: '#254070' },
+                        { name: 'HOOK', key: 'H', bg: '#1F4735' },
+                        { name: 'INSTRUMENTAL', key: 'I', bg: '#1D3B6D' },
+                      ].map(preset => (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => handleAddSlideLabel(preset.name, preset.key, preset.bg)}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold border border-[#3b404d] bg-[#14151a] hover:bg-[#252833] text-gray-300 hover:text-white transition-all cursor-pointer active:scale-95 flex items-center gap-1 shadow-sm"
+                          title={`Click to add ${preset.name} with key [${preset.key}]`}
+                        >
+                          <Plus size={10} className="text-indigo-400 stroke-[2.5]" />
+                          <span>{preset.name}</span>
+                        </button>
                       ))}
                     </div>
+
+                    {/* Feedback Toast Notification */}
+                    {slideLabelFeedback && (
+                      <div className="flex items-center justify-between px-3 py-2 rounded bg-indigo-950/80 border border-indigo-500/50 text-indigo-200 text-xs shadow-md animate-fadeIn">
+                        <div className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-indigo-400 shrink-0 animate-pulse" />
+                          <span className="font-medium">{slideLabelFeedback}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSlideLabelFeedback(null)}
+                          className="text-gray-400 hover:text-white text-xs px-1.5 py-0.5 rounded hover:bg-white/10 cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Slide Labels Table matching EasyWorship screenshot */}
+                    <div className="border border-[#323642] rounded-md overflow-hidden bg-[#18191f]">
+                      <div className="grid grid-cols-12 bg-[#252833] border-b border-[#303440] px-3 py-1.5 font-bold text-gray-400 text-[11px]">
+                        <div className="col-span-4">Label Name</div>
+                        <div className="col-span-2">Key</div>
+                        <div className="col-span-2">Background</div>
+                        <div className="col-span-2">Text Color</div>
+                        <div className="col-span-2 text-right">Badge & Action</div>
+                      </div>
+
+                      <div className="max-h-80 overflow-y-auto divide-y divide-[#222530] custom-scrollbar">
+                        {(localOptions.slideLabels || []).map((lbl, index) => {
+                          const isHighlighted = lbl.id === highlightedLabelId;
+                          return (
+                            <div 
+                              key={lbl.id || index} 
+                              className={`grid grid-cols-12 px-3 py-1.5 items-center gap-2 transition-all duration-300 ${
+                                isHighlighted 
+                                  ? 'bg-indigo-950/70 border-l-4 border-l-indigo-400 ring-1 ring-indigo-500/50' 
+                                  : 'hover:bg-[#1f2129]'
+                              }`}
+                            >
+                              <div className="col-span-4">
+                                <input
+                                  type="text"
+                                  autoFocus={isHighlighted}
+                                  value={lbl.name}
+                                  onChange={(e) => {
+                                    const updated = [...(localOptions.slideLabels || [])];
+                                    updated[index] = { ...updated[index], name: e.target.value };
+                                    setLocalOptions({ ...localOptions, slideLabels: updated });
+                                  }}
+                                  className={`w-full bg-[#121317] border rounded px-2 py-1 text-white text-xs font-semibold uppercase ${
+                                    isHighlighted ? 'border-indigo-400 ring-1 ring-indigo-400' : 'border-[#3b404d]'
+                                  }`}
+                                />
+                              </div>
+
+                              <div className="col-span-2">
+                                <input
+                                  type="text"
+                                  maxLength={12}
+                                  value={lbl.shortcut}
+                                  title="Keyboard shortcut or key combo (e.g. C, V, B, E, NUM .)"
+                                  onChange={(e) => {
+                                    const updated = [...(localOptions.slideLabels || [])];
+                                    updated[index] = { ...updated[index], shortcut: e.target.value.toUpperCase() };
+                                    setLocalOptions({ ...localOptions, slideLabels: updated });
+                                  }}
+                                  className="w-20 sm:w-24 bg-[#121317] border border-[#3b404d] rounded px-1.5 py-1 text-white text-xs font-mono text-center uppercase"
+                                />
+                              </div>
+
+                              <div className="col-span-2 flex items-center gap-1.5">
+                                <input
+                                  type="color"
+                                  value={lbl.bgColor}
+                                  onChange={(e) => {
+                                    const updated = [...(localOptions.slideLabels || [])];
+                                    updated[index] = { ...updated[index], bgColor: e.target.value };
+                                    setLocalOptions({ ...localOptions, slideLabels: updated });
+                                  }}
+                                  className="w-6 h-6 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
+                                />
+                                <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{lbl.bgColor}</span>
+                              </div>
+
+                              <div className="col-span-2 flex items-center gap-1.5">
+                                <input
+                                  type="color"
+                                  value={lbl.textColor}
+                                  onChange={(e) => {
+                                    const updated = [...(localOptions.slideLabels || [])];
+                                    updated[index] = { ...updated[index], textColor: e.target.value };
+                                    setLocalOptions({ ...localOptions, slideLabels: updated });
+                                  }}
+                                  className="w-6 h-6 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
+                                />
+                                <span className="font-mono text-[10px] text-gray-400 hidden sm:inline">{lbl.textColor}</span>
+                              </div>
+
+                              <div className="col-span-2 flex items-center justify-end gap-2">
+                                <span
+                                  className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-black/30 truncate max-w-[85px]"
+                                  style={{ backgroundColor: lbl.bgColor, color: lbl.textColor }}
+                                  title={`Preview: ${lbl.name} (Key: ${lbl.shortcut || 'None'})`}
+                                >
+                                  {lbl.name}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const filtered = (localOptions.slideLabels || []).filter((_, i) => i !== index);
+                                    setLocalOptions({ ...localOptions, slideLabels: filtered });
+                                  }}
+                                  className="p-1 text-gray-400 hover:text-rose-400 rounded transition-colors cursor-pointer"
+                                  title="Delete label"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ================= ADVANCED ================= */}
               {activeCategory === 'Advanced' && (
@@ -2814,10 +3566,10 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         <button
                           type="button"
                           onClick={async () => {
-                            const activeProfile = store.profiles.find(p => p.id === store.activeProfileId) || store.profiles[0];
+                            const activeProfile = profiles.find(p => p.id === activeProfileId) || profiles[0];
                             const pkg = await exportPortableProfile(activeProfile, {
-                              activeSchedule: store.activeSchedule,
-                              shortcutSettings: store.shortcutSettings
+                              activeSchedule: activeSchedule,
+                              shortcutSettings: shortcutSettings
                             });
                             downloadPortableProfilePackage(pkg);
                             window.dispatchEvent(
@@ -2834,7 +3586,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       </div>
                     </div>
                     <p className="text-[11px] text-gray-400">
-                      Current Active Profile: <span className="text-cyan-300 font-semibold">{store.profiles.find(p => p.id === store.activeProfileId)?.name || 'Default'}</span>. Export complete songs, themes, schedules, and custom settings as a portable bundle to transfer to USB or other computers.
+                      Current Active Profile: <span className="text-cyan-300 font-semibold">{profiles.find(p => p.id === activeProfileId)?.name || 'Default'}</span>. Export complete songs, themes, schedules, and custom settings as a portable bundle to transfer to USB or other computers.
                     </p>
                   </div>
 

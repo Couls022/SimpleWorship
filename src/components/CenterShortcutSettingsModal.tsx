@@ -34,6 +34,7 @@ import {
   getFriendlyKeyName, 
   matchesShortcut 
 } from '../utils/keyboardShortcuts';
+import { matchesLabelShortcut } from '../utils/slideLabelHelper';
 
 interface CenterShortcutSettingsModalProps {
   onClose: () => void;
@@ -48,8 +49,7 @@ interface EvaluatedAction {
 }
 
 function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalProps) {
-  const store = useStore();
-  const { shortcutSettings, updateShortcutSettings, resetShortcutSettings } = store;
+  const shortcutSettings = useStore(state => state.shortcutSettings);
 
   // Snapshot initial settings so "Cancel" can revert if needed
   const [initialSettings] = useState<ShortcutSettings>(() => JSON.parse(JSON.stringify(shortcutSettings)));
@@ -101,7 +101,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
           : (shortcutSettings.enterGoesLive ? 'Active via "Enter Key & F5 instantly Go Live" setting' : 'Ctrl+Enter Go Live hotkey'),
         isFunctional: true,
         execute: () => {
-          store.goLive();
+          useStore.getState().goLive();
         }
       };
     }
@@ -128,7 +128,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
         ruleExplanation: rule,
         isFunctional: true,
         execute: () => {
-          store.goLiveNext();
+          useStore.getState().goLiveNext();
         }
       };
     }
@@ -152,7 +152,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
         ruleExplanation: rule,
         isFunctional: true,
         execute: () => {
-          store.goLivePrev();
+          useStore.getState().goLivePrev();
         }
       };
     }
@@ -171,8 +171,8 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
           : `Matched configured shortcut [${mappings.clearOutput}]`,
         isFunctional: true,
         execute: () => {
-          const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-          store.toggleClear(targetId);
+          const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || 'group-congregation';
+          useStore.getState().toggleClear(targetId);
         }
       };
     }
@@ -191,8 +191,8 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
           : `Matched configured shortcut [${mappings.blackout}]`,
         isFunctional: true,
         execute: () => {
-          const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-          store.toggleBlack(targetId);
+          const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || 'group-congregation';
+          useStore.getState().toggleBlack(targetId);
         }
       };
     }
@@ -211,8 +211,8 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
           : `Matched configured shortcut [${mappings.logo}]`,
         isFunctional: true,
         execute: () => {
-          const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-          store.toggleLogo(targetId);
+          const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || 'group-congregation';
+          useStore.getState().toggleLogo(targetId);
         }
       };
     }
@@ -228,7 +228,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
         ruleExplanation: `Matched shortcut [${mappings.nextItem || 'ArrowRight'}]`,
         isFunctional: true,
         execute: () => {
-          store.goNextScheduleItem();
+          useStore.getState().goNextScheduleItem();
         }
       };
     }
@@ -242,7 +242,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
         ruleExplanation: `Matched shortcut [${mappings.previousItem || 'ArrowLeft'}]`,
         isFunctional: true,
         execute: () => {
-          store.goPrevScheduleItem();
+          useStore.getState().goPrevScheduleItem();
         }
       };
     }
@@ -257,8 +257,8 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
           ruleExplanation: 'Active via "Number Keys (1-9) Direct Verse Jump" setting',
           isFunctional: true,
           execute: () => {
-            const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-            store.goLiveSlide(num - 1, targetId);
+            const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || 'group-congregation';
+            useStore.getState().goLiveSlide(num - 1, targetId);
           }
         };
       } else {
@@ -271,6 +271,24 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
       }
     }
 
+    // 8.5 Slide Label Quick Navigation (e.g. C for Chorus, V for Verse, B for Bridge, etc.)
+    if (isNoModifier && key && key.length <= 8) {
+      const labels = useStore.getState().systemOptions?.slideLabels || [];
+      const matched = labels.find(l => matchesLabelShortcut(key, l.shortcut));
+      if (matched) {
+        return {
+          actionName: `JUMP TO ${matched.name} (Slide Label: ${matched.name})`,
+          category: 'Slide Labels',
+          ruleExplanation: `Configured in Options -> Slide Labels [Key: ${matched.shortcut}]. Navigates to ${matched.name} when presenting songs live.`,
+          isFunctional: true,
+          execute: () => {
+            const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || 'group-congregation';
+            useStore.getState().goLiveNext();
+          }
+        };
+      }
+    }
+
     // 9. Escape Key
     if (key === 'Escape') {
       return {
@@ -279,11 +297,11 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
         ruleExplanation: 'Cancels active Blackout, Clear, or Logo and restores live slide text',
         isFunctional: true,
         execute: () => {
-          const targetId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-          const activeGroup = store.groupStates[targetId];
-          if (activeGroup?.isBlack) store.toggleBlack(targetId);
-          if (activeGroup?.isClear) store.toggleClear(targetId);
-          if (activeGroup?.showLogo) store.toggleLogo(targetId);
+          const targetId = useStore.getState().activeControlGroupId || useStore.getState().outputGroups[0]?.id || 'group-congregation';
+          const activeGroup = useStore.getState().groupStates[targetId];
+          if (activeGroup?.isBlack) useStore.getState().toggleBlack(targetId);
+          if (activeGroup?.isClear) useStore.getState().toggleClear(targetId);
+          if (activeGroup?.showLogo) useStore.getState().toggleLogo(targetId);
         }
       };
     }
@@ -326,7 +344,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
       ruleExplanation: 'This key combination is not mapped to any active live presentation action',
       isFunctional: false
     };
-  }, [mappings, shortcutSettings, store]);
+  }, [mappings, shortcutSettings]);
 
   // Update initial tester state
   useEffect(() => {
@@ -356,7 +374,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
             ...mappings,
             [editingMappingKey]: ''
           };
-          updateShortcutSettings({
+          useStore.getState().updateShortcutSettings({
             presetName: 'Custom',
             keyMappings: updatedMappings
           });
@@ -378,7 +396,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
             ...mappings,
             [editingMappingKey]: formatted
           };
-          updateShortcutSettings({
+          useStore.getState().updateShortcutSettings({
             presetName: 'Custom',
             keyMappings: updatedMappings
           });
@@ -405,7 +423,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
 
     window.addEventListener('keydown', handleKeyRecord, true);
     return () => window.removeEventListener('keydown', handleKeyRecord, true);
-  }, [editingMappingKey, activeTab, mappings, updateShortcutSettings, evaluateKeyAction]);
+  }, [editingMappingKey, activeTab, mappings, evaluateKeyAction]);
 
   const configurableActions: { key: keyof CustomKeyMappings; action: string; desc: string; category: string; badge: string; defaultKey: string }[] = [
     { key: 'goLive', action: 'Go Live', desc: 'Push selected item or preview slide directly to the Live Output screen', category: 'Live Control', badge: 'Critical', defaultKey: DEFAULT_SIMPLEWORSHIP_MAPPINGS.goLive },
@@ -437,7 +455,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
 
   const applyPreset = (preset: 'SimpleWorship' | 'ProPresenter') => {
     if (preset === 'SimpleWorship') {
-      updateShortcutSettings({
+      useStore.getState().updateShortcutSettings({
         presetName: 'SimpleWorship',
         arrowControlsLive: true,
         spacebarAdvancesLive: true,
@@ -449,7 +467,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
         keyMappings: { ...DEFAULT_SIMPLEWORSHIP_MAPPINGS }
       });
     } else if (preset === 'ProPresenter') {
-      updateShortcutSettings({
+      useStore.getState().updateShortcutSettings({
         presetName: 'ProPresenter',
         arrowControlsLive: true,
         spacebarAdvancesLive: true,
@@ -488,7 +506,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
       ...mappings,
       [key]: defaultKey
     };
-    updateShortcutSettings({
+    useStore.getState().updateShortcutSettings({
       keyMappings: updatedMappings
     });
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
@@ -724,7 +742,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
                 <input
                   type="checkbox"
                   checked={shortcutSettings.arrowControlsLive}
-                  onChange={(e) => updateShortcutSettings({ arrowControlsLive: e.target.checked })}
+                  onChange={(e) => useStore.getState().updateShortcutSettings({ arrowControlsLive: e.target.checked })}
                   className="mt-0.5 w-4 h-4 rounded text-cyan-600 bg-[#252a3a] border-gray-600 focus:ring-cyan-500"
                 />
                 <div>
@@ -743,7 +761,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
                 <input
                   type="checkbox"
                   checked={shortcutSettings.spacebarAdvancesLive}
-                  onChange={(e) => updateShortcutSettings({ spacebarAdvancesLive: e.target.checked })}
+                  onChange={(e) => useStore.getState().updateShortcutSettings({ spacebarAdvancesLive: e.target.checked })}
                   className="mt-0.5 w-4 h-4 rounded text-cyan-600 bg-[#252a3a] border-gray-600 focus:ring-cyan-500"
                 />
                 <div>
@@ -762,7 +780,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
                 <input
                   type="checkbox"
                   checked={shortcutSettings.enterGoesLive}
-                  onChange={(e) => updateShortcutSettings({ enterGoesLive: e.target.checked })}
+                  onChange={(e) => useStore.getState().updateShortcutSettings({ enterGoesLive: e.target.checked })}
                   className="mt-0.5 w-4 h-4 rounded text-cyan-600 bg-[#252a3a] border-gray-600 focus:ring-cyan-500"
                 />
                 <div>
@@ -781,7 +799,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
                 <input
                   type="checkbox"
                   checked={shortcutSettings.numericQuickJump}
-                  onChange={(e) => updateShortcutSettings({ numericQuickJump: e.target.checked })}
+                  onChange={(e) => useStore.getState().updateShortcutSettings({ numericQuickJump: e.target.checked })}
                   className="mt-0.5 w-4 h-4 rounded text-cyan-600 bg-[#252a3a] border-gray-600 focus:ring-cyan-500"
                 />
                 <div>
@@ -800,7 +818,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
                 <input
                   type="checkbox"
                   checked={shortcutSettings.quickKeysBcl}
-                  onChange={(e) => updateShortcutSettings({ quickKeysBcl: e.target.checked })}
+                  onChange={(e) => useStore.getState().updateShortcutSettings({ quickKeysBcl: e.target.checked })}
                   className="mt-0.5 w-4 h-4 rounded text-cyan-600 bg-[#252a3a] border-gray-600 focus:ring-cyan-500"
                 />
                 <div>
@@ -819,7 +837,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
                 <input
                   type="checkbox"
                   checked={shortcutSettings.wrapAroundSlides}
-                  onChange={(e) => updateShortcutSettings({ wrapAroundSlides: e.target.checked })}
+                  onChange={(e) => useStore.getState().updateShortcutSettings({ wrapAroundSlides: e.target.checked })}
                   className="mt-0.5 w-4 h-4 rounded text-cyan-600 bg-[#252a3a] border-gray-600 focus:ring-cyan-500"
                 />
                 <div>
@@ -979,7 +997,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
           <button
             onClick={() => {
               if (confirm('Reset all shortcuts and live navigation behavior to factory defaults?')) {
-                resetShortcutSettings();
+                useStore.getState().resetShortcutSettings();
                 window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Shortcuts reset to factory defaults' }));
               }
             }}
@@ -993,7 +1011,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
             <button
               onClick={() => {
                 // Revert any changes made during this dialog session
-                updateShortcutSettings(initialSettings);
+                useStore.getState().updateShortcutSettings(initialSettings);
                 onClose();
               }}
               className="px-4 py-1.5 bg-[#2a2f3f] hover:bg-[#353b4f] text-gray-200 rounded-lg text-xs font-semibold transition-colors"

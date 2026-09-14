@@ -58,8 +58,9 @@ function FontPicker({ label, value, onChange }: { label: string, value: FontStyl
 }
 
 function SettingsModal({ onClose }: SettingsModalProps) {
-  const store = useStore();
-  const { outputGroups, addOutputGroup, removeOutputGroup, themesList, systemOptions, updateSystemOptions } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const themesList = useStore(state => state.themesList);
+  const systemOptions = useStore(state => state.systemOptions);
   
   const [activeTab, setActiveTab] = useState<'displays' | 'general' | 'songs' | 'scriptures'>('displays');
 
@@ -114,7 +115,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
       aspectRatio: newGroupAspectRatio as any,
       targetDisplayId: newGroupDisplayId || undefined,
     };
-    addOutputGroup(newGroup);
+    useStore.getState().addOutputGroup(newGroup);
     setNewGroupName('');
   };
 
@@ -182,7 +183,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                         <div className="font-bold text-gray-200 text-sm">{group.name}</div>
                         <div className="text-gray-400 mt-1">Role: <span className="uppercase text-xs">{group.role}</span> | Aspect Ratio: {group.aspectRatio} | Target: {group.targetDisplayId || 'Windowed'}</div>
                       </div>
-                      <button onClick={() => removeOutputGroup(group.id)} className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded">
+                      <button onClick={() => useStore.getState().removeOutputGroup(group.id)} className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -244,14 +245,14 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                   <FontPicker 
                     label="Default Font" 
                     value={systemOptions.mainOutput.general.defaultFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, general: { ...prev.mainOutput.general, defaultFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, general: { ...prev.mainOutput.general, defaultFont: v } } }))} 
                   />
                   
                   <div className="flex items-center gap-3 bg-[#242833] p-4 rounded border border-[#2d313d]">
                     <input 
                       type="checkbox" 
                       checked={systemOptions.mainOutput.general.disableLogoOnLive} 
-                      onChange={(e) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, general: { ...prev.mainOutput.general, disableLogoOnLive: e.target.checked } } }))}
+                      onChange={(e) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, general: { ...prev.mainOutput.general, disableLogoOnLive: e.target.checked } } }))}
                       className="w-4 h-4 rounded border-gray-500"
                     />
                     <div>
@@ -270,17 +271,17 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                   <FontPicker 
                     label="Song Lyrics Font" 
                     value={systemOptions.mainOutput.song.songFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, songFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, songFont: v } } }))} 
                   />
                   <FontPicker 
                     label="Section Label Font" 
                     value={systemOptions.mainOutput.song.labelFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, labelFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, labelFont: v } } }))} 
                   />
                   <FontPicker 
                     label="Copyright Font" 
                     value={systemOptions.mainOutput.song.copyrightFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, copyrightFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, copyrightFont: v } } }))} 
                   />
                 </div>
                 
@@ -289,7 +290,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                     <label className="text-gray-400">Label Location</label>
                     <select 
                       value={systemOptions.mainOutput.song.labelLocation} 
-                      onChange={(e) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, labelLocation: e.target.value as any } } }))}
+                      onChange={(e) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, labelLocation: e.target.value as any } } }))}
                       className="bg-[#1c1f26] border border-[#2d313d] rounded p-2 text-white outline-none"
                     >
                       <option value="Header">Header</option>
@@ -303,7 +304,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                     <label className="text-gray-400">Copyright Location</label>
                     <select 
                       value={systemOptions.mainOutput.song.copyrightPosition} 
-                      onChange={(e) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, copyrightPosition: e.target.value as any } } }))}
+                      onChange={(e) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, song: { ...prev.mainOutput.song, copyrightPosition: e.target.value as any } } }))}
                       className="bg-[#1c1f26] border border-[#2d313d] rounded p-2 text-white outline-none"
                     >
                       <option value="Bottom Left">Bottom Left</option>
@@ -324,17 +325,17 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                   <FontPicker 
                     label="Scripture Body Font" 
                     value={systemOptions.mainOutput.scripture.scriptureFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, scriptureFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, scriptureFont: v } } }))} 
                   />
                   <FontPicker 
                     label="Reference Font" 
                     value={systemOptions.mainOutput.scripture.referenceFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, referenceFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, referenceFont: v } } }))} 
                   />
                   <FontPicker 
                     label="Verse Number Font" 
                     value={systemOptions.mainOutput.scripture.verseFont} 
-                    onChange={(v) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, verseFont: v } } }))} 
+                    onChange={(v) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, verseFont: v } } }))} 
                   />
                 </div>
                 
@@ -343,7 +344,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                     <label className="text-gray-400">Reference Location</label>
                     <select 
                       value={systemOptions.mainOutput.scripture.referenceLocation} 
-                      onChange={(e) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, referenceLocation: e.target.value as any } } }))}
+                      onChange={(e) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, referenceLocation: e.target.value as any } } }))}
                       className="bg-[#1c1f26] border border-[#2d313d] rounded p-2 text-white outline-none"
                     >
                       <option value="After Each Slide">After Each Slide</option>
@@ -358,7 +359,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                     <label className="text-gray-400">Verse Number Style</label>
                     <select 
                       value={systemOptions.mainOutput.scripture.verseNumberStyle} 
-                      onChange={(e) => updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, verseNumberStyle: e.target.value as any } } }))}
+                      onChange={(e) => useStore.getState().updateSystemOptions(prev => ({ ...prev, mainOutput: { ...prev.mainOutput, scripture: { ...prev.mainOutput.scripture, verseNumberStyle: e.target.value as any } } }))}
                       className="bg-[#1c1f26] border border-[#2d313d] rounded p-2 text-white outline-none"
                     >
                       <option value="superscript">Superscript</option>

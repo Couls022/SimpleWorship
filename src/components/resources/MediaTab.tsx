@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { PresentationContentResolver } from '../../core/PresentationContentResolver';
 import { 
   Plus, 
@@ -28,8 +28,14 @@ import { handleRangeSelection } from '../../utils/selectionUtils';
 import { LazyVideoThumbnail } from '../common/LazyVideoThumbnail';
 
 export default function MediaTab() {
-  const store = useStore();
-  const { assetsList, addAsset, deleteAsset, setDefaultBackground, addScheduleItem, goLiveItem } = store;
+  const assetsList = useStore(state => state.assetsList);
+  const addAsset = useStore(state => state.addAsset);
+  const deleteAsset = useStore(state => state.deleteAsset);
+  const setDefaultBackground = useStore(state => state.setDefaultBackground);
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
+  const themesList = useStore(state => state.themesList);
+  const systemOptions = useStore(state => state.systemOptions);
 
   const [activeMediaFilter, setActiveMediaFilter] = useState<'all' | 'image' | 'audio' | 'video'>('all');
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>(() => assetsList[0]?.id ? [assetsList[0].id] : []);
@@ -54,38 +60,35 @@ export default function MediaTab() {
     }
   };
 
+  // Precompute default background URLs and IDs for high-speed O(1) lookups
+  const defaultBgTargets = useMemo(() => {
+    const songTheme = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
+    const scriptureTheme = themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
+    const presentationTheme = themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
+    const announcementTheme = themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
+    const logoTheme = themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
+    const timerTheme = themesList.find(th => th.type === 'timer' || th.id === 'theme-timer');
+
+    const sysLogo = systemOptions?.general?.defaultLogoUrl || systemOptions?.mainOutput?.general?.defaultLogoUrl;
+    const sysTimer = systemOptions?.serviceIntervals?.backgroundAssetId || (systemOptions?.serviceIntervals as any)?.backgroundAssetUrl;
+
+    return {
+      songs: [songTheme?.styles?.backgroundImageUrl, songTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      scriptures: [scriptureTheme?.styles?.backgroundImageUrl, scriptureTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      presentations: [presentationTheme?.styles?.backgroundImageUrl, presentationTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      announcements: [announcementTheme?.styles?.backgroundImageUrl, announcementTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      logo: [sysLogo, logoTheme?.styles?.backgroundImageUrl, logoTheme?.styles?.backgroundVideoUrl, logoTheme?.styles?.logoUrl].filter(Boolean),
+      timers: [sysTimer, timerTheme?.styles?.backgroundImageUrl, timerTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+    };
+  }, [themesList, systemOptions]);
+
   const isDefaultBgFor = (asset: Asset, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers') => {
     if (!asset) return false;
     if (asset.isDefaultScope?.[scope] === true) return true;
     const url = asset.url;
     const id = asset.id;
-    if (scope === 'songs') {
-      const t = store.themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
-    }
-    if (scope === 'scriptures') {
-      const t = store.themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
-    }
-    if (scope === 'presentations') {
-      const t = store.themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
-    }
-    if (scope === 'announcements') {
-      const t = store.themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
-    }
-    if (scope === 'logo') {
-      const sysLogo = store.systemOptions?.general?.defaultLogoUrl || store.systemOptions?.mainOutput?.general?.defaultLogoUrl;
-      const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return sysLogo === url || sysLogo === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id || t?.styles?.logoUrl === id));
-    }
-    if (scope === 'timers') {
-      const sysTimer = store.systemOptions?.serviceIntervals?.backgroundAssetId || (store.systemOptions?.serviceIntervals as any)?.backgroundAssetUrl;
-      const t = store.themesList.find(th => th.type === 'timer' || th.id === 'theme-timer');
-      return sysTimer === url || sysTimer === id || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(id) && (t?.styles?.backgroundImageUrl === id || t?.styles?.backgroundVideoUrl === id));
-    }
-    return false;
+    const targets = defaultBgTargets[scope] || [];
+    return (Boolean(url) && targets.includes(url)) || (Boolean(id) && targets.includes(id));
   };
 
   const getActiveDefaultBadges = (asset: Asset) => {

@@ -11,8 +11,9 @@ interface SaveScheduleAsModalProps {
 }
 
 function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
-  const store = useStore();
-  const { activeSchedule, setActiveSchedule, systemOptions, outputGroups } = store;
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const systemOptions = useStore(state => state.systemOptions);
+  const outputGroups = useStore(state => state.outputGroups);
   
   const [scheduleName, setScheduleName] = useState(
     activeSchedule?.name || 'Sunday Morning Service'
@@ -41,7 +42,7 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
       };
       
       await dbApi.addSchedule(updated);
-      setActiveSchedule(updated);
+      useStore.getState().setActiveSchedule(updated);
       
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();

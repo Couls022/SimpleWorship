@@ -7,8 +7,33 @@ import { PresentationContentResolver } from '../../core/PresentationContentResol
 import { LazyVideoThumbnail } from '../common/LazyVideoThumbnail';
 
 export default function MediaLibraryPanel() {
-  const store = useStore();
-  const { assetsList, setDefaultBackground, addScheduleItem } = store;
+  const assetsList = useStore(state => state.assetsList);
+  const setDefaultBackground = useStore(state => state.setDefaultBackground);
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const setPreviewItem = useStore(state => state.setPreviewItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const themesList = useStore(state => state.themesList);
+  const systemOptions = useStore(state => state.systemOptions);
+
+  const defaultBgTargets = React.useMemo(() => {
+    const songTheme = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
+    const scriptureTheme = themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
+    const presentationTheme = themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
+    const announcementTheme = themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
+    const logoTheme = themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
+    const timerTheme = themesList.find(th => th.type === 'timer' || th.id === 'theme-timer');
+
+    const so = systemOptions;
+    return {
+      songs: [so?.mainOutput?.song?.backdropAssetUrl, songTheme?.styles?.backgroundImageUrl, songTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      scriptures: [so?.mainOutput?.scripture?.backdropAssetUrl, scriptureTheme?.styles?.backgroundImageUrl, scriptureTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      presentations: [presentationTheme?.styles?.backgroundImageUrl, presentationTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      announcements: [announcementTheme?.styles?.backgroundImageUrl, announcementTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+      logo: [so?.general?.defaultLogoUrl, so?.mainOutput?.general?.defaultLogoUrl, logoTheme?.styles?.backgroundImageUrl, logoTheme?.styles?.backgroundVideoUrl, logoTheme?.styles?.logoUrl].filter(Boolean),
+      timers: [so?.serviceIntervals?.backgroundAssetId, (so?.serviceIntervals as any)?.backgroundAssetUrl, timerTheme?.styles?.backgroundImageUrl, timerTheme?.styles?.backgroundVideoUrl].filter(Boolean),
+    };
+  }, [themesList, systemOptions]);
 
   const isDefaultBgFor = (asset: Asset, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers') => {
     if (!asset) return false;
@@ -16,51 +41,8 @@ export default function MediaLibraryPanel() {
     
     const url = asset.url;
     const id = asset.id;
-    const so = store.systemOptions;
-    
-    const checkMatch = (target: string | undefined) => {
-      if (!target) return false;
-      return target === url || target === id;
-    };
-
-    if (scope === 'songs') {
-      const t = store.themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return checkMatch(so.mainOutput?.song?.backdropAssetUrl) || 
-             checkMatch(t?.styles?.backgroundImageUrl) || 
-             checkMatch(t?.styles?.backgroundVideoUrl);
-    }
-    if (scope === 'scriptures') {
-      const t = store.themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return checkMatch(so.mainOutput?.scripture?.backdropAssetUrl) || 
-             checkMatch(t?.styles?.backgroundImageUrl) || 
-             checkMatch(t?.styles?.backgroundVideoUrl);
-    }
-    if (scope === 'presentations') {
-      const t = store.themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return checkMatch(t?.styles?.backgroundImageUrl) || 
-             checkMatch(t?.styles?.backgroundVideoUrl);
-    }
-    if (scope === 'announcements') {
-      const t = store.themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return checkMatch(t?.styles?.backgroundImageUrl) || 
-             checkMatch(t?.styles?.backgroundVideoUrl);
-    }
-    if (scope === 'logo') {
-      const t = store.themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return checkMatch(so.general?.defaultLogoUrl) || 
-             checkMatch(so.mainOutput?.general?.defaultLogoUrl) ||
-             checkMatch(t?.styles?.logoUrl) ||
-             checkMatch(t?.styles?.backgroundImageUrl) || 
-             checkMatch(t?.styles?.backgroundVideoUrl);
-    }
-    if (scope === 'timers') {
-      const t = store.themesList.find(th => th.type === 'timer' || th.id === 'theme-timer');
-      return checkMatch(so.serviceIntervals?.backgroundAssetId) || 
-             checkMatch((so.serviceIntervals as any)?.backgroundAssetUrl) ||
-             checkMatch(t?.styles?.backgroundImageUrl) || 
-             checkMatch(t?.styles?.backgroundVideoUrl);
-    }
-    return false;
+    const targets = defaultBgTargets[scope] || [];
+    return (Boolean(url) && targets.includes(url)) || (Boolean(id) && targets.includes(id));
   };
 
   const getActiveDefaultBadges = (asset: Asset) => {
@@ -171,8 +153,8 @@ export default function MediaLibraryPanel() {
         isAudio: asset.type === 'audio',
       },
     };
-    store.setPreviewItem(item.id, 0);
-    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
+    setPreviewItem(item.id, 0);
+    goLiveItem(item.id, 0, activeControlGroupId || undefined, item);
   };
 
   const handleSendMultipleToLive = (assets: Asset[]) => {
@@ -204,8 +186,8 @@ export default function MediaLibraryPanel() {
       isExpanded: true
     };
 
-    store.setPreviewItem(slideshowItem.id, 0);
-    store.goLiveItem(slideshowItem.id, 0, store.activeControlGroupId || undefined, slideshowItem);
+    setPreviewItem(slideshowItem.id, 0);
+    goLiveItem(slideshowItem.id, 0, activeControlGroupId || undefined, slideshowItem);
     window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
       detail: `Sent ${assets.length} images as slideshow directly to Active Live Output!` 
     }));

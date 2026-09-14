@@ -2,16 +2,89 @@
 const BROADCAST_CHANNEL_NAME = 'simpleworship_live_channel';
 
 let channel: BroadcastChannel | null = null;
-if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-  try {
-    channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-  } catch (e) {
-    console.error('BroadcastChannel initialization error:', e);
+const activeSubscribers = new Set<(payload: BroadcastPayload) => void>();
+
+function dispatchToSubscribers(msg: BroadcastPayload) {
+  if (isDuplicateMessage(msg)) return;
+  activeSubscribers.forEach((cb) => {
+    try {
+      cb(msg);
+    } catch (err) {
+      console.error('[BroadcastSync] Subscriber error:', err);
+    }
+  });
+}
+
+function handleChannelMessage(event: MessageEvent) {
+  if (event.data && typeof event.data === 'object') {
+    const msg = event.data as BroadcastPayload;
+    dispatchToSubscribers(msg);
   }
 }
 
+function handleChannelError(e: MessageEvent | Event) {
+  console.warn('[BroadcastSync] BroadcastChannel encountered an error, triggering auto-reconnect:', e);
+  reconnectBroadcastChannel();
+}
+
+export function initBroadcastChannel(): BroadcastChannel | null {
+  if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
+    return null;
+  }
+
+  try {
+    if (channel) {
+      try {
+        channel.removeEventListener('message', handleChannelMessage);
+        channel.removeEventListener('messageerror', handleChannelError);
+        channel.close();
+      } catch {}
+    }
+
+    channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+    channel.addEventListener('message', handleChannelMessage);
+    channel.addEventListener('messageerror', handleChannelError);
+    return channel;
+  } catch (e) {
+    console.error('[BroadcastSync] BroadcastChannel initialization error:', e);
+    return null;
+  }
+}
+
+// Initial boot
+if (typeof window !== 'undefined') {
+  initBroadcastChannel();
+
+  // Watch for tab wakeups and network changes to maintain live channel health
+  window.addEventListener('online', () => {
+    reconnectBroadcastChannel();
+  });
+  window.addEventListener('focus', () => {
+    if (!channel) {
+      reconnectBroadcastChannel();
+    }
+  });
+}
+
+export function getBroadcastChannel(): BroadcastChannel | null {
+  if (!channel && typeof window !== 'undefined') {
+    return initBroadcastChannel();
+  }
+  return channel;
+}
+
+export function reconnectBroadcastChannel(): BroadcastChannel | null {
+  const newChan = initBroadcastChannel();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('simpleworship:broadcast-channel-reconnected', {
+      detail: { timestamp: Date.now() }
+    }));
+  }
+  return newChan;
+}
+
 export interface BroadcastPayload {
-  type: 'GROUP_STATES_UPDATE' | 'SCHEDULE_UPDATE' | 'SYSTEM_UPDATE' | 'SYSTEM_OPTIONS' | 'ALERT_UPDATE' | 'ALERT_PRESETS_UPDATE' | 'GO_LIVE' | 'ANNOTATION_UPDATE' | 'LASER_UPDATE' | 'IDENTIFY_DISPLAYS' | 'REQUEST_STATE' | 'SYNC_STATE' | 'PREVIEW_UPDATE';
+  type: 'GROUP_STATES_UPDATE' | 'SCHEDULE_UPDATE' | 'SYSTEM_UPDATE' | 'SYSTEM_OPTIONS' | 'ALERT_UPDATE' | 'ALERT_PRESETS_UPDATE' | 'GO_LIVE' | 'ANNOTATION_UPDATE' | 'LASER_UPDATE' | 'IDENTIFY_DISPLAYS' | 'REQUEST_STATE' | 'SYNC_STATE' | 'PREVIEW_UPDATE' | 'HEARTBEAT' | 'HEARTBEAT_ACK';
   data: any;
   timestamp?: number;
   msgId?: string;
@@ -22,6 +95,9 @@ const recentProcessedIds = new Set<string>();
 const recentProcessedQueue: string[] = [];
 
 function isDuplicateMessage(msg: BroadcastPayload): boolean {
+  if (msg.type === 'HEARTBEAT' || msg.type === 'HEARTBEAT_ACK') {
+    return false;
+  }
   const id = msg.msgId || `${msg.type}_${msg.timestamp || 0}`;
   if (recentProcessedIds.has(id)) {
     return true;
@@ -114,20 +190,24 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
 
   // 1. Post to BroadcastChannel (fast in-memory IPC with zero delay and no storage quota)
   // Send fullPayload so ArrayBuffers, TypedArrays (fileBytes), and data URLs are preserved with 1:1 fidelity across windows!
-  if (channel) {
+  const activeChannel = getBroadcastChannel();
+  if (activeChannel) {
     try {
-      channel.postMessage(fullPayload);
+      activeChannel.postMessage(fullPayload);
     } catch (err) {
       try {
         const lightweight = sanitizeForSync(fullPayload);
-        channel.postMessage(lightweight);
+        activeChannel.postMessage(lightweight);
       } catch (e2) {
         // Ultimate fallback to guarantee delivery via BroadcastChannel:
         // JSON stringification natively strips any lingering uncloneable objects (functions, DOM nodes, etc.)
         try {
           const ultraLight = JSON.parse(JSON.stringify(sanitizeForSync(fullPayload), getCircularReplacer()));
-          channel.postMessage(ultraLight);
-        } catch (e3) {}
+          activeChannel.postMessage(ultraLight);
+        } catch (e3) {
+          // If the channel was closed or broken, re-establish it
+          reconnectBroadcastChannel();
+        }
       }
     }
   }
@@ -139,7 +219,8 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
 
   // 2. Non-blocking fallback to localStorage for older browsers or cross-origin fallback
   // Executed asynchronously to never block frame rendering or UI interactions
-  if (typeof window !== 'undefined' && window.localStorage) {
+  // Heartbeats are purely in-memory IPC and do not need disk storage writes
+  if (typeof window !== 'undefined' && window.localStorage && payload.type !== 'HEARTBEAT' && payload.type !== 'HEARTBEAT_ACK') {
     setTimeout(() => {
       try {
         const lightweightPayload = sanitizeForSync(fullPayload);
@@ -166,14 +247,7 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
 export const subscribeToBroadcast = (callback: (payload: BroadcastPayload) => void) => {
   if (typeof window === 'undefined') return () => {};
 
-  const handleMessage = (event: MessageEvent) => {
-    if (event.data && typeof event.data === 'object') {
-      const msg = event.data as BroadcastPayload;
-      if (!isDuplicateMessage(msg)) {
-        callback(msg);
-      }
-    }
-  };
+  activeSubscribers.add(callback);
 
   const handleStorage = (event: StorageEvent) => {
     if (event.key === 'simpleworship_live_sync_event' && event.newValue) {
@@ -186,15 +260,10 @@ export const subscribeToBroadcast = (callback: (payload: BroadcastPayload) => vo
     }
   };
 
-  if (channel) {
-    channel.addEventListener('message', handleMessage);
-  }
   window.addEventListener('storage', handleStorage);
 
   return () => {
-    if (channel) {
-      channel.removeEventListener('message', handleMessage);
-    }
+    activeSubscribers.delete(callback);
     window.removeEventListener('storage', handleStorage);
   };
 };

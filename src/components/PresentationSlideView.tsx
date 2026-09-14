@@ -10,7 +10,7 @@ interface PresentationSlideViewProps {
   themeStyles?: ThemeStyles;
 }
 
-export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
+export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React.memo(({
   slide,
   slideIndex,
   totalSlides,
@@ -420,4 +420,6 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = ({
       )}
     </div>
   );
-};
+});
+
+PresentationSlideView.displayName = 'PresentationSlideView';

@@ -96,7 +96,14 @@ const getStoredOptions = (): SystemOptions => {
   try {
     const saved = localStorage.getItem('simpleworship_system_options_v1');
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return {
+        ...defaultSystemOptions,
+        ...parsed,
+        slideLabels: Array.isArray(parsed.slideLabels) && parsed.slideLabels.length > 0
+          ? parsed.slideLabels
+          : defaultSystemOptions.slideLabels,
+      };
     }
   } catch (e) {
     console.error('Error loading stored options', e);
@@ -179,6 +186,12 @@ interface AppState {
   systemOptions: SystemOptions;
   updateSystemOptions: (updates: Partial<SystemOptions> | ((prev: SystemOptions) => SystemOptions)) => void;
   resetSystemOptions: () => void;
+
+  // Service Interval Timer Actions
+  startServiceTimer: (duration?: string, label?: string) => void;
+  pauseServiceTimer: () => void;
+  resetServiceTimer: (newDuration?: string) => void;
+  setServiceIntervalConfig: (config: Partial<SystemOptions['serviceIntervals']>) => void;
 
   // Router Panels
   routerPanels: RouterPanelState[];
@@ -447,6 +460,174 @@ export const useStore = create<AppState>((set, get) => ({
         systemOptions: next,
         groupStates: updatedGroupStates,
       };
+    });
+  },
+
+  startServiceTimer: (duration?: string, label?: string) => {
+    set((state) => {
+      const current = state.systemOptions?.serviceIntervals || {
+        countdownEnabled: true,
+        countdownTime: '05:00',
+        intervalType: 'Pre-Service Countdown',
+        showOnMainDisplay: false,
+      };
+
+      const finalDuration = (duration && duration.trim()) ? duration.trim() : (current.countdownTime || '05:00');
+      const finalLabel = (label && label.trim()) ? label.trim() : (current.intervalType || 'Pre-Service Countdown');
+
+      const parseSecs = (str: string): number => {
+        if (!str) return 300;
+        const parts = str.trim().split(':');
+        if (parts.length === 2) {
+          const m = parseInt(parts[0], 10) || 0;
+          const s = parseInt(parts[1], 10) || 0;
+          return m * 60 + s;
+        }
+        const num = parseInt(str, 10);
+        return isNaN(num) ? 300 : num * 60;
+      };
+
+      let secsToCount = current.pausedRemainingSecs;
+      // If duration was explicitly passed or no paused time exists, start fresh from duration
+      if (duration || secsToCount === null || secsToCount === undefined || secsToCount <= 0) {
+        secsToCount = parseSecs(finalDuration);
+      }
+
+      const targetTimestamp = Date.now() + secsToCount * 1000;
+
+      const updatedIntervals = {
+        ...current,
+        countdownEnabled: current.countdownEnabled ?? true,
+        countdownTime: finalDuration,
+        intervalType: finalLabel,
+        isRunning: true,
+        targetTimestamp,
+        pausedRemainingSecs: null,
+      };
+
+      const nextOptions: SystemOptions = {
+        ...state.systemOptions,
+        serviceIntervals: updatedIntervals,
+      };
+
+      try {
+        localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextOptions));
+        dbApi.saveSystemOptions(nextOptions).catch(() => {});
+      } catch (e) {}
+
+      broadcastStateChange({
+        type: 'SYSTEM_UPDATE',
+        data: { systemOptions: nextOptions }
+      });
+
+      return { systemOptions: nextOptions };
+    });
+  },
+
+  pauseServiceTimer: () => {
+    set((state) => {
+      const current = state.systemOptions?.serviceIntervals;
+      if (!current || !current.isRunning) return {};
+
+      let remaining = 0;
+      if (current.targetTimestamp) {
+        remaining = Math.max(0, Math.ceil((current.targetTimestamp - Date.now()) / 1000));
+      }
+
+      const updatedIntervals = {
+        ...current,
+        isRunning: false,
+        targetTimestamp: null,
+        pausedRemainingSecs: remaining,
+      };
+
+      const nextOptions: SystemOptions = {
+        ...state.systemOptions,
+        serviceIntervals: updatedIntervals,
+      };
+
+      try {
+        localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextOptions));
+        dbApi.saveSystemOptions(nextOptions).catch(() => {});
+      } catch (e) {}
+
+      broadcastStateChange({
+        type: 'SYSTEM_UPDATE',
+        data: { systemOptions: nextOptions }
+      });
+
+      return { systemOptions: nextOptions };
+    });
+  },
+
+  resetServiceTimer: (newDuration?: string) => {
+    set((state) => {
+      const current = state.systemOptions?.serviceIntervals || {
+        countdownEnabled: true,
+        countdownTime: '05:00',
+        intervalType: 'Pre-Service Countdown',
+        showOnMainDisplay: false,
+      };
+
+      const finalDuration = (newDuration && newDuration.trim()) ? newDuration.trim() : (current.countdownTime || '05:00');
+
+      const updatedIntervals = {
+        ...current,
+        countdownTime: finalDuration,
+        isRunning: false,
+        targetTimestamp: null,
+        pausedRemainingSecs: null,
+      };
+
+      const nextOptions: SystemOptions = {
+        ...state.systemOptions,
+        serviceIntervals: updatedIntervals,
+      };
+
+      try {
+        localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextOptions));
+        dbApi.saveSystemOptions(nextOptions).catch(() => {});
+      } catch (e) {}
+
+      broadcastStateChange({
+        type: 'SYSTEM_UPDATE',
+        data: { systemOptions: nextOptions }
+      });
+
+      return { systemOptions: nextOptions };
+    });
+  },
+
+  setServiceIntervalConfig: (config: Partial<SystemOptions['serviceIntervals']>) => {
+    set((state) => {
+      const current = state.systemOptions?.serviceIntervals || {
+        countdownEnabled: true,
+        countdownTime: '05:00',
+        intervalType: 'Pre-Service Countdown',
+        showOnMainDisplay: false,
+      };
+
+      const updatedIntervals = {
+        ...current,
+        ...config,
+      };
+
+      const nextOptions: SystemOptions = {
+        ...state.systemOptions,
+        serviceIntervals: updatedIntervals,
+      };
+
+      try {
+        localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextOptions));
+        dbApi.saveSystemOptions(nextOptions).catch(() => {});
+      } catch (e) {}
+
+      broadcastStateChange({
+        type: 'SYSTEM_UPDATE',
+        data: { systemOptions: nextOptions }
+      });
+
+      return { systemOptions: nextOptions };
     });
   },
 
@@ -993,6 +1174,8 @@ export const useStore = create<AppState>((set, get) => ({
         isVideoLooping: combinedState.isVideoLooping,
         videoVolume: combinedState.videoVolume,
         videoSeekTime: combinedState.videoSeekTime,
+        pptxAction: combinedState.pptxAction,
+        pptxActionTimestamp: combinedState.pptxActionTimestamp,
         isBlack: combinedState.isBlack ?? false,
         isClear: combinedState.isClear ?? false,
         showLogo: combinedState.showLogo ?? false,
@@ -1041,6 +1224,8 @@ export const useStore = create<AppState>((set, get) => ({
           isVideoLooping: staged.isVideoLooping,
           videoVolume: staged.videoVolume,
           videoSeekTime: staged.videoSeekTime,
+          pptxAction: staged.pptxAction,
+          pptxActionTimestamp: staged.pptxActionTimestamp,
           isBlack: false,
           isClear: false,
           showLogo: staged.showLogo ?? false,
@@ -1062,10 +1247,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set({ groupStates: updatedStates });
 
-    try {
-      const sanitized = sanitizeForSync(updatedStates);
-      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
-    } catch (e) {}
+    scheduleGroupStatesSave(updatedStates);
 
     broadcastStateChange({
       type: 'GROUP_STATES_UPDATE',
@@ -1657,6 +1839,8 @@ export const useStore = create<AppState>((set, get) => ({
           isVideoLooping: staged.isVideoLooping,
           videoVolume: staged.videoVolume,
           videoSeekTime: staged.videoSeekTime,
+          pptxAction: staged.pptxAction,
+          pptxActionTimestamp: staged.pptxActionTimestamp,
           isBlack: false,
           isClear: false,
           showLogo: staged.showLogo ?? false,
@@ -1707,10 +1891,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     set({ groupStates: updatedStates, stagedGroupStates: updatedStaged });
 
-    try {
-      const sanitized = sanitizeForSync(updatedStates);
-      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
-    } catch (e) {}
+    scheduleGroupStatesSave(updatedStates);
 
     broadcastStateChange({
       type: 'GROUP_STATES_UPDATE',

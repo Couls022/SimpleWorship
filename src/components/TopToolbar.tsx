@@ -36,7 +36,8 @@ import {
   Film,
   Trash2,
   Plus,
-  Timer
+  Timer,
+  MonitorPlay
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -51,6 +52,7 @@ import SaveScheduleAsModal from './SaveScheduleAsModal';
 import ThemeTemplateModal from './ThemeTemplateModal';
 import { downloadSwsFile, readSwsFile, encodeSwsPackage } from '../services/swsService';
 import { forceSyncNow } from '../store/sync';
+import { DisplayManager } from '../core/DisplayManager';
 
 interface TopToolbarProps {
   onOpenAlerts: () => void;
@@ -81,20 +83,25 @@ export default function TopToolbar({
   onOpenNewSong,
   onOpenTimers
 }: TopToolbarProps) {
-  const store = useStore();
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const groupStates = useStore(state => state.groupStates);
+  const outputGroups = useStore(state => state.outputGroups);
+  const goLive = useStore(state => state.goLive);
+  const goLivePrev = useStore(state => state.goLivePrev);
+  const toggleBlack = useStore(state => state.toggleBlack);
+  const toggleClear = useStore(state => state.toggleClear);
+  const toggleLogo = useStore(state => state.toggleLogo);
+  const toggleMasterLive = useStore(state => state.toggleMasterLive);
+  const alertState = useStore(state => state.alert);
+  const systemOptions = useStore(state => state.systemOptions);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const profiles = useStore(state => state.profiles);
+  const activeProfileId = useStore(state => state.activeProfileId);
+  const routerPanels = useStore(state => state.routerPanels);
+  const activeRouterId = useStore(state => state.activeRouterId);
+  const previewItemId = useStore(state => state.previewItemId);
+
   const workspace = useWorkspace();
-  const { 
-    activeControlGroupId, 
-    groupStates, 
-    outputGroups, 
-    goLive, 
-    goLivePrev,
-    toggleBlack, 
-    toggleClear, 
-    toggleLogo, 
-    toggleMasterLive,
-    alert: alertState
-  } = store;
 
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [showProfilesModal, setShowProfilesModal] = useState(false);
@@ -111,7 +118,7 @@ export default function TopToolbar({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Timer active tracking (highlights only when actively in use: running or showing on main display)
-  const serviceIntervals = store.systemOptions?.serviceIntervals;
+  const serviceIntervals = systemOptions?.serviceIntervals;
   const [timerNow, setTimerNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -126,8 +133,26 @@ export default function TopToolbar({
     serviceIntervals?.isRunning &&
     (!serviceIntervals.targetTimestamp || serviceIntervals.targetTimestamp > timerNow)
   );
+  const isTimerPaused = Boolean(
+    !serviceIntervals?.isRunning &&
+    serviceIntervals?.pausedRemainingSecs !== null &&
+    serviceIntervals?.pausedRemainingSecs !== undefined &&
+    serviceIntervals.pausedRemainingSecs > 0
+  );
   const isTimerShowing = Boolean(serviceIntervals?.showOnMainDisplay);
-  const isTimerActive = isTimerRunning || isTimerShowing;
+  const isTimerActive = isTimerRunning || isTimerPaused || isTimerShowing;
+
+  let timerDisplayStr = '';
+  if (isTimerRunning && serviceIntervals?.targetTimestamp) {
+    const diff = Math.max(0, Math.ceil((serviceIntervals.targetTimestamp - timerNow) / 1000));
+    const m = Math.floor(diff / 60);
+    const s = diff % 60;
+    timerDisplayStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  } else if (isTimerPaused && serviceIntervals?.pausedRemainingSecs) {
+    const m = Math.floor(serviceIntervals.pausedRemainingSecs / 60);
+    const s = serviceIntervals.pausedRemainingSecs % 60;
+    timerDisplayStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  }
 
   // Monitor window maximized and fullscreen states
   useEffect(() => {
@@ -225,21 +250,21 @@ export default function TopToolbar({
   };
 
   const handleSaveSchedule = async () => {
-    if (!store.activeSchedule) {
+    if (!activeSchedule) {
       handleNotify('No active schedule to save');
       return;
     }
 
     try {
-      await dbApi.addSchedule(store.activeSchedule);
+      await dbApi.addSchedule(activeSchedule);
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();
       const usedSongIds = new Set(
-        store.activeSchedule.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
+        activeSchedule.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
       );
       const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
-      await downloadSwsFile(store.activeSchedule, undefined, bundledSongs, allThemes, store.systemOptions, store.outputGroups);
-      handleNotify(`Enterprise schedule "${store.activeSchedule.name}.sws" saved with embedded SimpleWorship icon & assets!`);
+      await downloadSwsFile(activeSchedule, undefined, bundledSongs, allThemes, systemOptions, outputGroups);
+      handleNotify(`Enterprise schedule "${activeSchedule.name}.sws" saved with embedded SimpleWorship icon & assets!`);
     } catch (err) {
       console.error('Failed to save schedule:', err);
       handleNotify('Error saving schedule');
@@ -247,26 +272,26 @@ export default function TopToolbar({
   };
 
   const handleSaveScheduleAs = async () => {
-    const defaultName = store.activeSchedule?.name || 'Sunday Morning Service';
+    const defaultName = activeSchedule?.name || 'Sunday Morning Service';
     const newName = prompt('Save Schedule As:', defaultName);
     if (!newName) return;
 
     try {
       const updated: Schedule = {
-        ...(store.activeSchedule || { id: `sched-${Date.now()}`, items: [] }),
+        ...(activeSchedule || { id: `sched-${Date.now()}`, items: [] }),
         id: `sched-${Date.now()}`,
         name: newName,
         createdAt: Date.now()
       };
       await dbApi.addSchedule(updated);
-      store.setActiveSchedule(updated);
+      useStore.getState().setActiveSchedule(updated);
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();
       const usedSongIds = new Set(
         updated.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
       );
       const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
-      await downloadSwsFile(updated, newName, bundledSongs, allThemes, store.systemOptions, store.outputGroups);
+      await downloadSwsFile(updated, newName, bundledSongs, allThemes, systemOptions, outputGroups);
       handleNotify(`Schedule saved as "${newName}.sws" with SimpleWorship branding!`);
     } catch (err) {
       console.error('Save As failed:', err);
@@ -274,19 +299,19 @@ export default function TopToolbar({
   };
 
   const handleExportStandalone = async () => {
-    if (!store.activeSchedule) return;
+    if (!activeSchedule) return;
     try {
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();
 
       // Collect only songs and themes used in schedule
       const usedSongIds = new Set(
-        store.activeSchedule.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
+        activeSchedule.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
       );
       const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
       
-      const safeName = store.activeSchedule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-      await downloadSwsFile(store.activeSchedule, `${safeName}_standalone`, bundledSongs, allThemes, store.systemOptions, store.outputGroups);
+      const safeName = activeSchedule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      await downloadSwsFile(activeSchedule, `${safeName}_standalone`, bundledSongs, allThemes, systemOptions, outputGroups);
 
       handleNotify(`Standalone package "${safeName}_standalone.sws" exported with embedded icons, songs & themes!`);
     } catch (err) {
@@ -300,7 +325,7 @@ export default function TopToolbar({
     if (!file) return;
 
     try {
-      const { schedule, bundledSongs, bundledThemes, systemOptions, outputGroups } = await readSwsFile(file);
+      const { schedule, bundledSongs, bundledThemes, systemOptions: loadedOptions, outputGroups: loadedGroups } = await readSwsFile(file);
 
       if (bundledSongs && bundledSongs.length > 0) {
         for (const s of bundledSongs) {
@@ -313,16 +338,16 @@ export default function TopToolbar({
         }
       }
       
-      if (systemOptions) {
-        store.updateSystemOptions(systemOptions);
+      if (loadedOptions) {
+        useStore.getState().updateSystemOptions(loadedOptions);
       }
       
-      if (outputGroups && outputGroups.length > 0) {
-        store.setOutputGroups(outputGroups);
+      if (loadedGroups && loadedGroups.length > 0) {
+        useStore.getState().setOutputGroups(loadedGroups);
       }
 
       await dbApi.addSchedule(schedule);
-      store.setActiveSchedule(schedule);
+      useStore.getState().setActiveSchedule(schedule);
       handleNotify(`Imported schedule "${schedule.name}" (${schedule.items.length} items)!`);
     } catch (err: any) {
       console.error('Failed to parse schedule file:', err);
@@ -350,16 +375,16 @@ export default function TopToolbar({
 
   // Edit actions
   const handleEditCopy = () => {
-    if (store.activeSchedule && store.previewItemId) {
-      const item = store.activeSchedule.items.find(it => it.id === store.previewItemId);
+    if (activeSchedule && previewItemId) {
+      const item = activeSchedule.items.find(it => it.id === previewItemId);
       if (item) {
         navigator.clipboard?.writeText(JSON.stringify(item)).catch(() => {});
         handleNotify(`Copied "${item.name}" to clipboard`);
         return;
       }
     }
-    if (store.activeSchedule && store.activeSchedule.items.length > 0) {
-      const item = store.activeSchedule.items[0];
+    if (activeSchedule && activeSchedule.items.length > 0) {
+      const item = activeSchedule.items[0];
       navigator.clipboard?.writeText(JSON.stringify(item)).catch(() => {});
       handleNotify(`Copied "${item.name}" to clipboard`);
       return;
@@ -370,12 +395,12 @@ export default function TopToolbar({
   const handleEditPaste = async () => {
     try {
       const text = await navigator.clipboard?.readText();
-      if (text && store.activeSchedule) {
+      if (text && activeSchedule) {
         const item = JSON.parse(text);
         if (item && item.name && item.type) {
           const newItem = { ...item, id: `item-${Date.now()}` };
-          const updatedItems = [...store.activeSchedule.items, newItem];
-          store.setActiveSchedule({ ...store.activeSchedule, items: updatedItems });
+          const updatedItems = [...activeSchedule.items, newItem];
+          useStore.getState().setActiveSchedule({ ...activeSchedule, items: updatedItems });
           handleNotify(`Pasted "${newItem.name}" into schedule`);
           return;
         }
@@ -385,10 +410,10 @@ export default function TopToolbar({
   };
 
   const handleEditDelete = () => {
-    if (store.activeSchedule && store.previewItemId) {
-      const item = store.activeSchedule.items.find(it => it.id === store.previewItemId);
+    if (activeSchedule && previewItemId) {
+      const item = activeSchedule.items.find(it => it.id === previewItemId);
       if (item) {
-        store.removeScheduleItem(item.id);
+        useStore.getState().removeScheduleItem(item.id);
         handleNotify(`Removed "${item.name}" from schedule`);
         return;
       }
@@ -407,7 +432,7 @@ export default function TopToolbar({
             <span className="shrink-0">SimpleWorship</span>
             <span className="text-[10px] text-cyan-400 font-mono font-normal shrink-0">v7.4</span>
             <span className="text-gray-500 font-normal shrink-0">•</span>
-            <span className="text-gray-400 font-normal truncate max-w-[140px] sm:max-w-[260px]" title={store.activeSchedule?.name || 'Default Service'}>{store.activeSchedule?.name || 'Default Service'}</span>
+            <span className="text-gray-400 font-normal truncate max-w-[140px] sm:max-w-[260px]" title={activeSchedule?.name || 'Default Service'}>{activeSchedule?.name || 'Default Service'}</span>
           </span>
         </div>
 
@@ -588,7 +613,7 @@ export default function TopToolbar({
                             key={s.id}
                             type="button"
                             onClick={() => {
-                              store.setActiveSchedule(s);
+                              useStore.getState().setActiveSchedule(s);
                               handleNotify(`Loaded "${s.name}"`);
                               setActiveMenu(null);
                               setActiveSubmenu(null);
@@ -650,7 +675,7 @@ export default function TopToolbar({
                 <button 
                   type="button"
                   onClick={() => {
-                    store.setActiveSchedule({ id: `sched-${Date.now()}`, name: 'Blank Schedule', createdAt: Date.now(), items: [] });
+                    useStore.getState().setActiveSchedule({ id: `sched-${Date.now()}`, name: 'Blank Schedule', createdAt: Date.now(), items: [] });
                     handleNotify('Schedule closed');
                     setActiveMenu(null);
                   }}
@@ -772,7 +797,7 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={() => { 
-                    toggleLogo(activeControlGroupId || store.outputGroups[0]?.id || ""); 
+                    toggleLogo(activeControlGroupId || outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
@@ -787,7 +812,7 @@ export default function TopToolbar({
                 </button>
                 <button 
                   onClick={() => { 
-                    toggleBlack(activeControlGroupId || store.outputGroups[0]?.id || ""); 
+                    toggleBlack(activeControlGroupId || outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
@@ -802,7 +827,7 @@ export default function TopToolbar({
                 </button>
                 <button 
                   onClick={() => { 
-                    toggleClear(activeControlGroupId || store.outputGroups[0]?.id || ""); 
+                    toggleClear(activeControlGroupId || outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
@@ -842,10 +867,42 @@ export default function TopToolbar({
                   </span>
                   <span className="text-[10px] font-mono text-gray-400">QR / PIN</span>
                 </button>
+                <button 
+                  onClick={() => { 
+                    DisplayManager.openProjector('group-stage', systemOptions?.foldback?.outputMonitor);
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 text-amber-300">
+                    <Tv size={12} />
+                    <span>Launch Stage Display (Foldback)...</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-400 flex items-center gap-0.5">
+                    <ExternalLink size={10} />
+                    <span>POP-OUT</span>
+                  </span>
+                </button>
+                <button 
+                  onClick={() => { 
+                    DisplayManager.openProjector('group-alternate', systemOptions?.alternateOutput?.outputMonitor);
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5 text-purple-300">
+                    <MonitorPlay size={12} />
+                    <span>Launch Alternate Output (Foyer / Stream)...</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-purple-400 flex items-center gap-0.5">
+                    <ExternalLink size={10} />
+                    <span>POP-OUT</span>
+                  </span>
+                </button>
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={() => { 
-                    toggleMasterLive(activeControlGroupId || store.outputGroups[0]?.id || ""); 
+                    toggleMasterLive(activeControlGroupId || outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white font-bold cursor-pointer"
@@ -877,13 +934,13 @@ export default function TopToolbar({
                   Profiles
                 </div>
 
-                {store.profiles?.map(p => {
-                  const isSelected = store.activeProfileId === p.id;
+                {profiles?.map(p => {
+                  const isSelected = activeProfileId === p.id;
                   return (
                     <button 
                       key={p.id}
                       onClick={() => { 
-                        store.setActiveProfile(p.id); 
+                        useStore.getState().setActiveProfile(p.id); 
                         setActiveMenu(null); 
                       }} 
                       className={`w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer ${
@@ -940,12 +997,12 @@ export default function TopToolbar({
               <div className="absolute left-0 top-full mt-0.5 w-64 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl z-50 text-[11px] py-1 text-gray-200 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
                   <span>Live Output Panels</span>
-                  <span className="text-[9px] font-mono text-cyan-400">({store.routerPanels.length})</span>
+                  <span className="text-[9px] font-mono text-cyan-400">({routerPanels.length})</span>
                 </div>
 
-                {store.routerPanels.map((router, index) => {
-                  const isSelected = store.activeRouterId === router.routerId;
-                  const targetGroup = store.outputGroups.find(g => g.id === router.targetOutputGroupId);
+                {routerPanels.map((router, index) => {
+                  const isSelected = activeRouterId === router.routerId;
+                  const targetGroup = outputGroups.find(g => g.id === router.targetOutputGroupId);
                   return (
                     <div
                       key={router.routerId}
@@ -953,7 +1010,7 @@ export default function TopToolbar({
                     >
                       <button
                         onClick={() => {
-                          store.setActiveRouterId(router.routerId);
+                          useStore.getState().setActiveRouterId(router.routerId);
                           workspace.setPanelVisibility('live', true);
                           window.dispatchEvent(
                             new CustomEvent('simpleworship:notify', { 
@@ -969,11 +1026,11 @@ export default function TopToolbar({
                         {isSelected && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
                       </button>
 
-                      {store.routerPanels.length > 1 && (
+                      {routerPanels.length > 1 && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            store.removeRouterPanel(router.routerId);
+                            useStore.getState().removeRouterPanel(router.routerId);
                             window.dispatchEvent(
                               new CustomEvent('simpleworship:notify', { detail: `Removed Router Panel R-${index + 1}` })
                             );
@@ -991,9 +1048,9 @@ export default function TopToolbar({
                 <div className="flex items-center gap-1 px-3 py-1 mt-0.5">
                   <button
                     onClick={() => {
-                      const nextIndex = store.routerPanels.length + 1;
-                      const targetGroup = store.outputGroups[(nextIndex - 1) % store.outputGroups.length] || store.outputGroups[0];
-                      store.addRouterPanel({
+                      const nextIndex = routerPanels.length + 1;
+                      const targetGroup = outputGroups[(nextIndex - 1) % outputGroups.length] || outputGroups[0];
+                      useStore.getState().addRouterPanel({
                         routerId: `router-${Date.now()}`,
                         targetOutputGroupId: targetGroup?.id || 'group-congregation',
                         active: true,
@@ -1011,12 +1068,12 @@ export default function TopToolbar({
                     <span>Add Panel</span>
                   </button>
 
-                  {store.routerPanels.length > 1 && (
+                  {routerPanels.length > 1 && (
                     <button
                       onClick={() => {
-                        const lastRouter = store.routerPanels[store.routerPanels.length - 1];
+                        const lastRouter = routerPanels[routerPanels.length - 1];
                         if (lastRouter) {
-                          store.removeRouterPanel(lastRouter.routerId);
+                          useStore.getState().removeRouterPanel(lastRouter.routerId);
                           window.dispatchEvent(
                             new CustomEvent('simpleworship:notify', { detail: 'Removed last Router Panel' })
                           );
@@ -1084,6 +1141,7 @@ export default function TopToolbar({
                   [
                     { id: 'schedule', label: 'Schedule Panel' },
                     { id: 'live', label: 'Live Output Panel' },
+                    { id: 'stageMonitor', label: 'Stage / Foldback Monitor' },
                     { id: 'multiGroup', label: 'Multi-Group Displays' },
                     { id: 'quickNotes', label: 'Quick Notes & Script' },
                   ] as const
@@ -1298,21 +1356,29 @@ export default function TopToolbar({
           {/* TIMER BUTTON */}
           {onOpenTimers && (
             <div className={`flex items-center rounded-md border transition-all ${
-              isTimerActive
-                ? 'bg-amber-600/30 text-amber-300 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+              isTimerRunning
+                ? 'bg-amber-600/30 text-amber-300 border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.35)]'
+                : isTimerActive
+                ? 'bg-amber-950/40 text-amber-200 border-amber-600/50'
                 : 'hover:bg-[#3c414d] border-transparent hover:border-[#4c5261] text-gray-300 hover:text-white'
             }`}>
               <button
                 onClick={onOpenTimers}
                 className="flex items-center gap-1.5 justify-center p-1.5 cursor-pointer"
-                title={isTimerActive ? "Service Interval Timer Active (Click to configure)" : "Service Interval Timer & Stage Countdown"}
+                title={isTimerActive ? `Service Interval Timer: ${timerDisplayStr || 'Active'} (Click to configure)` : "Service Interval Timer & Stage Countdown"}
               >
                 <div className={`w-6 h-6 rounded flex items-center justify-center border shrink-0 ${
-                  isTimerActive ? 'bg-amber-500 text-black border-amber-300' : 'bg-transparent text-gray-400 border-transparent'
+                  isTimerRunning
+                    ? 'bg-amber-500 text-black border-amber-300 animate-pulse'
+                    : isTimerActive
+                    ? 'bg-amber-600/40 text-amber-300 border-amber-500/40'
+                    : 'bg-transparent text-gray-400 border-transparent'
                 }`}>
                   <Timer size={13} />
                 </div>
-                <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">Timer</span>
+                <span className="text-[10px] font-bold tracking-wide uppercase select-none hidden min-[1150px]:inline pr-1">
+                  {isTimerRunning && timerDisplayStr ? `Timer: ${timerDisplayStr}` : 'Timer'}
+                </span>
               </button>
             </div>
           )}
@@ -1339,7 +1405,7 @@ export default function TopToolbar({
 
           {/* LOGO */}
           <button
-            onClick={() => toggleLogo(activeControlGroupId || store.outputGroups[0]?.id || "")}
+            onClick={() => toggleLogo(activeControlGroupId || outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.showLogo
                 ? 'bg-indigo-600/30 text-cyan-300 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
@@ -1357,7 +1423,7 @@ export default function TopToolbar({
 
           {/* BLACK */}
           <button
-            onClick={() => toggleBlack(activeControlGroupId || store.outputGroups[0]?.id || "")}
+            onClick={() => toggleBlack(activeControlGroupId || outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isBlack
                 ? 'bg-rose-600/30 text-rose-300 border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
@@ -1375,7 +1441,7 @@ export default function TopToolbar({
 
           {/* CLEAR */}
           <button
-            onClick={() => toggleClear(activeControlGroupId || store.outputGroups[0]?.id || "")}
+            onClick={() => toggleClear(activeControlGroupId || outputGroups[0]?.id || "")}
             className={`flex items-center gap-1.5 justify-center p-1.5 rounded-md border transition-all ${
               activeControlState?.isClear
                 ? 'bg-amber-500/30 text-amber-300 border-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
@@ -1394,7 +1460,7 @@ export default function TopToolbar({
 
           {/* MASTER LIVE SWITCH (MAIN SOURCE OF TRUTH) */}
           <button
-            onClick={() => toggleMasterLive(activeControlGroupId || store.outputGroups[0]?.id || "")}
+            onClick={() => toggleMasterLive(activeControlGroupId || outputGroups[0]?.id || "")}
             className={`flex items-center gap-2 justify-center px-2.5 py-1.5 rounded-md border transition-all cursor-pointer ${
               activeControlState?.isLiveEnabled
                 ? 'bg-gradient-to-r from-emerald-900/60 to-emerald-700/60 text-emerald-200 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.35)]'

@@ -12,8 +12,13 @@ import CameraLiveRenderer from '../CameraLiveRenderer';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function CamerasTab() {
-  const store = useStore();
-  const { availableCameras, setAvailableCameras, goLiveItem, activeControlGroupId, setPreviewItem, addScheduleItem } = store;
+  const availableCameras = useStore(state => state.availableCameras);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const setAvailableCameras = useStore(state => state.setAvailableCameras);
+  const goLiveItem = useStore(state => state.goLiveItem);
+  const setPreviewItem = useStore(state => state.setPreviewItem);
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);

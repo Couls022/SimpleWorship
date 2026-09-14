@@ -42,7 +42,13 @@ interface SystemDiagnosticsModalProps {
 }
 
 function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
-  const store = useStore();
+  const songsList = useStore(state => state.songsList);
+  const scripturesList = useStore(state => state.scripturesList);
+  const themesList = useStore(state => state.themesList);
+  const assetsList = useStore(state => state.assetsList);
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const outputGroups = useStore(state => state.outputGroups);
+
   const [activeTab, setActiveTab] = useState<'server' | 'hardware' | 'gpu-diag' | 'storage' | 'broadcaster' | 'remote'>('hardware');
   
   // Hardware profile state
@@ -146,7 +152,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
     setIsImporting(true);
     importDatabaseBackup(file)
       .then(async () => {
-        await store.loadAllData();
+        await useStore.getState().loadAllData();
         setActionMessage('Backup restored and reloaded successfully into database!');
       })
       .catch((err) => {
@@ -894,31 +900,31 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                 <div className="bg-[#14161c] p-3 rounded-lg border border-[#2b303e] text-center">
                   <div className="text-xs text-gray-400 mb-1">Songs Library</div>
-                  <div className="text-lg font-bold text-cyan-400">{store.songsList.length}</div>
+                  <div className="text-lg font-bold text-cyan-400">{songsList.length}</div>
                   <div className="text-[10px] text-gray-500">Master Hymnals</div>
                 </div>
 
                 <div className="bg-[#14161c] p-3 rounded-lg border border-[#2b303e] text-center">
                   <div className="text-xs text-gray-400 mb-1">Scriptures</div>
-                  <div className="text-lg font-bold text-cyan-400">{store.scripturesList.length}</div>
+                  <div className="text-lg font-bold text-cyan-400">{scripturesList.length}</div>
                   <div className="text-[10px] text-gray-500">KJV & Tagalog</div>
                 </div>
 
                 <div className="bg-[#14161c] p-3 rounded-lg border border-[#2b303e] text-center">
                   <div className="text-xs text-gray-400 mb-1">Themes & Layouts</div>
-                  <div className="text-lg font-bold text-cyan-400">{store.themesList.length}</div>
+                  <div className="text-lg font-bold text-cyan-400">{themesList.length}</div>
                   <div className="text-[10px] text-gray-500">Styling Presets</div>
                 </div>
 
                 <div className="bg-[#14161c] p-3 rounded-lg border border-[#2b303e] text-center">
                   <div className="text-xs text-gray-400 mb-1">Media Assets</div>
-                  <div className="text-lg font-bold text-cyan-400">{store.assetsList.length}</div>
+                  <div className="text-lg font-bold text-cyan-400">{assetsList.length}</div>
                   <div className="text-[10px] text-gray-500">Stills & Motions</div>
                 </div>
 
                 <div className="bg-[#14161c] p-3 rounded-lg border border-[#2b303e] text-center">
                   <div className="text-xs text-gray-400 mb-1">Active Sched Items</div>
-                  <div className="text-lg font-bold text-cyan-400">{store.activeSchedule?.items.length || 0}</div>
+                  <div className="text-lg font-bold text-cyan-400">{activeSchedule?.items.length || 0}</div>
                   <div className="text-[10px] text-gray-500">Live Service Queue</div>
                 </div>
               </div>
@@ -1062,7 +1068,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
 
                   <div className="bg-[#1d212b] p-3 rounded border border-[#2b3140]">
                     <div className="text-gray-400 text-[11px]">Active Output Groups</div>
-                    <div className="text-lg font-bold text-cyan-400 mt-0.5">{store.outputGroups.length} Screen(s)</div>
+                    <div className="text-lg font-bold text-cyan-400 mt-0.5">{outputGroups.length} Screen(s)</div>
                     <div className="text-[10px] text-gray-400">Main, Foyer, Stage, Stream</div>
                   </div>
                 </div>
@@ -1076,7 +1082,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {store.outputGroups.map((group) => (
+                  {outputGroups.map((group) => (
                     <div key={group.id} className="p-3 bg-[#1d212b] rounded-lg border border-[#2b3140] flex items-center justify-between">
                       <div>
                         <div className="font-bold text-white text-xs flex items-center gap-1.5">

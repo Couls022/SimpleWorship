@@ -196,7 +196,12 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     </div>
   );
 }, (prevProps, nextProps) => {
-  return prevProps.activeSlideIndex === nextProps.activeSlideIndex && prevProps.bytes === nextProps.bytes;
+  return (
+    prevProps.activeSlideIndex === nextProps.activeSlideIndex && 
+    prevProps.bytes === nextProps.bytes &&
+    prevProps.pptxAction === nextProps.pptxAction &&
+    prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp
+  );
 });
 
 const pptxBytesCache = new Map<string, Uint8Array>();

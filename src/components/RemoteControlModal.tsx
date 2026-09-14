@@ -25,10 +25,13 @@ interface RemoteControlModalProps {
 }
 
 function RemoteControlModal({ onClose }: RemoteControlModalProps) {
-  const store = useStore();
-  const activeGroupId = store.activeControlGroupId || store.outputGroups[0]?.id || 'group-congregation';
-  const groupState = store.groupStates[activeGroupId];
-  const activeSchedule = store.activeSchedule;
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const outputGroups = useStore(state => state.outputGroups);
+  const groupStates = useStore(state => state.groupStates);
+  const activeSchedule = useStore(state => state.activeSchedule);
+
+  const activeGroupId = activeControlGroupId || outputGroups[0]?.id || 'group-congregation';
+  const groupState = groupStates[activeGroupId];
 
   const [pin, setPin] = useState(() => {
     return localStorage.getItem('simpleworship_remote_pin') || '8492';
@@ -292,7 +295,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
               <div className="grid grid-cols-2 gap-2 mt-0.5">
                 <button
                   type="button"
-                  onClick={() => { store.goLivePrev(); }}
+                  onClick={() => { useStore.getState().goLivePrev(); }}
                   className="p-3 bg-[#222530] hover:bg-[#2e3342] text-white rounded-xl flex flex-col items-center justify-center gap-1 border border-white/10 active:scale-95 transition-all cursor-pointer"
                 >
                   <ArrowLeft size={16} className="text-cyan-400" />
@@ -301,7 +304,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
 
                 <button
                   type="button"
-                  onClick={() => { store.goLiveNext(); }}
+                  onClick={() => { useStore.getState().goLiveNext(); }}
                   className="p-3 bg-[#222530] hover:bg-[#2e3342] text-white rounded-xl flex flex-col items-center justify-center gap-1 border border-white/10 active:scale-95 transition-all cursor-pointer"
                 >
                   <ArrowRight size={16} className="text-cyan-400" />
@@ -311,7 +314,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
 
               <button
                 type="button"
-                onClick={() => { store.goLive(); }}
+                onClick={() => { useStore.getState().goLive(); }}
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black tracking-wider flex items-center justify-center gap-1.5 shadow active:scale-95 transition-all cursor-pointer"
               >
                 <Play size={14} className="fill-white" />
@@ -321,7 +324,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
               <div className="grid grid-cols-3 gap-1.5">
                 <button
                   type="button"
-                  onClick={() => store.toggleBlack(activeGroupId)}
+                  onClick={() => useStore.getState().toggleBlack(activeGroupId)}
                   className={`py-2 rounded-lg text-[10px] font-bold border active:scale-95 transition-all flex flex-col items-center cursor-pointer ${
                     groupState?.isBlack
                       ? 'bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/30'
@@ -333,7 +336,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => store.toggleClear(activeGroupId)}
+                  onClick={() => useStore.getState().toggleClear(activeGroupId)}
                   className={`py-2 rounded-lg text-[10px] font-bold border active:scale-95 transition-all flex flex-col items-center cursor-pointer ${
                     groupState?.isClear
                       ? 'bg-cyan-600 text-white border-cyan-500 shadow-md shadow-cyan-600/30'
@@ -345,7 +348,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => store.toggleLogo(activeGroupId)}
+                  onClick={() => useStore.getState().toggleLogo(activeGroupId)}
                   className={`py-2 rounded-lg text-[10px] font-bold border active:scale-95 transition-all flex flex-col items-center cursor-pointer ${
                     groupState?.showLogo
                       ? 'bg-amber-600 text-white border-amber-500 shadow-md shadow-amber-600/30'

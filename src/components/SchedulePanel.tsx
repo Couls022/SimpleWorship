@@ -43,6 +43,7 @@ import { dbApi } from '../db';
 import { isValidPptxBinary } from '../utils/pptxValidator';
 import { slideRenderCache } from '../utils/SlideRenderCache';
 import { processDroppedFileList, isMediaOrPresentationFile } from '../utils/fileDropHandler';
+import { matchSlideLabel } from '../utils/slideLabelHelper';
 import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 import SimpleWorshipLogo from './SimpleWorshipLogo';
 import BibleLibraryModule from './workspace/BibleLibraryModule';
@@ -175,7 +176,22 @@ const ScheduleItemThumbnail: React.FC<{
 };
 
 export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }: SchedulePanelProps) {
-  const store = useStore();
+  const activeSchedule = useStore(state => state.activeSchedule);
+  const previewItemId = useStore(state => state.previewItemId);
+  const previewSlideIndex = useStore(state => state.previewSlideIndex);
+  const setPreviewItem = useStore(state => state.setPreviewItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
+  const groupStates = useStore(state => state.groupStates);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const toggleScheduleItemExpand = useStore(state => state.toggleScheduleItemExpand);
+  const removeScheduleItem = useStore(state => state.removeScheduleItem);
+  const updateScheduleItem = useStore(state => state.updateScheduleItem);
+  const reorderSchedule = useStore(state => state.reorderSchedule);
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const songsList = useStore(state => state.songsList);
+  const themesList = useStore(state => state.themesList);
+  const systemOptions = useStore(state => state.systemOptions);
+
   const { panels, togglePanelDock } = useWorkspace();
   const isDocked = panels.schedule?.isDocked ?? true;
 
@@ -295,22 +311,6 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
       window.removeEventListener('simpleworship:switch-sidebar-tab' as any, handleSwitchSidebarTab);
     };
   }, []);
-
-  const { 
-    activeSchedule, 
-    previewItemId, 
-    previewSlideIndex,
-    setPreviewItem, 
-    goLiveItem, 
-    groupStates, 
-    activeControlGroupId, 
-    toggleScheduleItemExpand, 
-    removeScheduleItem,
-    updateScheduleItem,
-    reorderSchedule,
-    addScheduleItem,
-    songsList
-  } = store;
 
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -506,7 +506,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const dropResult = await processDroppedFileList(e.dataTransfer.files);
       if (dropResult.schedule) {
-        store.setActiveSchedule(dropResult.schedule);
+        useStore.getState().setActiveSchedule(dropResult.schedule);
         setDraggedIdx(null);
         return;
       }
@@ -938,7 +938,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
           const isSelected = selectedScheduleItemIds.includes(item.id);
           const isItemInPreview = previewItemId === item.id;
           const isItemLive = activeControlState?.activeItemId === item.id;
-          const slides = PresentationCore.generateSlides(item, songsList, store.systemOptions);
+          const slides = PresentationCore.generateSlides(item, songsList, systemOptions);
           const isDragOverThis = dragOverIdx === index;
           const isBeingDragged = draggedIdx === index;
 
@@ -1008,7 +1008,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                           item={item}
                           viewMode={viewMode}
                           isItemLive={isItemLive}
-                          themesList={store.themesList}
+                          themesList={themesList}
                         />
 
                         {/* Title & Subtitle */}
@@ -1352,11 +1352,24 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
                             )}
 
                             <div className="flex-1 min-w-0">
-                              {slide.title && (
-                                <div className="text-[10px] font-bold text-indigo-300 truncate mb-0.5">
-                                  {slide.title}
-                                </div>
-                              )}
+                              {slide.title && (() => {
+                                const matchedLabel = matchSlideLabel(slide.title, systemOptions?.slideLabels);
+                                return (
+                                  <div className="mb-0.5">
+                                    <span
+                                      className="inline-block text-[9px] font-bold px-1.5 py-0.2 rounded border border-black/30 truncate max-w-[120px]"
+                                      style={matchedLabel ? {
+                                        backgroundColor: matchedLabel.bgColor,
+                                        color: matchedLabel.textColor,
+                                      } : {
+                                        color: '#a5b4fc',
+                                      }}
+                                    >
+                                      {slide.title}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                               <p className="text-[10px] leading-tight line-clamp-2 text-gray-300 whitespace-pre-line font-sans">
                                 {slide.text}
                               </p>

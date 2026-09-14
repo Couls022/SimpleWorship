@@ -12,10 +12,12 @@ interface RouteConfigModalProps {
 }
 
 export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalProps) {
-  const store = useStore();
-  const { outputGroups, updateOutputGroup, themesList, moveOutputGroup } = store;
+  const outputGroups = useStore(state => state.outputGroups);
+  const updateOutputGroup = useStore(state => state.updateOutputGroup);
+  const themesList = useStore(state => state.themesList);
+  const moveOutputGroup = useStore(state => state.moveOutputGroup);
+  const updateSystemOptions = useStore(state => state.updateSystemOptions);
   const { screens, permissionGranted, requestAccess } = useScreens();
-  const { updateSystemOptions } = store;
   
   const group = outputGroups.find(g => g.id === groupId);
   const groupIndex = outputGroups.findIndex(g => g.id === groupId);
@@ -96,8 +98,8 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
 
     // Ensure the route is OFF (not live) when newly locked to a monitor
     // This enforces "target monitor lock only, no display yet" behavior
-    store.setGroupState(groupId, { isLiveEnabled: false });
-    store.setStagedGroupState(groupId, { isLiveEnabled: false });
+    useStore.getState().setGroupState(groupId, { isLiveEnabled: false });
+    useStore.getState().setStagedGroupState(groupId, { isLiveEnabled: false });
 
     // 2. Sync legacy systemOptions if it maps to a standard legacy route
     updateSystemOptions((prev) => {
@@ -292,7 +294,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
                   targetDisplayId: selectedDisplayIds[0] || '',
                   displayIds: selectedDisplayIds
                 };
-                store.addOutputGroup(duplicated);
+                useStore.getState().addOutputGroup(duplicated as any);
                 onClose();
               }}
               className="px-2.5 py-1.5 text-xs text-indigo-400 border border-indigo-500/30 rounded hover:bg-indigo-500/10 transition-colors"
@@ -303,7 +305,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
             {outputGroups.length > 1 && (
               <button 
                 onClick={() => {
-                  store.removeOutputGroup(groupId);
+                  useStore.getState().removeOutputGroup(groupId);
                   onClose();
                 }}
                 className="px-2.5 py-1.5 text-xs text-rose-400 border border-rose-500/30 rounded hover:bg-rose-500/10 transition-colors"

@@ -37,8 +37,13 @@ const CATEGORIES = ["All", "Hymns", "Special Number"] as const;
 type CategoryType = (typeof CATEGORIES)[number];
 
 export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
-  const store = useStore();
-  const { songsList, addScheduleItem, addSong, deleteSong } = store;
+  const songsList = useStore(state => state.songsList);
+  const addScheduleItem = useStore(state => state.addScheduleItem);
+  const addSong = useStore(state => state.addSong);
+  const deleteSong = useStore(state => state.deleteSong);
+  const setPreviewItem = useStore(state => state.setPreviewItem);
+  const goLiveItem = useStore(state => state.goLiveItem);
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSongIds, setSelectedSongIds] = useState<string[]>(() =>
@@ -323,7 +328,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
   }, [songsList, activeCategory, searchQuery]);
 
   const handleAddToSchedule = (song: Song) => {
-    store.addScheduleItem({
+    addScheduleItem({
       type: "song",
       contentId: song.id,
       name: song.title,
@@ -370,8 +375,8 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         ccliNumber: song.ccliNumber,
       },
     };
-    store.setPreviewItem(item.id, 0);
-    store.goLiveItem(item.id, 0, store.activeControlGroupId || undefined, item);
+    setPreviewItem(item.id, 0);
+    goLiveItem(item.id, 0, activeControlGroupId || undefined, item);
   };
 
   // Drag-and-drop start handler with full metadata

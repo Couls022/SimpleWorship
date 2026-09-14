@@ -85,6 +85,7 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
             className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
             style={{
               ...(isBible && referenceThemeStyles ? referenceCss : (labelThemeStyles ? labelCss : {})),
+              ...(frame.headerStyles || {}),
               fontSize: (isBible && referenceThemeStyles?.fontSize)
                 ? `${referenceThemeStyles.fontSize}px`
                 : (labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '32px'),

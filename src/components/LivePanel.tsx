@@ -76,7 +76,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   };
 
   const activeSchedule = useStore(state => state.activeSchedule);
-  const groupStates = useStore(state => state.groupStates);
+  const publicControlState = useStore(state => state.groupStates[groupId]);
   const outputGroups = useStore(state => state.outputGroups);
   const songsList = useStore(state => state.songsList);
   const themesList = useStore(state => state.themesList);
@@ -97,7 +97,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const activeGroup = outputGroups.find(g => g.id === groupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === groupId);
   const activeControlState = stagedGroupState;
-  const publicControlState = groupStates[groupId];
   const isTargetedGroup = activeRouterId === routerId || (!routerId && activeControlGroupId === groupId);
   const isActiveControlGroup = activeControlGroupId === groupId;
   const groupTargetDisplays = (activeGroup?.displayIds && activeGroup.displayIds.length > 0)
