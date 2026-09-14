@@ -199,6 +199,22 @@ export default function ModeratorView() {
         return;
       }
 
+      // Check if current live item is a PowerPoint
+      const targetPptxId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
+      const currentPptxState = currentStore.groupStates[targetPptxId] || currentStore.stagedGroupStates[targetPptxId];
+      const activeContentId = currentPptxState?.activeItemId;
+      let isLivePptx = false;
+      if (activeContentId) {
+        const liveItem = currentPptxState?.directLiveItem 
+          || currentStore.activeSchedule?.items?.find(i => i.id === activeContentId)
+          || currentStore.songsList.find(s => s.id === activeContentId);
+        if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation' || liveItem.type === 'pptx')) {
+          isLivePptx = true;
+        }
+      }
+
+      const isPreviewDifferent = currentStore.previewItemId && currentStore.previewItemId !== activeContentId;
+
       // 1. GO LIVE controls
       if (
         matchesShortcut(e, mappings?.goLive) ||
@@ -206,6 +222,12 @@ export default function ModeratorView() {
         (shortcutSettings?.enterGoesLive && (e.key === 'Enter' || e.key === 'F5')) ||
         (e.key === 'Enter' && (e.ctrlKey || e.metaKey))
       ) {
+        // If it's a PPTX, and the preview is NOT different, let Enter advance the slide instead of restarting goLive
+        if (isLivePptx && e.key === 'Enter' && !isPreviewDifferent && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          currentStore.goLiveNext();
+          return;
+        }
         e.preventDefault();
         currentStore.goLive();
         return;
@@ -215,7 +237,6 @@ export default function ModeratorView() {
       if (!e.ctrlKey && !e.altKey && !e.metaKey && e.key && e.key.length <= 8) {
         const targetId = currentStore.activeControlGroupId || currentStore.outputGroups[0]?.id || 'group-congregation';
         const groupState = currentStore.groupStates[targetId] || currentStore.stagedGroupStates[targetId];
-
         const activeItem = PresentationCore.getActiveContent(
           currentStore.activeSchedule,
           groupState,
@@ -227,7 +248,6 @@ export default function ModeratorView() {
           if (slides && slides.length > 0) {
             const currentIdx = groupState?.activeSlideIndex ?? 0;
             const navResult = getSlideForShortcut(e.key, slides, currentIdx, currentStore.systemOptions?.slideLabels);
-
             if (navResult) {
               e.preventDefault();
               currentStore.goLiveSlide(navResult.slideIndex, targetId);
@@ -255,41 +275,62 @@ export default function ModeratorView() {
       }
 
       // 3. Next Live Slide controls
-      if (
+      const isNextPptxAction = isLivePptx && (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Space' || e.key === 'Enter' || e.key === 'PageDown');
+      const isNextNormalAction = !isLivePptx && (
         matchesShortcut(e, mappings?.nextSlide) ||
         (shortcutSettings?.arrowControlsLive && e.key === 'ArrowDown') ||
         (shortcutSettings?.spacebarAdvancesLive && (e.key === ' ' || e.key === 'Space')) ||
         e.key === 'PageDown'
-      ) {
+      );
+      if (isNextPptxAction || isNextNormalAction) {
         e.preventDefault();
         currentStore.goLiveNext();
         return;
       }
 
+      // Explicitly disable down arrow for PPTX
+      if (isLivePptx && e.key === 'ArrowDown') {
+        e.preventDefault();
+        return;
+      }
+
       // 4. Previous Live Slide controls
-      if (
+      const isPrevPptxAction = isLivePptx && (e.key === 'ArrowLeft' || e.key === 'PageUp');
+      const isPrevNormalAction = !isLivePptx && (
         matchesShortcut(e, mappings?.previousSlide) ||
         (shortcutSettings?.arrowControlsLive && e.key === 'ArrowUp') ||
         e.key === 'PageUp'
-      ) {
+      );
+      if (isPrevPptxAction || isPrevNormalAction) {
         e.preventDefault();
         currentStore.goLivePrev();
         return;
       }
 
+      // Explicitly disable up arrow for PPTX
+      if (isLivePptx && e.key === 'ArrowUp') {
+        e.preventDefault();
+        return;
+      }
+
       // 5. Schedule Navigation (Next / Previous Item)
-      if (
+      const isNextItemPptx = isLivePptx && matchesShortcut(e, mappings?.nextItem) && e.key !== 'ArrowRight'; 
+      const isNextItemNormal = !isLivePptx && (
         matchesShortcut(e, mappings?.nextItem) ||
         (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === 'n' || e.key === 'ArrowRight'))
-      ) {
+      );
+      if (isNextItemPptx || isNextItemNormal) {
         e.preventDefault();
         currentStore.goNextScheduleItem();
         return;
       }
-      if (
+
+      const isPrevItemPptx = isLivePptx && matchesShortcut(e, mappings?.previousItem) && e.key !== 'ArrowLeft';
+      const isPrevItemNormal = !isLivePptx && (
         matchesShortcut(e, mappings?.previousItem) ||
         (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === 'p' || e.key === 'ArrowLeft'))
-      ) {
+      );
+      if (isPrevItemPptx || isPrevItemNormal) {
         e.preventDefault();
         currentStore.goPrevScheduleItem();
         return;

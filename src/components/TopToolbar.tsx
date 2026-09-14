@@ -84,7 +84,11 @@ export default function TopToolbar({
   onOpenTimers
 }: TopToolbarProps) {
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
-  const groupStates = useStore(state => state.groupStates);
+  const activeControlState = useStore(React.useCallback(state => 
+    state.activeControlGroupId && state.groupStates[state.activeControlGroupId] 
+      ? state.groupStates[state.activeControlGroupId] 
+      : null, 
+  []));
   const outputGroups = useStore(state => state.outputGroups);
   const goLive = useStore(state => state.goLive);
   const goLivePrev = useStore(state => state.goLivePrev);
@@ -234,10 +238,6 @@ export default function TopToolbar({
       // Browser sandbox may restrict window.close
     }
   };
-
-  const activeControlState = activeControlGroupId && groupStates[activeControlGroupId] 
-    ? groupStates[activeControlGroupId] 
-    : null;
 
   // Load recent schedules when opening dropdown
   const loadRecentSchedules = async () => {

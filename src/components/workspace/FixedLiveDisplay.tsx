@@ -35,7 +35,6 @@ interface FixedLiveDisplayProps {
 
 export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProps) {
   const outputGroups = useStore(state => state.outputGroups);
-  const groupStates = useStore(state => state.groupStates);
   const routerPanels = useStore(state => state.routerPanels);
   const activeRouterId = useStore(state => state.activeRouterId);
   const activeSchedule = useStore(state => state.activeSchedule);
@@ -83,9 +82,9 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
   const activeGroup = outputGroups.find(g => g.id === effectiveGroupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === effectiveGroupId);
-  const publicControlState = groupStates[effectiveGroupId];
-  const stagedControlState = useStore(state => state.stagedGroupStates[effectiveGroupId]);
-  const mediaProgress = useMediaProgressStore(state => state.progress[effectiveGroupId]);
+  const publicControlState = useStore(React.useCallback(state => state.groupStates[effectiveGroupId], [effectiveGroupId]));
+  const stagedControlState = useStore(React.useCallback(state => state.stagedGroupStates[effectiveGroupId], [effectiveGroupId]));
+  const mediaProgress = useMediaProgressStore(React.useCallback(state => state.progress[effectiveGroupId], [effectiveGroupId]));
   const uiVideoCurrentTime = mediaProgress?.currentTime || stagedControlState?.videoCurrentTime || 0;
   const uiVideoDuration = mediaProgress?.duration || stagedControlState?.videoDuration || 0;
 

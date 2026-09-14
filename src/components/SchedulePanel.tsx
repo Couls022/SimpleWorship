@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { PresentationItem, Song } from '../types';
+import { PresentationItem, Song, PresentationState } from '../types';
 import { PresentationCore } from '../core/PresentationCore';
 import { PresentationContentResolver, FormatBadgeInfo } from '../core/PresentationContentResolver';
 import { readSwsFile } from '../services/swsService';
@@ -181,8 +181,9 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
   const previewSlideIndex = useStore(state => state.previewSlideIndex);
   const setPreviewItem = useStore(state => state.setPreviewItem);
   const goLiveItem = useStore(state => state.goLiveItem);
-  const groupStates = useStore(state => state.groupStates);
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const activeControlState = useStore(React.useCallback(state => activeControlGroupId ? (state.groupStates[activeControlGroupId] as PresentationState | undefined) : undefined, [activeControlGroupId]));
+  
   const toggleScheduleItemExpand = useStore(state => state.toggleScheduleItemExpand);
   const removeScheduleItem = useStore(state => state.removeScheduleItem);
   const updateScheduleItem = useStore(state => state.updateScheduleItem);
@@ -437,10 +438,6 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
     window.addEventListener('mousedown', handleClickOutside);
     return () => window.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const activeControlState = activeControlGroupId && groupStates[activeControlGroupId] 
-    ? groupStates[activeControlGroupId] 
-    : null;
 
   // Reorder start
   const handleItemDragStart = (e: React.DragEvent, index: number) => {

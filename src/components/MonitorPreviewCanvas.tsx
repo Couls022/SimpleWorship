@@ -31,7 +31,7 @@ interface MonitorPreviewCanvasProps {
   isProjectorMode?: boolean;
 }
 
-export default function MonitorPreviewCanvas({
+const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   groupId,
   customGroup,
   customState,
@@ -42,20 +42,31 @@ export default function MonitorPreviewCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
-  const outputGroups = useStore(state => state.outputGroups);
-  const stagedGroupStates = useStore(state => state.stagedGroupStates);
-  const groupStates = useStore(state => state.groupStates);
+  const group = useStore(useCallback(state => customGroup || state.outputGroups.find(g => g.id === groupId) || state.outputGroups[0], [customGroup, groupId]));
+
+  const fallbackState = useMemo(() => ({
+    activeScheduleId: null,
+    activeItemId: null,
+    activeSlideIndex: 0,
+    nextSlideIndex: 1,
+    isBlack: false,
+    isClear: false,
+    showLogo: false,
+    timestamp: Date.now(),
+    isLiveEnabled: false,
+  } as PresentationState), []);
+
+  const presentationState = useStore(useCallback(state => customState || state.stagedGroupStates[groupId] || fallbackState, [customState, groupId, fallbackState]));
+
   const activeSchedule = useStore(state => state.activeSchedule);
   const songsList = useStore(state => state.songsList);
   const themesList = useStore(state => state.themesList);
-  const alert = useStore(state => state.alert);
-  const groupAlerts = useStore(state => state.groupAlerts);
-  const systemOptions = useStore(state => state.systemOptions);
   const setStagedGroupState = useStore(state => state.setStagedGroupState);
-
-  const currentAlert = (groupId && groupAlerts?.[groupId]) || alert || { active: false, showNursery: false, message: '', nurseryText: '' };
-
-  const group = customGroup || outputGroups.find(g => g.id === groupId) || outputGroups[0];
+  
+  const fallbackAlert = useMemo(() => ({ active: false, showNursery: false, message: '', nurseryText: '' } as any), []);
+  const currentAlert = useStore(useCallback(state => (groupId && state.groupAlerts?.[groupId]) || state.alert || fallbackAlert, [groupId, fallbackAlert]));
+  
+  const systemOptions = useStore(state => state.systemOptions);
 
   const handlePptxSlideChange = useCallback((index: number) => {
     const currentState = useStore.getState().stagedGroupStates[groupId || 'group-congregation'];
@@ -75,18 +86,6 @@ export default function MonitorPreviewCanvas({
       </div>
     );
   }
-
-  const presentationState = customState || stagedGroupStates[groupId] || ({
-    activeScheduleId: null,
-    activeItemId: null,
-    activeSlideIndex: 0,
-    nextSlideIndex: 1,
-    isBlack: false,
-    isClear: false,
-    showLogo: false,
-    timestamp: Date.now(),
-    isLiveEnabled: false,
-  } as PresentationState);
   
   const isLiveOff = !presentationState.isLiveEnabled;
   
@@ -1188,4 +1187,5 @@ export default function MonitorPreviewCanvas({
       </div>
     </div>
   );
-}
+});
+export default MonitorPreviewCanvas;

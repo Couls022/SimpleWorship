@@ -32,9 +32,14 @@ interface StageMonitorContentProps {
 
 export default function StageMonitorContent({ isProjectorMode = false }: StageMonitorContentProps) {
   const activeSchedule = useStore(state => state.activeSchedule);
-  const groupStates = useStore(state => state.groupStates);
-  const stagedGroupStates = useStore(state => state.stagedGroupStates);
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  
+  const activeControlState = useStore(React.useCallback(state => {
+    return state.activeControlGroupId && state.groupStates[state.activeControlGroupId]
+      ? state.groupStates[state.activeControlGroupId]
+      : (state.groupStates['group-stage'] || state.groupStates[state.outputGroups[0]?.id]);
+  }, []));
+
   const outputGroups = useStore(state => state.outputGroups);
   const songsList = useStore(state => state.songsList);
   const alert = useStore(state => state.alert);
@@ -42,10 +47,6 @@ export default function StageMonitorContent({ isProjectorMode = false }: StageMo
 
   // Automatic broadcast & engine connection watchdog
   const { status: connStatus, reconnectAttempts, latency, reconnect: forceReconnect } = useStageConnection();
-
-  const activeControlState = activeControlGroupId && groupStates[activeControlGroupId] 
-    ? groupStates[activeControlGroupId] 
-    : (groupStates['group-stage'] || groupStates[outputGroups[0]?.id]);
 
   const liveItem = activeControlState ? PresentationCore.getActiveContent(activeSchedule, activeControlState, activeControlState.directLiveItem) : null;
   const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];

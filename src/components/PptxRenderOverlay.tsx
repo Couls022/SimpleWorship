@@ -1,5 +1,5 @@
 import '../utils/initPptxViewer';
-import React, { useEffect, useRef, useState, useMemo, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { SlideCanvas, useViewerBuildingBlocks, PowerPointViewerHandle } from 'pptx-react-viewer';
 import 'pptx-react-viewer/styles';
 import { toValidPptxUint8Array, isValidPptxBinary } from '../utils/pptxValidator';
@@ -48,12 +48,18 @@ interface PptxViewerInnerProps {
 const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex, isThumbnail, pptxAction, pptxActionTimestamp, onActiveSlideChange }) => {
   const handleRef = useRef<PowerPointViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastReportedSlideRef = useRef<number>(activeSlideIndex);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
+
+  const handleSlideChange = useCallback((index: number) => {
+    lastReportedSlideRef.current = index;
+    onActiveSlideChange?.(index);
+  }, [onActiveSlideChange]);
 
   const blocks = useViewerBuildingBlocks({
     content: bytes,
     canEdit: false,
-    onActiveSlideChange,
+    onActiveSlideChange: handleSlideChange,
     handle: handleRef,
   });
 
@@ -125,8 +131,9 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
            handleRef.current.goNext();
         } else if (pptxAction === 'prev') {
            handleRef.current.goPrev();
-        } else {
+        } else if (lastReportedSlideRef.current !== activeSlideIndex) {
            handleRef.current.goTo(activeSlideIndex);
+           lastReportedSlideRef.current = activeSlideIndex;
         }
         
       } catch (e) {

@@ -332,6 +332,10 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handlePrevSlide = () => {
     if (slides.length === 0) return;
+    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
+      useStore.getState().setStagedGroupState(groupId, { pptxAction: 'prev', pptxActionTimestamp: Date.now() });
+      return;
+    }
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev, pptxAction: null });
@@ -339,6 +343,10 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handleNextSlide = () => {
     if (slides.length === 0) return;
+    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
+      useStore.getState().setStagedGroupState(groupId, { pptxAction: 'next', pptxActionTimestamp: Date.now() });
+      return;
+    }
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next, pptxAction: null });

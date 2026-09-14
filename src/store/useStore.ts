@@ -1614,7 +1614,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
-    if (liveItem && (liveItem.type === 'pptx' || liveItem.type === 'presentation' || liveItem.type === 'ppt')) {
+    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
         get().setStagedGroupState(targetGroupId, { 
           pptxAction: 'next',
           pptxActionTimestamp: Date.now()
@@ -1661,7 +1661,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
-    if (liveItem && (liveItem.type === 'pptx' || liveItem.type === 'presentation' || liveItem.type === 'ppt')) {
+    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
         get().setStagedGroupState(targetGroupId, { 
           pptxAction: 'prev',
           pptxActionTimestamp: Date.now()
