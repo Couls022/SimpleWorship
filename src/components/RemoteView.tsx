@@ -22,7 +22,8 @@ import {
   Bell,
   RefreshCw,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Activity
 } from 'lucide-react';
 
 interface RemoteViewProps {
@@ -39,6 +40,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
   const [serverPin, setServerPin] = useState('8492');
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const [currentTime, setCurrentTime] = useState('');
 
   // Clock ticker for stage timer
@@ -103,6 +105,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
         setIsSyncing(true);
         const res = await fetch('/api/sync/state');
         if (res.ok) {
+          setIsConnected(true);
           const payload = await res.json();
           if (payload.success && payload.data) {
             const serverState = payload.data;
@@ -118,9 +121,11 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               setLastSyncTime(serverState.lastUpdated);
             }
           }
+        } else {
+          setIsConnected(false);
         }
       } catch (err) {
-        // Silent poll error
+        setIsConnected(false);
       } finally {
         setIsSyncing(false);
       }
@@ -331,11 +336,11 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
         <div className="flex items-center gap-2.5">
           <div className="relative">
             <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              {isConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
             </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
-              <Wifi size={16} />
+            <div className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${isConnected ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-400' : 'bg-rose-600/20 border-rose-500/40 text-rose-400'}`}>
+              {isConnected ? <Activity size={16} className={isSyncing ? "animate-pulse" : ""} /> : <Wifi size={16} className="opacity-50" />}
             </div>
           </div>
           <div>

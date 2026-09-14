@@ -36,29 +36,42 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [isGeneratingQr, setIsGeneratingQr] = useState(true);
+  const [localIps, setLocalIps] = useState<string[]>([]);
 
-  // Construct full pairing URL
-  const remoteUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}?remote=true&pin=${pin}`
-    : `http://localhost:3000/?remote=true&pin=${pin}`;
+  // Construct full pairing URL dynamically
+  let baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+  
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // If running on localhost or file:// (desktop app), try to use actual local network IP for the QR code
+    if ((hostname === 'localhost' || hostname === '127.0.0.1' || window.location.protocol === 'file:') && localIps.length > 0) {
+      // Pick the first non-internal IPv4 address
+      baseUrl = `http://${localIps[0]}:3000`;
+    }
+  }
+  
+  const remoteUrl = `${baseUrl}${typeof window !== 'undefined' ? window.location.pathname : '/'}?remote=true&pin=${pin}`;
 
-  // Fetch or sync current PIN from server
+  // Fetch or sync current PIN and network IPs from server
   useEffect(() => {
-    const fetchPin = async () => {
+    const fetchRemoteInfo = async () => {
       try {
-        const res = await fetch('/api/remote/pin');
+        const res = await fetch('/api/remote/info');
         if (res.ok) {
           const data = await res.json();
           if (data.pin) {
             setPin(data.pin);
             localStorage.setItem('simpleworship_remote_pin', data.pin);
           }
+          if (data.ips && Array.isArray(data.ips)) {
+            setLocalIps(data.ips);
+          }
         }
       } catch (e) {
         // Fallback to local PIN
       }
     };
-    fetchPin();
+    fetchRemoteInfo();
   }, []);
 
   // Generate real QR code image whenever remoteUrl updates
@@ -188,19 +201,25 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
               </div>
 
               {/* PIN Info with Regenerate Action */}
-              <div className="mt-4 flex items-center justify-center gap-2 bg-[#1b1e28] px-3.5 py-1.5 rounded-lg border border-[#2e3344]">
-                <span className="text-xs text-gray-400 font-medium">Pairing PIN:</span>
-                <span className="text-sm font-black text-purple-300 font-mono tracking-widest bg-purple-950 px-2.5 py-0.5 rounded border border-purple-500/50">
-                  {pin}
-                </span>
-                <button
-                  type="button"
-                  onClick={regeneratePin}
-                  className="p-1 hover:bg-[#2c3140] rounded text-gray-400 hover:text-white transition-colors cursor-pointer"
-                  title="Generate new 4-digit PIN"
-                >
-                  <RefreshCw size={13} />
-                </button>
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <div className="flex items-center justify-center gap-2 bg-[#1b1e28] px-3.5 py-1.5 rounded-lg border border-[#2e3344]">
+                  <span className="text-xs text-gray-400 font-medium">Pairing PIN:</span>
+                  <span className="text-sm font-black text-purple-300 font-mono tracking-widest bg-purple-950 px-2.5 py-0.5 rounded border border-purple-500/50">
+                    {pin}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={regeneratePin}
+                    className="p-1 hover:bg-[#2c3140] rounded text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    title="Generate new 4-digit PIN"
+                  >
+                    <RefreshCw size={13} />
+                  </button>
+                </div>
+                <div className="text-[10px] text-gray-400 bg-emerald-950/30 border border-emerald-900/50 px-3 py-1.5 rounded-md max-w-[200px] text-center flex items-center justify-center gap-1.5">
+                  <Wifi size={12} className="text-emerald-400 shrink-0" />
+                  <span>Ensure your phone is connected to the <strong className="text-emerald-300">same WiFi network</strong>.</span>
+                </div>
               </div>
             </div>
 

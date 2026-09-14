@@ -9,14 +9,15 @@
   "scripts": {
     "dev": "vite",
     "dev:electron": "electron .",
-    "build": "vite build && node scripts/postbuild.cjs",
-    "build:renderer": "vite build",
-    "dist": "vite build && node scripts/postbuild.cjs && electron-builder --win",
-    "dist:dir": "vite build && node scripts/postbuild.cjs && electron-builder --dir",
+    "build": "vite build",
+    "build:electron": "vite build && node scripts/postbuild.cjs",
+    "build:installer": "npm run build:electron && electron-builder --win",
+    "dist": "npm run build:electron && electron-builder --win",
+    "dist:dir": "npm run build:electron && electron-builder --dir",
     "preview": "vite preview --port 3000 --host 0.0.0.0",
     "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "build:installer": "vite build && node scripts/postbuild.cjs && electron-builder --win"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.95",

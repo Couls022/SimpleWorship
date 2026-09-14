@@ -143,6 +143,24 @@ async function startServer() {
     }
   });
 
+  app.get('/api/remote/info', (req, res) => {
+    const interfaces = os.networkInterfaces();
+    const ips: string[] = [];
+    for (const name of Object.keys(interfaces)) {
+      for (const iface of interfaces[name] || []) {
+        if (iface.family === 'IPv4' && !iface.internal) {
+          ips.push(iface.address);
+        }
+      }
+    }
+    res.json({
+      success: true,
+      ips,
+      port: PORT,
+      pin: currentServerState.remotePin || '8492'
+    });
+  });
+
   // 4. Remote PIN Pairing Management
   app.get('/api/remote/pin', (req, res) => {
     res.json({

@@ -33,11 +33,13 @@ export class OfflineSearchEngine {
    * Punctuation-tolerant text normalization for search matching.
    * Strips extraneous punctuation, lowercases, and collapses whitespaces.
    */
-  static normalizeText(text: string | null | undefined): { normalized: string; tokens: string[] } {
-    if (!text) return { normalized: '', tokens: [] };
+  static normalizeText(text: any): { normalized: string; tokens: string[] } {
+    if (text === null || text === undefined) return { normalized: '', tokens: [] };
+    const str = typeof text === 'string' ? text : String(text);
+    if (!str.trim()) return { normalized: '', tokens: [] };
     
     // Replace punctuation with spaces to prevent word concatenation (e.g., "Holy,Holy" -> "holy holy")
-    const cleaned = text
+    const cleaned = str
       .toLowerCase()
       .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“”‘’—–\[\]\\<>+@]/g, ' ')
       .replace(/\s+/g, ' ')
@@ -96,10 +98,21 @@ export class OfflineSearchEngine {
    * Search songs with tiered ranking, partial token matching, lyrics & metadata inspection.
    */
   static searchSongs(
-    songs: Song[],
-    rawQuery: string,
+    songsOrQuery: Song[] | string,
+    queryOrSongs: string | Song[],
     categoryFilter: 'All' | 'Hymns' | 'Special Number' = 'All'
   ): SongSearchResult[] {
+    let songs: Song[];
+    let rawQuery: string;
+
+    if (Array.isArray(songsOrQuery)) {
+      songs = songsOrQuery;
+      rawQuery = typeof queryOrSongs === 'string' ? queryOrSongs : '';
+    } else {
+      rawQuery = typeof songsOrQuery === 'string' ? songsOrQuery : '';
+      songs = Array.isArray(queryOrSongs) ? queryOrSongs : [];
+    }
+
     const { normalized: qNorm, tokens: qTokens } = this.normalizeText(rawQuery);
 
     // Filter by category first
@@ -261,8 +274,8 @@ export class OfflineSearchEngine {
    * - "3" (Standalone chapter / number)
    * - "born again", "for God so loved", "love" (Text search query)
    */
-  static parseScriptureReference(query: string): ScriptureParsedReference {
-    const trimmed = query.trim();
+  static parseScriptureReference(query: string | null | undefined): ScriptureParsedReference {
+    const trimmed = typeof query === 'string' ? query.trim() : String(query || '').trim();
     if (!trimmed) {
       return { type: 'text_query', cleanedQuery: '' };
     }
