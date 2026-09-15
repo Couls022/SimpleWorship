@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
-import { resolveDisplayAssignments } from '../core/DisplayRouter';
+import { resolveDisplayAssignments, routeTargetsDisplay } from '../core/DisplayRouter';
 import { DisplayManager } from '../core/DisplayManager';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
 import { useScreens } from '../hooks/useScreens';
@@ -20,6 +20,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
   const activeRouterId = useStore(state => state.activeRouterId);
   const routerPanels = useStore(state => state.routerPanels);
+  const routeActivationStack = useStore(state => state.routeActivationStack) || [];
 
   const { screens } = useScreens();
   const [identifyActive, setIdentifyActive] = useState(false);
@@ -125,6 +126,19 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     };
   }, []);
 
+  // Apply transparency to document & body when ProjectorView is mounted
+  useEffect(() => {
+    document.documentElement.classList.add('projector-mode');
+    document.body.classList.add('projector-mode');
+    document.documentElement.style.backgroundColor = 'transparent';
+    document.body.style.backgroundColor = 'transparent';
+    const rootEl = document.getElementById('root');
+    if (rootEl) {
+      rootEl.classList.add('projector-mode');
+      rootEl.style.backgroundColor = 'transparent';
+    }
+  }, []);
+
   // Compute monitor index for identification badge
   const displayIndex = useMemo(() => {
     if (identifyNumber !== null) return identifyNumber;
@@ -148,54 +162,78 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   }, [screens, displayId, identifyNumber]);
 
   // Resolve winning active route and all overlay routes targeting this physical display
-  const { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds } = useMemo(() => {
-    // Strictly enforce output route targeting as the single source of truth
-    const assignments = resolveDisplayAssignments(
-      outputGroups,
-      // Pass the most up-to-date state (staged or committed)
-      groupStates,
-      activeControlGroupId,
-      [displayId] // Ensure this physical display is evaluated
-    );
-    
-    const assignment = assignments.get(displayId);
+  const { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds, stackedLiveGroupIds } = useMemo(() => {
+    const isStageWindow = routedGroupId === 'group-stage' || 
+      (displayId && (displayId.toLowerCase().includes('stage') || displayId.toLowerCase().includes('foldback')));
 
-    if (assignment && assignment.candidateGroupIds && assignment.candidateGroupIds.length > 0) {
+    // 1. Stage / Confidence Monitor Mode: Dedicated to stage
+    if (isStageWindow) {
+      const isLive = Boolean(groupStates['group-stage']?.isLiveEnabled);
       return {
-        winningGroupId: assignment.assignedGroupId,
-        isLiveActive: Boolean(assignment.assignedGroupId && assignment.liveGroupIds.includes(assignment.assignedGroupId)),
-        candidateGroupIds: assignment.candidateGroupIds,
-        liveGroupIds: assignment.liveGroupIds,
+        winningGroupId: 'group-stage',
+        isLiveActive: isLive,
+        candidateGroupIds: ['group-stage'],
+        liveGroupIds: isLive ? ['group-stage'] : [],
+        stackedLiveGroupIds: isLive ? ['group-stage'] : [],
       };
     }
 
-    // Direct Group Routing Fallback (e.g., dedicated Stage/Foldback popups, secondary windows or unassigned physical screens)
-    const effectiveGroupId = routedGroupId || (
-      (displayId && (displayId.toLowerCase().includes('stage') || displayId.toLowerCase().includes('foldback') || displayId.toLowerCase().includes('confidence'))) 
-        ? 'group-stage' 
-        : 'group-congregation'
-    );
-    const isLive = Boolean(groupStates[effectiveGroupId]?.isLiveEnabled ?? true);
-    return {
-      winningGroupId: effectiveGroupId,
-      isLiveActive: isLive,
-      candidateGroupIds: [effectiveGroupId],
-      liveGroupIds: isLive ? [effectiveGroupId] : []
-    };
-  }, [displayId, outputGroups, groupStates, activeControlGroupId]);
+    // 2. Strict Physical Presentation Display Pipeline Isolation
+    // Only output groups configured to target THIS physical display are permitted as candidates.
+    const candidateSet = new Set<string>();
 
-  // Grace period to prevent transient blackscreen flicker during rapid live transitions between items
-  const [showStandbyCurtain, setShowStandbyCurtain] = useState(liveGroupIds.length === 0);
-  useEffect(() => {
-    if (liveGroupIds.length > 0) {
-      setShowStandbyCurtain(false);
+    if (displayId) {
+      // Find all output groups whose configured target displays match this physical display
+      outputGroups.forEach(g => {
+        if (g.role === 'confidence' || g.id === 'group-stage') return;
+        if (routeTargetsDisplay(g, displayId, screens)) {
+          candidateSet.add(g.id);
+        }
+      });
+    } else if (routedGroupId) {
+      // Standalone preview with explicit groupId
+      candidateSet.add(routedGroupId);
     } else {
-      const timer = setTimeout(() => {
-        setShowStandbyCurtain(true);
-      }, 800);
-      return () => clearTimeout(timer);
+      // Standalone web preview fallback when no displayId and no groupId is provided
+      const defaultGroup = outputGroups.find(g => g.role !== 'confidence' && g.id !== 'group-stage') || outputGroups[0];
+      if (defaultGroup) {
+        candidateSet.add(defaultGroup.id);
+      }
     }
-  }, [liveGroupIds.length]);
+
+    const allCandidateIds = Array.from(candidateSet);
+
+    // Filter candidate groups whose Live state is ON (isLiveEnabled: true)
+    const liveIds = allCandidateIds.filter(gid => Boolean(groupStates[gid]?.isLiveEnabled));
+
+    // Stacking Priority according to routeActivationStack (MRU order):
+    // Index 0 is UNA (most recently active route)
+    // Index 1 is PANGALAWA (previously active route)
+    // Index 2 is PANGATLO (the route before that)
+    const stackRankMap = new Map<string, number>();
+    (routeActivationStack || []).forEach((id, idx) => stackRankMap.set(id, idx));
+
+    // Sort live candidates by MRU stack rank
+    const stackedLiveGroupIds = [...liveIds].sort((a, b) => {
+      const rankA = stackRankMap.has(a) ? stackRankMap.get(a)! : 999;
+      const rankB = stackRankMap.has(b) ? stackRankMap.get(b)! : 999;
+      return rankA - rankB;
+    });
+
+    // The topmost active route (UNA)
+    const winning = stackedLiveGroupIds[0] || null;
+
+    return {
+      winningGroupId: winning,
+      isLiveActive: Boolean(winning && groupStates[winning]?.isLiveEnabled),
+      candidateGroupIds: allCandidateIds,
+      liveGroupIds: liveIds,
+      stackedLiveGroupIds,
+    };
+  }, [routedGroupId, displayId, outputGroups, groupStates, activeControlGroupId, currentRouteGroupId, routerPanels, activeRouterId, screens, routeActivationStack]);
+
+  // Standby indicator when no live routes are active
+  const isStandby = liveGroupIds.length === 0;
 
   // Determine what state to pass to the canvas
   const winningState = winningGroupId ? (groupStates[winningGroupId] || stagedGroupStates[winningGroupId]) : undefined;
@@ -206,25 +244,48 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       data-canvas-preview="true"
       className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
     >
-      {/* ALWAYS render all candidate canvases to preserve DOM state, video playheads, and asset caches. 
-          Use opacity to hide them if they are not the active winning route. 
-          Only the ACTIVE router has projector/output authority. */}
-      {candidateGroupIds.map((groupId, index) => {
-        const isWinning = groupId === winningGroupId;
-        // A route is only visible if it is BOTH live AND the active winning route.
-        // A non-active router may remain LIVE/ON internally but must not take over the projector.
-        const isVisible = liveGroupIds.includes(groupId) && isWinning;
+      {/* Hardware-accelerated presentation surfaces: renders candidate canvases with GPU isolation and zero-flicker stability */}
+      {candidateGroupIds.map((groupId) => {
+        // Stack rank for this group among live groups targeting this monitor:
+        // rank 0 = UNA (Topmost layer)
+        // rank 1 = PANGALAWA (Second layer)
+        // rank 2 = PANGATLO (Third layer)
+        const stackRank = stackedLiveGroupIds.indexOf(groupId);
+        const isLive = stackRank !== -1;
+        
+        // If not live, this route is completely hidden and will never clash or overlay
+        if (!isLive) {
+          return (
+            <div 
+              key={groupId}
+              className="absolute inset-0 hidden pointer-events-none"
+              style={{ display: 'none', zIndex: 0 }}
+            />
+          );
+        }
+
+        // Layer calculation:
+        // Topmost (UNA) has highest z-index (e.g. 50)
+        // PANGALAWA has z-index 40
+        // PANGATLO has z-index 30
+        const zIndex = Math.max(10, 50 - stackRank * 10);
+
+        // A group is an overlay if there is another live group beneath it on this display
+        // Bottom-most live route in the stack serves as the base layer (isOverlayLayer: false)
+        const isBaseLayer = stackRank === (stackedLiveGroupIds.length - 1);
+        const isOverlayLayer = !isBaseLayer;
+
         const state = groupStates[groupId] || stagedGroupStates[groupId];
         const group = outputGroups.find(g => g.id === groupId) || outputGroups[0];
         
         return (
           <div 
             key={groupId}
-            className="absolute inset-0 transition-opacity duration-300 ease-in-out pointer-events-none" 
+            className="absolute inset-0 pointer-events-auto" 
             style={{ 
-              opacity: isVisible ? 1 : 0,
-              zIndex: isVisible ? 20 : 0,
-              pointerEvents: isVisible ? 'auto' : 'none' 
+              zIndex,
+              transform: 'translateZ(0)',
+              backfaceVisibility: 'hidden',
             }}
           >
             <MonitorPreviewCanvas
@@ -232,45 +293,26 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
               customGroup={group}
               customState={state}
               isProjectorMode={true}
+              isOverlayLayer={isOverlayLayer}
               className="w-full h-full"
             />
           </div>
         );
       })}
 
-      {/* Master Gate Standby Overlay: Solid black if NO LIVE ROUTES AT ALL */}
-      <div 
-        className="absolute inset-0 z-[100] bg-black pointer-events-none transition-opacity duration-500 ease-in-out flex items-center justify-center"
-        style={{ opacity: showStandbyCurtain ? 1 : 0 }}
-      >
-        {/* Visual Identification Overlay for connected monitors */}
-        <AnimatePresence>
-          {identifyActive && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
-            >
-              <div className="w-48 h-48 rounded-3xl bg-indigo-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
-                <span className="text-8xl font-black">{displayIndex}</span>
-                <span className="text-xs uppercase font-mono tracking-widest text-blue-200 mt-2">
-                  {displayId || `Display ${displayIndex}`}
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      
-      {/* If LIVE is active, the identify overlay should still be visible if triggered */}
+      {/* Standby black backdrop when no routes are live */}
+      {isStandby && (
+        <div className="absolute inset-0 z-10 bg-black pointer-events-none" />
+      )}
+
+      {/* Visual Identification Overlay for connected monitors */}
       <AnimatePresence>
-        {(identifyActive && isLiveActive) && (
+        {identifyActive && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="absolute inset-0 z-[110] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
+            className="absolute inset-0 z-[120] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md pointer-events-none"
           >
             <div className="w-48 h-48 rounded-3xl bg-indigo-600/90 text-white flex flex-col items-center justify-center shadow-2xl border-4 border-white/20">
               <span className="text-8xl font-black">{displayIndex}</span>

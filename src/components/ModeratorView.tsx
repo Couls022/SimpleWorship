@@ -158,14 +158,19 @@ export default function ModeratorView() {
     };
 
     const handleOpenDiagnostics = () => setIsDiagnosticsOpen(true);
+    const handlePptxClick = () => {
+      useStore.getState().goLiveNext(); // Steps through slide animations first, then advances when exhausted
+    };
 
     window.addEventListener('simpleworship:notify', handleNotification);
     window.addEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
     window.addEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
+    window.addEventListener('simpleworship:pptx-click', handlePptxClick as EventListener);
     return () => {
       window.removeEventListener('simpleworship:notify', handleNotification);
       window.removeEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
       window.removeEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
+      window.removeEventListener('simpleworship:pptx-click', handlePptxClick as EventListener);
     };
   }, [resetLayout]);
 
@@ -208,7 +213,7 @@ export default function ModeratorView() {
         const liveItem = currentPptxState?.directLiveItem 
           || currentStore.activeSchedule?.items?.find(i => i.id === activeContentId)
           || currentStore.songsList.find(s => s.id === activeContentId);
-        if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation' || liveItem.type === 'pptx')) {
+        if (liveItem && 'type' in liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation' || (liveItem.type as string) === 'pptx')) {
           isLivePptx = true;
         }
       }
@@ -275,7 +280,7 @@ export default function ModeratorView() {
       }
 
       // 3. Next Live Slide controls
-      const isNextPptxAction = isLivePptx && (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Space' || e.key === 'Enter' || e.key === 'PageDown');
+      const isNextPptxAction = isLivePptx && (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'Space' || e.key === 'Enter' || e.key === 'PageDown');
       const isNextNormalAction = !isLivePptx && (
         matchesShortcut(e, mappings?.nextSlide) ||
         (shortcutSettings?.arrowControlsLive && e.key === 'ArrowDown') ||
@@ -288,14 +293,8 @@ export default function ModeratorView() {
         return;
       }
 
-      // Explicitly disable down arrow for PPTX
-      if (isLivePptx && e.key === 'ArrowDown') {
-        e.preventDefault();
-        return;
-      }
-
       // 4. Previous Live Slide controls
-      const isPrevPptxAction = isLivePptx && (e.key === 'ArrowLeft' || e.key === 'PageUp');
+      const isPrevPptxAction = isLivePptx && (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp');
       const isPrevNormalAction = !isLivePptx && (
         matchesShortcut(e, mappings?.previousSlide) ||
         (shortcutSettings?.arrowControlsLive && e.key === 'ArrowUp') ||
@@ -304,12 +303,6 @@ export default function ModeratorView() {
       if (isPrevPptxAction || isPrevNormalAction) {
         e.preventDefault();
         currentStore.goLivePrev();
-        return;
-      }
-
-      // Explicitly disable up arrow for PPTX
-      if (isLivePptx && e.key === 'ArrowUp') {
-        e.preventDefault();
         return;
       }
 

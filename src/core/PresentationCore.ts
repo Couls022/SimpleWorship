@@ -463,7 +463,7 @@ export class PresentationCore {
           { id: 'b1', title: item.name, text: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.', backgroundUrl: item.customBackgroundUrl }
         ];
       }
-    } else if (item.type === 'ppt' || item.type === 'presentation') {
+    } else if (item.type === 'ppt' || item.type === 'presentation' || (item.type as any) === 'pptx') {
       if (item.data && Array.isArray(item.data.slides) && item.data.slides.length > 0) {
         generated = item.data.slides.map((s: any, idx: number) => ({
           id: s.id || `p-slide-${idx}`,

@@ -367,12 +367,21 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
       }
     }
 
+    // Persist explicit user foldback preference
+    const isFoldbackActive = Boolean(localOptions.foldback?.enabled);
+    try {
+      localStorage.setItem('simpleworship_foldback_explicit_v1', isFoldbackActive ? 'true' : 'false');
+    } catch (e) {}
+
     const stageGroup = currentGroups.find(g => g.id === 'group-stage');
     if (stageGroup) {
       useStore.getState().updateOutputGroup(stageGroup.id, {
-        displayIds: localOptions.foldback.outputMonitor ? [localOptions.foldback.outputMonitor] : stageGroup.displayIds,
-        targetDisplayId: localOptions.foldback.outputMonitor || ''
+        displayIds: (isFoldbackActive && localOptions.foldback.outputMonitor) ? [localOptions.foldback.outputMonitor] : [],
+        targetDisplayId: (isFoldbackActive && localOptions.foldback.outputMonitor) || ''
       });
+      if (!isFoldbackActive) {
+        DisplayManager.closeProjector('group-stage').catch(() => {});
+      }
     }
 
     const altGroup = currentGroups.find(g => g.id === 'group-alternate');
@@ -419,7 +428,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
     // Sync physical displays and broadcast immediately
     try {
       const stateNow = useStore.getState();
-      DisplayManager.syncPhysicalDisplays(stateNow.outputGroups, stateNow.groupStates, stateNow.activeControlGroupId);
+      DisplayManager.syncPhysicalDisplays(stateNow.outputGroups, stateNow.groupStates, stateNow.activeControlGroupId, stateNow.routeActivationStack);
     } catch (e) {
       console.warn('Display sync non-critical warning:', e);
     }
@@ -433,6 +442,9 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
   };
 
   const handleResetCurrentSection = () => {
+    try {
+      localStorage.removeItem('simpleworship_foldback_explicit_v1');
+    } catch (e) {}
     resetSystemOptions();
     applyAppearanceSettings(systemOptions.appearance);
     onClose();

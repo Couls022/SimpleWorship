@@ -63,7 +63,7 @@ export default function App() {
     hashParams.get('displayId') ||
     undefined;
 
-  const groupId = rawGroupId || (isProjector ? (isStage ? 'group-stage' : 'group-congregation') : undefined);
+  const groupId = rawGroupId;
 
   useEffect(() => {
     // 1. Init IndexedDB in background
@@ -138,6 +138,19 @@ export default function App() {
     window.addEventListener('dragover', preventGlobalDrop);
     window.addEventListener('drop', preventGlobalDrop);
 
+    // When in projector mode, ensure document and body have transparency enabled
+    if (isProjector) {
+      document.documentElement.classList.add('projector-mode');
+      document.body.classList.add('projector-mode');
+      document.documentElement.style.backgroundColor = 'transparent';
+      document.body.style.backgroundColor = 'transparent';
+      const rootEl = document.getElementById('root');
+      if (rootEl) {
+        rootEl.classList.add('projector-mode');
+        rootEl.style.backgroundColor = 'transparent';
+      }
+    }
+
     return () => {
       window.removeEventListener('dragover', preventGlobalDrop);
       window.removeEventListener('drop', preventGlobalDrop);
@@ -146,7 +159,7 @@ export default function App() {
     };
   }, [isProjector]);
 
-  if (isProjector && groupId) {
+  if (isProjector) {
     return <ProjectorView groupId={groupId} displayId={displayId} />;
   }
 

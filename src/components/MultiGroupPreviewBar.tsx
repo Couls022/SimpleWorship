@@ -159,7 +159,13 @@ export default function MultiGroupPreviewBar() {
                   } catch (err) {}
                 }
               }}
-              onClick={() => setActiveControlGroupId(group.id)}
+              onClick={() => {
+                setActiveControlGroupId(group.id);
+                const matchingPanel = useStore.getState().routerPanels.find(p => p.targetOutputGroupId === group.id);
+                if (matchingPanel) {
+                  useStore.getState().setActiveRouterId(matchingPanel.routerId);
+                }
+              }}
               className={`rounded-lg border p-2 cursor-pointer transition-all flex flex-col justify-between relative select-none ${
                 isDragging ? 'opacity-40 border-2 border-dashed border-cyan-400' : ''
               } ${

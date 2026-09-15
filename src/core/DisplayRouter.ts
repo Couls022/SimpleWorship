@@ -5,12 +5,14 @@ export interface DisplayAssignment {
   assignedGroupId: string | null;
   liveGroupIds: string[];
   candidateGroupIds?: string[];
+  stackedGroupIds?: string[]; // Sorted MRU: index 0 is topmost (UNA), index 1 is 2nd (PANGALAWA)
 }
 
 /**
- * Helper to normalize monitor label / ID for robust string matching
+ * Helper to clean and normalize monitor label / ID for exact alphanumeric comparison
+ * Strips resolutions (e.g. 1920x1080) and "(Primary)" labels, preserving the core monitor identity.
  */
-function normalizeDisplayName(str: string): string {
+export function cleanDisplayString(str: string): string {
   if (!str) return '';
   return str
     .toLowerCase()
@@ -20,21 +22,110 @@ function normalizeDisplayName(str: string): string {
     .trim();
 }
 
-function isPrimaryDescriptor(str: string): boolean {
-  if (!str) return false;
-  const s = str.toLowerCase().trim();
-  return (
-    s.includes('primary') ||
-    s === 'monitor 1' ||
-    s === 'monitor-1' ||
-    s === 'display 1' ||
-    s === 'display-1' ||
-    s.startsWith('screen-0')
-  );
+/**
+ * Enterprise-grade Physical Display Matching.
+ * Strictly verifies whether two display references (such as a configured route display ID
+ * and a detected physical display ID) refer to the EXACT same physical monitor hardware.
+ * 
+ * Rules:
+ * 1. Direct string equality: exact match.
+ * 2. Hardware canonical matching via display list:
+ *    - Resolves both references to their physical display hardware records.
+ *    - If both resolve to physical displays, they MATCH if and only if they are the SAME display!
+ *    - If they resolve to DIFFERENT physical displays, they DEFINITIVELY DO NOT MATCH (no bleed).
+ * 3. Never uses fuzzy substring or partial numeric matching to prevent routes from leaking onto other monitors.
+ */
+export function isSamePhysicalDisplay(a: string, b: string, cachedDisplays?: any[]): boolean {
+  if (!a || !b) return false;
+  const strA = String(a).trim();
+  const strB = String(b).trim();
+  if (strA.toLowerCase() === strB.toLowerCase()) return true;
+
+  const cleanA = cleanDisplayString(strA);
+  const cleanB = cleanDisplayString(strB);
+  if (cleanA && cleanB && cleanA === cleanB) return true;
+
+  const displays = cachedDisplays || 
+    (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
+
+  if (displays && Array.isArray(displays) && displays.length > 0) {
+    const findMatchingDisplay = (query: string) => {
+      const qLower = query.toLowerCase().trim();
+      const qClean = cleanDisplayString(query);
+
+      return displays.find((d: any) => {
+        if (!d) return false;
+        // Direct string match on ID, displayId, name, or label
+        if (d.id && String(d.id).toLowerCase() === qLower) return true;
+        if (d.displayId !== undefined && String(d.displayId).toLowerCase() === qLower) return true;
+        if (d.displayId !== undefined && `display-${d.displayId}`.toLowerCase() === qLower) return true;
+        if (d.name && String(d.name).toLowerCase() === qLower) return true;
+        if (d.label && String(d.label).toLowerCase() === qLower) return true;
+        // Clean match (stripping resolutions & primary tags)
+        if (qClean) {
+          if (d.name && cleanDisplayString(d.name) === qClean) return true;
+          if (d.label && cleanDisplayString(d.label) === qClean) return true;
+          if (d.id && cleanDisplayString(d.id) === qClean) return true;
+        }
+        return false;
+      });
+    };
+
+    const dispA = findMatchingDisplay(strA);
+    const dispB = findMatchingDisplay(strB);
+
+    // If both references resolve to known physical displays in the system:
+    if (dispA && dispB) {
+      if (dispA === dispB) return true;
+      if (dispA.id && dispB.id && String(dispA.id).toLowerCase() === String(dispB.id).toLowerCase()) return true;
+      if (dispA.displayId !== undefined && dispB.displayId !== undefined && String(dispA.displayId) === String(dispB.displayId)) return true;
+      // Also match identical bounding coordinates if available
+      if (dispA.bounds && dispB.bounds &&
+          dispA.bounds.x === dispB.bounds.x &&
+          dispA.bounds.y === dispB.bounds.y &&
+          dispA.bounds.width === dispB.bounds.width &&
+          dispA.bounds.height === dispB.bounds.height) {
+        return true;
+      }
+      // They resolved to two distinct physical monitors - STRICT NO MATCH!
+      return false;
+    }
+
+    // If only dispA resolved to a physical monitor, check if strB matches any of dispA's canonical attributes
+    if (dispA) {
+      const bLower = strB.toLowerCase();
+      if (dispA.id && String(dispA.id).toLowerCase() === bLower) return true;
+      if (dispA.displayId !== undefined && String(dispA.displayId).toLowerCase() === bLower) return true;
+      if (dispA.displayId !== undefined && `display-${dispA.displayId}`.toLowerCase() === bLower) return true;
+      if (dispA.name && String(dispA.name).toLowerCase() === bLower) return true;
+      if (dispA.label && String(dispA.label).toLowerCase() === bLower) return true;
+      if (cleanB && dispA.name && cleanDisplayString(dispA.name) === cleanB) return true;
+      if (cleanB && dispA.label && cleanDisplayString(dispA.label) === cleanB) return true;
+      return false;
+    }
+
+    // If only dispB resolved to a physical monitor, check if strA matches any of dispB's canonical attributes
+    if (dispB) {
+      const aLower = strA.toLowerCase();
+      if (dispB.id && String(dispB.id).toLowerCase() === aLower) return true;
+      if (dispB.displayId !== undefined && String(dispB.displayId).toLowerCase() === aLower) return true;
+      if (dispB.displayId !== undefined && `display-${dispB.displayId}`.toLowerCase() === aLower) return true;
+      if (dispB.name && String(dispB.name).toLowerCase() === aLower) return true;
+      if (dispB.label && String(dispB.label).toLowerCase() === aLower) return true;
+      if (cleanA && dispB.name && cleanDisplayString(dispB.name) === cleanA) return true;
+      if (cleanA && dispB.label && cleanDisplayString(dispB.label) === cleanA) return true;
+      return false;
+    }
+  }
+
+  // Fallback: exact clean string match only
+  return cleanA === cleanB;
 }
 
 /**
  * Checks if a route group is configured to target a given physical display.
+ * Strictly enforces pipeline isolation: an output route will ONLY target the displays
+ * explicitly selected in its configuration.
  */
 export function routeTargetsDisplay(group: OutputGroup, displayId: string, cachedDisplays?: any[]): boolean {
   if (!group || !displayId) return false;
@@ -42,86 +133,22 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
     ? group.displayIds 
     : (group.targetDisplayId ? [group.targetDisplayId] : []);
 
-  const target = String(displayId).toLowerCase().trim();
-  const targetNorm = normalizeDisplayName(displayId);
-  const targetIsPrimary = isPrimaryDescriptor(displayId);
-
-  // Default fallback when output group has no explicit display IDs set yet:
+  // When output group has no explicit display IDs configured:
   if (list.length === 0) {
+    const target = String(displayId).toLowerCase().trim();
     const isTargetStage = target.includes('stage') || target.includes('confidence') || target.includes('foldback');
-    if (isTargetStage) {
-      return group.role === 'confidence' || group.id === 'group-stage';
+    if (group.role === 'confidence' || group.id === 'group-stage') {
+      return isTargetStage;
     }
-    const isTargetAlt = target.includes('alternate') || target.includes('foyer') || target.includes('stream') || target.includes('overflow') || target.includes('lobby');
-    if (isTargetAlt) {
-      return group.id === 'group-alternate' || group.role === 'lobby';
-    }
-    // Do not implicitly target all displays. A route must explicitly target a display, 
-    // otherwise it bleeds onto whatever display happens to be configured by other routes.
+    // Strict isolation: unconfigured routes do NOT target physical presentation displays
     return false;
   }
 
-  const displays = cachedDisplays || (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
+  const displays = cachedDisplays || 
+    (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
 
-  return list.some((id) => {
-    if (!id) return false;
-    const raw = String(id).toLowerCase().trim();
-    if (raw === target) return true;
-
-    // 1. Check physical cached displays (matches canonical ID, name, label, displayId)
-    if (displays && Array.isArray(displays) && displays.length > 0) {
-      const matchTarget = displays.find((d: any) => 
-        d.id === displayId || 
-        String(d.id).toLowerCase() === target ||
-        String(d.name).toLowerCase() === target ||
-        String(d.label).toLowerCase() === target ||
-        String(d.displayId) === target ||
-        `display-${d.displayId}` === target
-      );
-      const matchRaw = displays.find((d: any) => 
-        d.id === id || 
-        String(d.id).toLowerCase() === raw ||
-        String(d.name).toLowerCase() === raw ||
-        String(d.label).toLowerCase() === raw ||
-        String(d.displayId) === raw ||
-        `display-${d.displayId}` === raw
-      );
-      if (matchTarget && matchRaw && matchTarget.id === matchRaw.id) {
-        return true;
-      }
-      if (matchTarget && (
-        String(matchTarget.name).toLowerCase() === raw ||
-        String(matchTarget.label).toLowerCase() === raw ||
-        String(matchTarget.id).toLowerCase() === raw ||
-        normalizeDisplayName(matchTarget.name) === normalizeDisplayName(raw)
-      )) {
-        return true;
-      }
-      if (matchRaw && (
-        String(matchRaw.name).toLowerCase() === target ||
-        String(matchRaw.label).toLowerCase() === target ||
-        String(matchRaw.id).toLowerCase() === target ||
-        normalizeDisplayName(matchRaw.name) === normalizeDisplayName(target)
-      )) {
-        return true;
-      }
-    }
-    
-    // 2. Normalized comparison (strips punctuation, (Primary), resolutions)
-    const rawNorm = normalizeDisplayName(raw);
-    if (rawNorm && targetNorm) {
-      if (rawNorm === targetNorm) return true;
-      if (rawNorm.length >= 3 && targetNorm.length >= 3) {
-        if (rawNorm.includes(targetNorm) || targetNorm.includes(rawNorm)) return true;
-      }
-    }
-
-    // User requested strictly locking route to the selected display.
-    // Removed all fuzzy matching (Primary/Secondary guessing, substring digit matching)
-    // to prevent the system from sending displays to the wrong screens.
-
-    return false;
-  });
+  // Strictly check if target display matches any of the explicitly configured displays in this route's list
+  return list.some((id) => isSamePhysicalDisplay(id, displayId, displays));
 }
 
 /**
@@ -143,9 +170,14 @@ export function resolveDisplayAssignments(
   outputGroups: OutputGroup[],
   groupStates: Record<string, PresentationState | { isLiveEnabled?: boolean }>,
   activeControlGroupId: string | null | undefined,
-  allTargetDisplayIds?: string[]
+  allTargetDisplayIds?: string[],
+  cachedDisplays?: any[],
+  routeActivationStack?: string[]
 ): Map<string, DisplayAssignment> {
   const result = new Map<string, DisplayAssignment>();
+
+  const displays = cachedDisplays || 
+    (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
 
   // Collect all unique physical display IDs from output groups or provided display list
   const displayIdSet = new Set<string>();
@@ -153,8 +185,10 @@ export function resolveDisplayAssignments(
     allTargetDisplayIds.forEach((id) => displayIdSet.add(id));
   }
   outputGroups.forEach((g) => {
-    if (g.displayIds) {
+    if (g.displayIds && g.displayIds.length > 0) {
       g.displayIds.forEach((id) => displayIdSet.add(id));
+    } else if (g.targetDisplayId) {
+      displayIdSet.add(g.targetDisplayId);
     }
   });
 
@@ -162,23 +196,20 @@ export function resolveDisplayAssignments(
     if (!groupStates) return false;
     const st = (groupStates as any)[gid];
     if (!st) return false;
-    
-    // If explicitly live, consider the route active
-    if (st.isLiveEnabled) {
-      return true;
-    }
-    
-    return false;
+    return Boolean(st.isLiveEnabled);
   };
 
+  const stack = routeActivationStack || [];
+  const stackRankMap = new Map<string, number>();
+  stack.forEach((id, idx) => stackRankMap.set(id, idx));
+
   for (const displayId of displayIdSet) {
-    // 1. Find all configured route groups targeting this physical display
+    // 1. Strictly find all configured route groups targeting this physical display
     const groupsForDisplay = outputGroups.filter((g) => {
-      return routeTargetsDisplay(g, displayId);
+      return routeTargetsDisplay(g, displayId, displays);
     });
 
-    // Include all groups targeting this display (both explicitly assigned and global/overlay router output groups).
-    // This ensures secondary routers (R2, R3, R4...) are available to display and overlay on the projector!
+    // Strictly isolated candidate routes targeting THIS physical display
     const candidateGroupIds = groupsForDisplay.map((g) => g.id);
     const liveGroupIds = candidateGroupIds.filter((gid) => isRouteLive(gid));
 
@@ -189,35 +220,29 @@ export function resolveDisplayAssignments(
         assignedGroupId: null,
         liveGroupIds: [],
         candidateGroupIds: [],
+        stackedGroupIds: [],
       });
       continue;
     }
 
-    // 3. Resolve winning route for this physical display
-    // RULE: If multiple routes target this display, the ACTIVE route takes priority over others.
-    let winningGroupId: string | null = null;
-    if (activeControlGroupId && candidateGroupIds.includes(activeControlGroupId) && isRouteLive(activeControlGroupId)) {
-      winningGroupId = activeControlGroupId;
-    } else if (liveGroupIds.length > 0) {
-      winningGroupId = liveGroupIds[0];
-    } else {
-      winningGroupId = null;
-    }
+    // 3. Resolve overlay stacking order based on routeActivationStack
+    // Most recently activated live route is index 0 (UNA / topmost)
+    // The previous live route is index 1 (PANGALAWA / 2nd)
+    // The one before is index 2 (PANGATLO / 3rd)
+    const stackedGroupIds = [...liveGroupIds].sort((a, b) => {
+      const rankA = stackRankMap.has(a) ? stackRankMap.get(a)! : 999;
+      const rankB = stackRankMap.has(b) ? stackRankMap.get(b)! : 999;
+      return rankA - rankB;
+    });
 
-    // Ensure the winning group (active route) is the LAST element in liveGroupIds
-    // so it renders on top as the active overlay.
-    if (winningGroupId && liveGroupIds.includes(winningGroupId)) {
-      const filtered = liveGroupIds.filter(id => id !== winningGroupId);
-      filtered.push(winningGroupId);
-      liveGroupIds.length = 0;
-      liveGroupIds.push(...filtered);
-    }
+    const winningGroupId = stackedGroupIds[0] || null;
 
     result.set(displayId, {
       displayId,
       assignedGroupId: winningGroupId,
-      liveGroupIds: liveGroupIds,
+      liveGroupIds,
       candidateGroupIds,
+      stackedGroupIds,
     });
   }
 
@@ -232,13 +257,15 @@ export function resolveWinningRouteForDisplay(
   outputGroups: OutputGroup[],
   groupStates: Record<string, PresentationState>,
   activeControlGroupId: string | null | undefined,
-  fallbackGroupId?: string
+  fallbackGroupId?: string,
+  cachedDisplays?: any[]
 ): string | null {
   const assignments = resolveDisplayAssignments(
     outputGroups,
     groupStates,
     activeControlGroupId,
-    [displayId]
+    [displayId],
+    cachedDisplays
   );
   const assignment = assignments.get(displayId);
   if (assignment && assignment.assignedGroupId) {

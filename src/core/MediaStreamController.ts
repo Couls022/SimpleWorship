@@ -91,7 +91,15 @@ export class MediaStreamController {
         // This allows projectors to find the blob in their local IndexedDB even if only the URL was passed.
         try {
           const assetsList = useStore.getState().assetsList || [];
-          const matchedAsset = assetsList.find(a => a.url === fallbackUrl);
+          let matchedAsset = assetsList.find(a => a.url === fallbackUrl);
+          
+          if (!matchedAsset) {
+            // Fallback: check IndexedDB directly in case assetsList hasn't hydrated yet (Projector Window race condition)
+            const db = await getDB();
+            const allAssets = await db.getAll('assets');
+            matchedAsset = allAssets.find((a: any) => a.url === fallbackUrl);
+          }
+          
           if (matchedAsset && matchedAsset.id) {
             console.log('[MediaStreamController] Recovered asset ID from blob URL:', matchedAsset.id);
             return this.load(matchedAsset.id, fallbackUrl);

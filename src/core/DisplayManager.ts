@@ -203,13 +203,6 @@ export class DisplayManager {
     // 2. Web Standalone Mode
     if (typeof window !== 'undefined') {
       this.localStatuses[groupId] = 'CONNECTED';
-      
-      // Dispatch in-app activation event as fallback
-      window.dispatchEvent(
-        new CustomEvent('simpleworship:projector-activate', {
-          detail: { groupId, displayId: displayId || 'primary-display', status: 'CONNECTED' },
-        })
-      );
 
       // Attempt to open an actual popup window that can be dragged to a secondary monitor
       const popupUrl = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${groupId}${displayId ? `&displayId=${displayId}` : ''}`;
@@ -309,7 +302,8 @@ export class DisplayManager {
   static async syncPhysicalDisplays(
     outputGroups: OutputGroup[],
     groupStates: Record<string, PresentationState>,
-    activeControlGroupId: string | null | undefined
+    activeControlGroupId: string | null | undefined,
+    routeActivationStack?: string[]
   ): Promise<{ opened: string[]; updated: string[]; closed: string[]; conflicts: DisplayConflict[] }> {
     const displays = this.cachedDisplays.length > 0 ? this.cachedDisplays : await this.getDisplays();
     const conflicts = this.detectConflicts(outputGroups, displays);
@@ -345,7 +339,9 @@ export class DisplayManager {
       outputGroups,
       groupStates,
       activeControlGroupId,
-      Array.from(configuredTargetDisplayIds)
+      Array.from(configuredTargetDisplayIds),
+      displays,
+      routeActivationStack
     );
 
     const opened: string[] = [];

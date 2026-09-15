@@ -52,10 +52,17 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
 
   const handleToggleDisplay = (dispObj: any) => {
     const dispId = dispObj.id;
+    const dispLabel = dispObj.label || dispObj.name || '';
+    
     setSelectedDisplayIds(prev => {
-      if (prev.includes(dispId)) {
-        return prev.filter(id => id !== dispId);
+      // Check if this display is currently in the selection under either its ID or its label
+      const isCurrentlySelected = prev.some(id => id === dispId || (dispLabel && id === dispLabel));
+
+      if (isCurrentlySelected) {
+        // UNCHECK: Remove all references to this display (both ID and label)
+        return prev.filter(id => id !== dispId && id !== dispLabel);
       } else {
+        // CHECK: Add the canonical display ID to the selection
         return [...prev, dispId];
       }
     });
@@ -96,11 +103,6 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       customResolution: { width: targetW, height: targetH }
     });
 
-    // Ensure the route is OFF (not live) when newly locked to a monitor
-    // This enforces "target monitor lock only, no display yet" behavior
-    useStore.getState().setGroupState(groupId, { isLiveEnabled: false });
-    useStore.getState().setStagedGroupState(groupId, { isLiveEnabled: false });
-
     // 2. Sync legacy systemOptions if it maps to a standard legacy route
     updateSystemOptions((prev) => {
       const next = { ...prev };
@@ -118,8 +120,13 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
           }
         };
       } else if (groupId === 'group-stage') {
+        const hasDisplays = selectedDisplayIds.length > 0;
+        try {
+          localStorage.setItem('simpleworship_foldback_explicit_v1', hasDisplays ? 'true' : 'false');
+        } catch (e) {}
         next.foldback = {
           ...next.foldback,
+          enabled: hasDisplays,
           outputMonitor: primaryTarget || '',
         };
       } else if (groupId === 'group-alternate') {
@@ -163,6 +170,16 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-bold text-gray-300">Display Targets</label>
               <div className="flex items-center gap-2">
+                {selectedDisplayIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDisplayIds([])}
+                    className="text-[10px] bg-rose-950/60 hover:bg-rose-900 border border-rose-600/40 text-rose-300 hover:text-white px-2 py-0.5 rounded transition-all font-semibold cursor-pointer"
+                    title="Uncheck all display targets (Reset to unconfigured)"
+                  >
+                    Uncheck All
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={async () => {

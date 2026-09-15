@@ -145,14 +145,14 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const systemFontOverride = ThemeEngine.getSystemFontForContent(systemOptions, liveItem?.type);
 
-  const resolvedStyles = ThemeEngine.resolveStyles(
+  const resolvedStyles = React.useMemo(() => ThemeEngine.resolveStyles(
     globalTheme?.styles || ThemeEngine.getDefaultGlobalTheme(),
     groupTheme?.styles,
     typeTheme?.styles,
     systemFontOverride,
     itemTheme?.styles,
     elementOverride
-  );
+  ), [globalTheme, groupTheme, typeTheme, systemFontOverride, itemTheme, elementOverride]);
 
   const isLogoMode = Boolean(activeControlState?.showLogo);
   const logoTheme = themesList.find(t => t.type === 'logo' || t.id === 'theme-logo');
@@ -321,21 +321,17 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     }
   };
 
-  const handleSelectSlide = (idx: number) => {
+  const handleSelectSlide = React.useCallback((idx: number) => {
     useStore.getState().setActiveControlGroupId(groupId);
     if (activeControlState?.activeItemId === liveItem?.id) {
       useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: idx, pptxAction: null });
     } else if (liveItem) {
       useStore.getState().goLiveItem(liveItem.id, idx, groupId, liveItem, routerId);
     }
-  };
+  }, [groupId, activeControlState?.activeItemId, liveItem, routerId]);
 
   const handlePrevSlide = () => {
     if (slides.length === 0) return;
-    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
-      useStore.getState().setStagedGroupState(groupId, { pptxAction: 'prev', pptxActionTimestamp: Date.now() });
-      return;
-    }
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev, pptxAction: null });
@@ -343,10 +339,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handleNextSlide = () => {
     if (slides.length === 0) return;
-    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
-      useStore.getState().setStagedGroupState(groupId, { pptxAction: 'next', pptxActionTimestamp: Date.now() });
-      return;
-    }
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next, pptxAction: null });
@@ -637,7 +629,8 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                       mediaFormat={mediaFormat}
                       resolvedStyles={resolvedStyles}
                       systemOptions={systemOptions}
-                      activeControlState={activeControlState}
+                      isVideoPlaying={activeControlState?.activeSlideIndex === idx ? activeControlState?.isVideoPlaying : undefined}
+                      videoDuration={activeControlState?.activeSlideIndex === idx ? activeControlState?.videoDuration : undefined}
                       onSelect={handleSelectSlide}
                     />
                   ))}
@@ -674,7 +667,8 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                         mediaFormat={mediaFormat}
                         resolvedStyles={resolvedStyles}
                         systemOptions={systemOptions}
-                        activeControlState={activeControlState}
+                        isVideoPlaying={activeControlState?.activeSlideIndex === idx ? activeControlState?.isVideoPlaying : undefined}
+                        videoDuration={activeControlState?.activeSlideIndex === idx ? activeControlState?.videoDuration : undefined}
                         onSelect={handleSelectSlide}
                       />
                     ))}

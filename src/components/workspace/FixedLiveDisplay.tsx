@@ -50,21 +50,15 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
-  // Sync fullscreen state & listen for in-app projector events
+  // Sync fullscreen state
   React.useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
-    const handleProjectorActivate = () => {
-      handleToggleFullscreen();
-    };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    window.addEventListener('simpleworship:projector-activate', handleProjectorActivate);
-
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      window.removeEventListener('simpleworship:projector-activate', handleProjectorActivate);
     };
   }, []);
 

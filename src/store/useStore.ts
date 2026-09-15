@@ -97,9 +97,15 @@ const getStoredOptions = (): SystemOptions => {
     const saved = localStorage.getItem('simpleworship_system_options_v1');
     if (saved) {
       const parsed = JSON.parse(saved);
+      const isFoldbackExplicitlyActive = localStorage.getItem('simpleworship_foldback_explicit_v1') === 'true';
       return {
         ...defaultSystemOptions,
         ...parsed,
+        foldback: {
+          ...defaultSystemOptions.foldback,
+          ...(parsed.foldback || {}),
+          enabled: isFoldbackExplicitlyActive ? Boolean(parsed.foldback?.enabled) : false,
+        },
         slideLabels: Array.isArray(parsed.slideLabels) && parsed.slideLabels.length > 0
           ? parsed.slideLabels
           : defaultSystemOptions.slideLabels,
@@ -196,6 +202,8 @@ interface AppState {
   // Router Panels
   routerPanels: RouterPanelState[];
   activeRouterId: string | null;
+  routeActivationStack: string[];
+  bringRouteToTop: (groupId: string) => void;
   addRouterPanel: (panel: RouterPanelState) => void;
   removeRouterPanel: (id: string) => void;
   updateRouterPanel: (id: string, updates: Partial<RouterPanelState>) => void;
@@ -242,8 +250,8 @@ interface AppState {
   goLiveItem: (itemId: string, slideIndex?: number, targetGroupId?: string, directItem?: PresentationItem, routerId?: string) => void; // Directly sends item to live
 
   // LIVE Navigation & Controls
-  goLiveNext: () => void;
-  goLivePrev: () => void;
+  goLiveNext: (forceSlideLevel?: boolean) => void;
+  goLivePrev: (forceSlideLevel?: boolean) => void;
   goLiveSlide: (slideIndex: number, groupId?: string) => void;
   goNextScheduleItem: () => void;
   goPrevScheduleItem: () => void;
@@ -438,6 +446,7 @@ export const useStore = create<AppState>((set, get) => ({
   resetSystemOptions: () => {
     try {
       localStorage.removeItem('simpleworship_system_options_v1');
+      localStorage.removeItem('simpleworship_foldback_explicit_v1');
     } catch (e) {}
     set((state) => {
       const next = defaultSystemOptions;
@@ -653,6 +662,45 @@ export const useStore = create<AppState>((set, get) => ({
     }
   ],
   activeRouterId: 'router-1',
+
+  // Route Activation Stack (MRU order of active presentation groups)
+  // Index 0: Topmost / UNA (most recently active route)
+  // Index 1: Second / PANGALAWA (previously active route)
+  // Index 2+: Third / PANGATLO, etc.
+  routeActivationStack: (() => {
+    try {
+      const stored = localStorage.getItem('simpleworship_route_stack_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return ['group-congregation', 'group-r2', 'group-stage'];
+  })(),
+
+  bringRouteToTop: (groupId: string) => {
+    if (!groupId) return;
+    set((state) => {
+      const prev = state.routeActivationStack || [];
+      const next = [groupId, ...prev.filter(id => id !== groupId)];
+      try {
+        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(next));
+      } catch (e) {}
+      return { routeActivationStack: next };
+    });
+    const { routeActivationStack, outputGroups, groupStates, routerPanels, activeControlGroupId, activeRouterId } = get();
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        routeActivationStack,
+        outputGroups,
+        groupStates,
+        routerPanels,
+        activeControlGroupId,
+        activeRouterId
+      }
+    });
+  },
   addRouterPanel: (panel) => set((state) => {
     let targetGroupId = panel.targetOutputGroupId;
     let newGroups = [...state.outputGroups];
@@ -662,49 +710,63 @@ export const useStore = create<AppState>((set, get) => ({
     // Find which output groups are currently targeted by existing router panels
     const assignedGroupIds = new Set(state.routerPanels.map(p => p.targetOutputGroupId).filter(Boolean));
 
-    // If targetGroupId is not specified or already taken, find an unassigned group or create a new dedicated one
-    if (!targetGroupId || assignedGroupIds.has(targetGroupId)) {
-      const unassignedGroup = state.outputGroups.find(g => !assignedGroupIds.has(g.id));
-      if (unassignedGroup) {
-        targetGroupId = unassignedGroup.id;
-      } else {
-        const count = state.routerPanels.length + 1;
-        const createdGroupId = `group-output-${Date.now()}`;
-        const defaultDisplayIds = state.outputGroups[0]?.displayIds || [];
-        const newGroup: OutputGroup = {
-          id: createdGroupId,
-          name: `Router ${count} (Overlay R${count})`,
-          role: 'broadcast',
-          themeId: count % 2 === 0 ? 'theme-scripture' : 'theme-global',
-          displayIds: defaultDisplayIds.length > 0 ? [...defaultDisplayIds] : [],
-          isBlack: false,
-          isClear: false,
-          showLogo: false
-        };
-        newGroups.push(newGroup);
-
-        const isMasterLive = Boolean(
-          state.groupStates['group-congregation']?.isLiveEnabled || 
-          (state.activeControlGroupId && state.groupStates[state.activeControlGroupId]?.isLiveEnabled)
-        );
-
-        newGroupStates[createdGroupId] = {
-          ...defaultState,
-          activeItemId: null,
-          activeSlideIndex: 0,
-          isLiveEnabled: isMasterLive,
-          timestamp: Date.now()
-        };
-        newStagedStates[createdGroupId] = {
-          ...defaultState,
-          activeItemId: null,
-          activeSlideIndex: 0,
-          isLiveEnabled: isMasterLive,
-          timestamp: Date.now()
-        };
-        dbApi.saveOutputGroup(newGroup);
-        targetGroupId = createdGroupId;
+    // If targetGroupId is not specified, already taken, or points to stage display, create a new dedicated independent broadcast output group
+    if (!targetGroupId || assignedGroupIds.has(targetGroupId) || targetGroupId === 'group-stage') {
+      const count = state.routerPanels.length + 1;
+      let createdGroupId = `group-r${count}`;
+      let suffix = count;
+      while (newGroups.some(g => g.id === createdGroupId)) {
+        suffix++;
+        createdGroupId = `group-r${suffix}`;
       }
+
+      const defaultDisplayIds = state.outputGroups[0]?.displayIds || [];
+      const newGroup: OutputGroup = {
+        id: createdGroupId,
+        name: `Router ${count} (Overlay R${count})`,
+        role: 'broadcast',
+        themeId: count % 2 === 0 ? 'theme-scripture' : 'theme-global',
+        displayIds: defaultDisplayIds.length > 0 ? [...defaultDisplayIds] : [],
+        targetDisplayId: '',
+        isBlack: false,
+        isClear: false,
+        showLogo: false
+      };
+      newGroups.push(newGroup);
+
+      // Dedicated, completely independent presentation and stage states
+      newGroupStates[createdGroupId] = {
+        ...defaultState,
+        activeItemId: null,
+        activeSlideIndex: 0,
+        isLiveEnabled: false,
+        isBlack: false,
+        isClear: false,
+        showLogo: false,
+        timestamp: Date.now()
+      };
+      newStagedStates[createdGroupId] = {
+        ...defaultState,
+        activeItemId: null,
+        activeSlideIndex: 0,
+        isLiveEnabled: false,
+        isBlack: false,
+        isClear: false,
+        showLogo: false,
+        timestamp: Date.now()
+      };
+      dbApi.saveOutputGroup(newGroup).catch(e => console.warn('Failed to save dynamic output group:', e));
+      targetGroupId = createdGroupId;
+    }
+
+    if (targetGroupId && !newGroupStates[targetGroupId]) {
+      newGroupStates[targetGroupId] = {
+        ...defaultState,
+        activeItemId: null,
+        activeSlideIndex: 0,
+        isLiveEnabled: false,
+        timestamp: Date.now()
+      };
     }
 
     if (targetGroupId && !newStagedStates[targetGroupId]) {
@@ -719,14 +781,18 @@ export const useStore = create<AppState>((set, get) => ({
 
     const updatedPanel: RouterPanelState = {
       ...panel,
+      routerId: panel.routerId || `router-${Date.now()}`,
       targetOutputGroupId: targetGroupId,
+      active: true,
+      visible: true,
+      focused: true,
       previewItemId: panel.previewItemId ?? null,
       previewSlideIndex: panel.previewSlideIndex ?? 0
     };
 
     const panels = state.routerPanels.map(p => ({
       ...p,
-      active: p.routerId === updatedPanel.routerId
+      active: false
     }));
     panels.push(updatedPanel);
 
@@ -738,6 +804,7 @@ export const useStore = create<AppState>((set, get) => ({
         groupStates: newGroupStates,
         routerPanels: panels,
         activeControlGroupId: targetGroupId,
+        activeRouterId: updatedPanel.routerId,
       }
     });
 
@@ -748,27 +815,49 @@ export const useStore = create<AppState>((set, get) => ({
       routerPanels: panels,
       activeRouterId: updatedPanel.routerId,
       activeControlGroupId: targetGroupId,
-      previewItemId: updatedPanel.previewItemId ?? state.previewItemId,
-      previewSlideIndex: updatedPanel.previewSlideIndex ?? state.previewSlideIndex
+      previewItemId: updatedPanel.previewItemId ?? null,
+      previewSlideIndex: updatedPanel.previewSlideIndex ?? 0
     };
   }),
   removeRouterPanel: (id) => set((state) => {
+    const panelToRemove = state.routerPanels.find(p => p.routerId === id);
+    const targetGroupId = panelToRemove?.targetOutputGroupId;
+
     const panels = state.routerPanels.filter(p => p.routerId !== id);
     const newActiveId = state.activeRouterId === id ? (panels[0]?.routerId || null) : state.activeRouterId;
     const activePanel = panels.find(p => p.routerId === newActiveId);
     const newActiveTarget = activePanel?.targetOutputGroupId || null;
 
+    let newOutputGroups = state.outputGroups;
+    let newGroupStates = { ...state.groupStates };
+    let newStagedStates = { ...state.stagedGroupStates };
+
+    // If removing a dynamically created router group (not the default main congregation, r2, or stage)
+    if (targetGroupId && targetGroupId !== 'group-congregation' && targetGroupId !== 'group-r2' && targetGroupId !== 'group-stage') {
+      newOutputGroups = state.outputGroups.filter(g => g.id !== targetGroupId);
+      delete newGroupStates[targetGroupId];
+      delete newStagedStates[targetGroupId];
+      try {
+        dbApi.deleteOutputGroup(targetGroupId).catch(() => {});
+      } catch (e) {}
+    }
+
+    scheduleGroupStatesSave(newGroupStates);
     broadcastStateChange({
       type: 'SYNC_STATE',
       data: {
-        outputGroups: state.outputGroups,
-        groupStates: state.groupStates,
-        routerPanels: panels,
+        outputGroups: newOutputGroups,
+        groupStates: newGroupStates,
+        routerPanels: panels.map(p => ({ ...p, active: p.routerId === newActiveId })),
         activeControlGroupId: newActiveTarget,
+        activeRouterId: newActiveId,
       }
     });
 
     return {
+      outputGroups: newOutputGroups,
+      groupStates: newGroupStates,
+      stagedGroupStates: newStagedStates,
       routerPanels: panels.map(p => ({
         ...p,
         active: p.routerId === newActiveId
@@ -800,6 +889,7 @@ export const useStore = create<AppState>((set, get) => ({
     };
   }),
   setActiveRouterId: (id) => {
+    let nextStack = get().routeActivationStack || [];
     set((state) => {
       const panels = state.routerPanels.map(p => ({
         ...p,
@@ -808,21 +898,29 @@ export const useStore = create<AppState>((set, get) => ({
       }));
       const activePanel = panels.find(p => p.routerId === id);
       const newActiveTarget = activePanel?.targetOutputGroupId || null;
+      if (newActiveTarget) {
+        nextStack = [newActiveTarget, ...nextStack.filter(g => g !== newActiveTarget)];
+        try {
+          localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+        } catch (e) {}
+      }
       return {
         activeRouterId: id,
         routerPanels: panels,
+        routeActivationStack: nextStack,
         activeControlGroupId: newActiveTarget || state.activeControlGroupId,
         previewItemId: activePanel?.previewItemId ?? null,
         previewSlideIndex: activePanel?.previewSlideIndex ?? 0
       };
     });
-    const { outputGroups, groupStates, activeControlGroupId, routerPanels } = get();
+    const { outputGroups, groupStates, activeControlGroupId, routerPanels, routeActivationStack } = get();
     
-    // Broadcast active router and active control group to all projector windows
+    // Broadcast active router, stack, and active control group to all projector windows
     broadcastStateChange({
       type: 'SYNC_STATE',
       data: {
         activeRouterId: id,
+        routeActivationStack,
         activeControlGroupId,
         routerPanels,
         outputGroups,
@@ -1051,7 +1149,7 @@ export const useStore = create<AppState>((set, get) => ({
     
     // Explicitly ask display manager to close window
     DisplayManager.closeProjector(id).catch(() => {});
-    DisplayManager.syncPhysicalDisplays(newGroups, newStates, newActive).catch(() => {});
+    DisplayManager.syncPhysicalDisplays(newGroups, newStates, newActive, state.routeActivationStack).catch(() => {});
 
     return { outputGroups: newGroups, groupStates: newStates, activeControlGroupId: newActive };
   }),
@@ -1096,23 +1194,32 @@ export const useStore = create<AppState>((set, get) => ({
         [groupId]: combinedState
       };
 
+      let nextStack = state.routeActivationStack || [];
+      if (newState.isLiveEnabled === true) {
+        nextStack = [groupId, ...nextStack.filter(id => id !== groupId)];
+        try {
+          localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+        } catch (e) {}
+      }
+
       if (!isOnlyPlaybackTimeUpdate) {
         // Debounce blocking synchronous localStorage writes to keep UI thread fluid and zero-lag
         scheduleGroupStatesSave(updatedGroupStates);
 
         if (newState.isLiveEnabled !== undefined && newState.isLiveEnabled !== current.isLiveEnabled) {
-          DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId).catch(() => {});
+          DisplayManager.syncPhysicalDisplays(state.outputGroups, updatedGroupStates, state.activeControlGroupId, nextStack).catch(() => {});
         }
       }
       
       // Broadcast to other windows so projector syncs correctly
       broadcastStateChange({
         type: 'GROUP_STATES_UPDATE',
-        data: { groupStates: updatedGroupStates }
+        data: { groupStates: updatedGroupStates, routeActivationStack: nextStack }
       });
 
       return {
-        groupStates: updatedGroupStates
+        groupStates: updatedGroupStates,
+        routeActivationStack: nextStack
       };
     });
   },
@@ -1193,9 +1300,18 @@ export const useStore = create<AppState>((set, get) => ({
         scheduleGroupStatesSave(updatedGroupStates);
       }
 
+      if (updatedPublicGroup.isLiveEnabled === true) {
+        const prevStack = get().routeActivationStack || [];
+        const nextStack = [groupId, ...prevStack.filter(id => id !== groupId)];
+        try {
+          localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+        } catch (e) {}
+        set({ routeActivationStack: nextStack });
+      }
+
       broadcastStateChange({
         type: 'GROUP_STATES_UPDATE',
-        data: { groupStates: updatedGroupStates }
+        data: { groupStates: updatedGroupStates, routeActivationStack: get().routeActivationStack }
       });
 
       return {
@@ -1209,6 +1325,10 @@ export const useStore = create<AppState>((set, get) => ({
     const targetGroupIds = groupId === 'ALL' ? outputGroups.map(g => g.id) : [groupId];
     let committedName = '';
     const updatedStates = { ...groupStates };
+
+    if (groupId && groupId !== 'ALL') {
+      get().bringRouteToTop(groupId);
+    }
 
     targetGroupIds.forEach(id => {
       const staged = stagedGroupStates[id];
@@ -1245,7 +1365,14 @@ export const useStore = create<AppState>((set, get) => ({
       }
     });
 
-    set({ groupStates: updatedStates });
+    const currentStack = get().routeActivationStack || [];
+    const nextStack = activeControlGroupId 
+      ? [activeControlGroupId, ...currentStack.filter(id => id !== activeControlGroupId)] 
+      : currentStack;
+    try {
+      localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+    } catch (e) {}
+    set({ groupStates: updatedStates, routeActivationStack: nextStack });
 
     scheduleGroupStatesSave(updatedStates);
 
@@ -1254,8 +1381,8 @@ export const useStore = create<AppState>((set, get) => ({
       data: { groupStates: updatedStates }
     });
 
-    // Immediately sync physical projector output
-    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId).catch(() => {});
+    // Immediately sync physical projector output with activation stack
+    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId, nextStack).catch(() => {});
 
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', {
@@ -1266,23 +1393,32 @@ export const useStore = create<AppState>((set, get) => ({
 
   activeControlGroupId: 'group-congregation',
   setActiveControlGroupId: (id) => {
+    let nextStack = get().routeActivationStack || [];
+    if (id) {
+      nextStack = [id, ...nextStack.filter(g => g !== id)];
+      try {
+        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+      } catch (e) {}
+    }
     set((state) => {
-      if (!state.activeRouterId) return { activeControlGroupId: id };
+      if (!state.activeRouterId) return { activeControlGroupId: id, routeActivationStack: nextStack };
       const panels = state.routerPanels.map(p => 
         p.routerId === state.activeRouterId ? { ...p, targetOutputGroupId: id } : p
       );
       return { 
         routerPanels: panels,
+        routeActivationStack: nextStack,
         activeControlGroupId: id 
       };
     });
-    const { outputGroups, groupStates, routerPanels } = get();
+    const { outputGroups, groupStates, routerPanels, routeActivationStack } = get();
     
     // Broadcast active control change with current states so ProjectorView can mirror the active tab without dropping state
     broadcastStateChange({ 
       type: 'SYNC_STATE', 
       data: { 
         activeControlGroupId: id,
+        routeActivationStack,
         outputGroups,
         groupStates,
         routerPanels
@@ -1569,6 +1705,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (routerIdToUse !== activeRouterId || groupToUpdate !== activeControlGroupId) {
         set({ activeControlGroupId: groupToUpdate, activeRouterId: routerIdToUse });
       }
+      get().bringRouteToTop(groupToUpdate);
     } else if (outputGroups.length > 0) {
       outputGroups.forEach(g => {
         setStagedGroupState(g.id, {
@@ -1594,7 +1731,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   // LIVE Navigation & Controls
-  goLiveNext: () => {
+  goLiveNext: (forceSlideLevel?: boolean) => {
     const { activeControlGroupId, stagedGroupStates, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups, systemOptions } = get();
     const targetGroupId = activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
@@ -1614,7 +1751,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
-    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
+    if (!forceSlideLevel && liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation' || liveItem.type === 'pptx')) {
         get().setStagedGroupState(targetGroupId, { 
           pptxAction: 'next',
           pptxActionTimestamp: Date.now()
@@ -1632,7 +1769,8 @@ export const useStore = create<AppState>((set, get) => ({
     }
     get().setStagedGroupState(targetGroupId, { 
       activeItemId: currentItemId,
-      activeSlideIndex: nextIndex 
+      activeSlideIndex: nextIndex,
+      pptxAction: null
     });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
@@ -1641,7 +1779,7 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
   
-  goLivePrev: () => {
+  goLivePrev: (forceSlideLevel?: boolean) => {
     const { activeControlGroupId, stagedGroupStates, groupStates, activeSchedule, songsList, shortcutSettings, outputGroups, systemOptions } = get();
     const targetGroupId = activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
@@ -1661,7 +1799,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
     }
 
-    if (liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation')) {
+    if (!forceSlideLevel && liveItem && (liveItem.type === 'ppt' || liveItem.type === 'presentation' || liveItem.type === 'pptx')) {
         get().setStagedGroupState(targetGroupId, { 
           pptxAction: 'prev',
           pptxActionTimestamp: Date.now()
@@ -1679,7 +1817,8 @@ export const useStore = create<AppState>((set, get) => ({
     }
     get().setStagedGroupState(targetGroupId, { 
       activeItemId: currentItemId,
-      activeSlideIndex: prevIndex 
+      activeSlideIndex: prevIndex,
+      pptxAction: null
     });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
@@ -1691,7 +1830,7 @@ export const useStore = create<AppState>((set, get) => ({
   goLiveSlide: (slideIndex: number, groupId?: string) => {
     const { activeControlGroupId, outputGroups, setStagedGroupState } = get();
     const targetGroupId = groupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
-    setStagedGroupState(targetGroupId, { activeSlideIndex: Math.max(0, slideIndex) });
+    setStagedGroupState(targetGroupId, { activeSlideIndex: Math.max(0, slideIndex), pptxAction: null });
   },
 
   goNextScheduleItem: () => {
@@ -1899,7 +2038,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     // Synchronize physical projector windows immediately
-    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId).catch(err => {
+    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId, get().routeActivationStack).catch(err => {
       console.error('[useStore] DisplayManager.syncPhysicalDisplays error on toggleMasterLive:', err);
     });
 
@@ -2262,10 +2401,16 @@ export const useStore = create<AppState>((set, get) => ({
         const mappedBg = mapUrl(storedOptions.serviceIntervals.backgroundAssetId);
         (storedOptions.serviceIntervals as any).backgroundAssetUrl = mappedBg;
       }
+      const isFoldbackExplicitlyActive = typeof window !== 'undefined' && localStorage.getItem('simpleworship_foldback_explicit_v1') === 'true';
       set(state => ({
         systemOptions: {
           ...state.systemOptions,
           ...storedOptions,
+          foldback: {
+            ...state.systemOptions.foldback,
+            ...(storedOptions.foldback || {}),
+            enabled: isFoldbackExplicitlyActive ? Boolean(storedOptions.foldback?.enabled) : false,
+          },
         }
       }));
     }
@@ -2377,6 +2522,16 @@ export const useStore = create<AppState>((set, get) => ({
           dbApi.saveOutputGroup(dg).catch(() => {});
         }
       }
+    }
+    const isFoldbackActive = (typeof window !== 'undefined' && localStorage.getItem('simpleworship_foldback_explicit_v1') === 'true') && 
+      Boolean(get().systemOptions?.foldback?.enabled);
+    if (!isFoldbackActive) {
+      finalOutputGroups = finalOutputGroups.map(g => {
+        if (g.id === 'group-stage') {
+          return { ...g, displayIds: [], targetDisplayId: '' };
+        }
+        return g;
+      });
     }
     set({ outputGroups: finalOutputGroups });
 

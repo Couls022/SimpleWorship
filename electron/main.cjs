@@ -484,12 +484,22 @@ function getProjectorUrl(displayId, groupId) {
   return `app://localhost/?${queryParams}${hashParams}`;
 }
 
+function cleanDisplayString(str) {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .replace(/\s*\(primary\)\s*/gi, '')
+    .replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
 function resolveTargetDisplay(displayId, formattedDisplays) {
-  if (!displayId) return null;
+  if (!displayId || !Array.isArray(formattedDisplays)) return null;
   const idStr = String(displayId).trim();
   const idLower = idStr.toLowerCase();
 
-  // 1. Direct match on id, displayId, name, or label
+  // 1. Direct exact match on id, displayId, name, or label
   let match = formattedDisplays.find(fd =>
     fd.id === idStr ||
     String(fd.displayId) === idStr ||
@@ -498,20 +508,28 @@ function resolveTargetDisplay(displayId, formattedDisplays) {
   );
   if (match) return match;
 
-  // 2. Case-insensitive / partial match (excluding loose numeric substrings)
+  // 2. Exact case-insensitive match
   match = formattedDisplays.find(fd =>
     fd.id.toLowerCase() === idLower ||
     String(fd.displayId).toLowerCase() === idLower ||
-    fd.name.toLowerCase() === idLower ||
-    fd.label.toLowerCase() === idLower ||
-    fd.name.toLowerCase().includes(idLower) ||
-    fd.label.toLowerCase().includes(idLower)
+    (fd.name && fd.name.toLowerCase() === idLower) ||
+    (fd.label && fd.label.toLowerCase() === idLower)
   );
   if (match) return match;
 
-  // Removed fuzzy matching and positional fallbacks (index 0, index 1 guessing)
-  // to ensure strict 1:1 locking to the user's selected driver monitor.
-  
+  // 3. Clean alphanumeric match (removes punctuation, "(Primary)", "(1920x1080)")
+  const cleanTarget = cleanDisplayString(idStr);
+  if (cleanTarget) {
+    match = formattedDisplays.find(fd => {
+      const cleanName = cleanDisplayString(fd.name);
+      const cleanLabel = cleanDisplayString(fd.label);
+      const cleanId = cleanDisplayString(fd.id);
+      return cleanName === cleanTarget || cleanLabel === cleanTarget || cleanId === cleanTarget;
+    });
+    if (match) return match;
+  }
+
+  // Strict 1:1 locking - zero fuzzy or substring fallbacks
   return null;
 }
 
@@ -605,6 +623,7 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
     fullscreen: false,
     alwaysOnTop: false,
     skipTaskbar: true,
+    transparent: false,
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -771,6 +790,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
       fullscreen: false,
       alwaysOnTop: false,
       skipTaskbar: true,
+      transparent: false,
       backgroundColor: '#000000',
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),

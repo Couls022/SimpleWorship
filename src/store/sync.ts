@@ -216,6 +216,8 @@ export async function forceSyncNow(): Promise<{ success: boolean; latency: numbe
     data: {
       groupStates: store.groupStates,
       activeControlGroupId: store.activeControlGroupId,
+      activeRouterId: store.activeRouterId,
+      routeActivationStack: store.routeActivationStack,
       outputGroups: store.outputGroups,
       alert: store.alert,
       annotationState: store.annotationState,
@@ -436,6 +438,7 @@ export function initSync(isProjector: boolean = false) {
           ...(data.annotationState ? { annotationState: data.annotationState } : {}),
           ...(data.activeRouterId !== undefined ? { activeRouterId: data.activeRouterId } : {}),
           ...(data.activeControlGroupId !== undefined ? { activeControlGroupId: data.activeControlGroupId } : {}),
+          ...(data.routeActivationStack && Array.isArray(data.routeActivationStack) && data.routeActivationStack.length > 0 ? { routeActivationStack: data.routeActivationStack } : {}),
           ...(data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0 ? { outputGroups: data.outputGroups } : {}),
           ...(data.routerPanels && Array.isArray(data.routerPanels) && data.routerPanels.length > 0 ? { routerPanels: data.routerPanels } : {}),
           ...(data.activeSchedule ? { activeSchedule: data.activeSchedule } : {}),
@@ -450,10 +453,16 @@ export function initSync(isProjector: boolean = false) {
               ...currentGroupStates,
               ...data.groupStates
             },
+            ...(data.routeActivationStack && Array.isArray(data.routeActivationStack) && data.routeActivationStack.length > 0 ? { routeActivationStack: data.routeActivationStack } : {}),
             ...(data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0 ? { outputGroups: data.outputGroups } : {}),
             ...(data.routerPanels && Array.isArray(data.routerPanels) && data.routerPanels.length > 0 ? { routerPanels: data.routerPanels } : {}),
           });
         } else if (data.groupId && (data.isLiveEnabled !== undefined || data.activeItemId !== undefined)) {
+          const currentGroupStates = useStore.getState().groupStates || {};
+          let nextStack = useStore.getState().routeActivationStack || [];
+          if (data.isLiveEnabled === true) {
+            nextStack = [data.groupId, ...nextStack.filter(id => id !== data.groupId)];
+          }
           useStore.setState({
             groupStates: {
               ...currentGroupStates,
@@ -461,12 +470,15 @@ export function initSync(isProjector: boolean = false) {
                 ...(currentGroupStates[data.groupId] || {}),
                 ...data
               }
-            }
+            },
+            ...(data.isLiveEnabled === true ? { routeActivationStack: nextStack } : {})
           });
         }
       } else if (payload.type === 'GO_LIVE') {
         if (data.groupId && data.state) {
           const currentGroupStates = useStore.getState().groupStates || {};
+          const currentStack = useStore.getState().routeActivationStack || [];
+          const nextStack = [data.groupId, ...currentStack.filter(id => id !== data.groupId)];
           useStore.setState({
             groupStates: {
               ...currentGroupStates,
@@ -474,7 +486,8 @@ export function initSync(isProjector: boolean = false) {
                 ...(currentGroupStates[data.groupId] || {}),
                 ...data.state
               }
-            }
+            },
+            routeActivationStack: nextStack
           });
         }
       } else if (payload.type === 'SCHEDULE_UPDATE') {
@@ -548,6 +561,8 @@ export function initSync(isProjector: boolean = false) {
           data: {
             groupStates: store.groupStates,
             activeControlGroupId: store.activeControlGroupId,
+            activeRouterId: store.activeRouterId,
+            routerPanels: store.routerPanels,
             outputGroups: store.outputGroups,
             alert: store.alert,
             annotationState: store.annotationState,

@@ -148,7 +148,8 @@ export const sanitizeForSync = (val: any, depth = 0): any => {
       key === 'buffer' ||
       key === 'rawBytes' ||
       key === 'binaryData' ||
-      key === '_raw'
+      key === '_raw' ||
+      key === 'renderFrame'
     ) {
       continue;
     }

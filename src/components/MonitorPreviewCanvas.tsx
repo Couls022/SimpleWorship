@@ -29,6 +29,7 @@ interface MonitorPreviewCanvasProps {
   showResolutionTag?: boolean;
   className?: string;
   isProjectorMode?: boolean;
+  isOverlayLayer?: boolean;
 }
 
 const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
@@ -38,6 +39,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   showResolutionTag = false,
   className = '',
   isProjectorMode = false,
+  isOverlayLayer,
 }: MonitorPreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -69,6 +71,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const systemOptions = useStore(state => state.systemOptions);
 
   const handlePptxSlideChange = useCallback((index: number) => {
+    if (isProjectorMode) return;
     const currentState = useStore.getState().stagedGroupStates[groupId || 'group-congregation'];
     if (currentState?.activeSlideIndex !== index || currentState?.pptxAction !== null) {
       useStore.getState().setStagedGroupState(groupId || 'group-congregation', {
@@ -76,7 +79,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
         pptxAction: null,
       });
     }
-  }, [groupId]);
+  }, [groupId, isProjectorMode]);
 
   // If this group is a confidence / foldback stage monitor, render the specialized high-contrast Stage Display UI
   if (group?.role === 'confidence' || groupId === 'group-stage') {
@@ -341,7 +344,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     }
   }
 
-  const isOverlayGroup = Boolean(isProjectorMode && group?.id !== 'group-congregation' && group?.role !== 'primary');
+  const isOverlayGroup = isOverlayLayer !== undefined
+    ? Boolean(isProjectorMode && isOverlayLayer)
+    : Boolean(isProjectorMode && group?.id !== 'group-congregation' && group?.role !== 'primary');
 
   // If this group acts as an overlay on the projector (e.g. R2, R3, R4...), suppress default background images/colors
   // unless the item or slide explicitly specifies a custom background!
@@ -660,11 +665,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
             background: isGradient 
               ? gradientVal 
-              : (isOverlayGroup && !effectiveBackgroundUrl && !videoSrc)
-                ? 'transparent'
-                : (resolvedStyles.backgroundColor === '#000000' && isOverlayGroup)
-                  ? 'transparent' 
-                  : (resolvedStyles.backgroundColor || (isOverlayGroup ? 'transparent' : '#000000')),
+              : isProjectorMode
+                ? (resolvedStyles.backgroundColor && resolvedStyles.backgroundColor !== '#000000' ? resolvedStyles.backgroundColor : 'transparent')
+                : (resolvedStyles.backgroundColor || '#000000'),
           }}
         >
           {/* Live Display Canvas Content */}
@@ -707,7 +710,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                         setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                       }
                     }}
-                    className={(contentType === 'video' || isLogoMode) ? "w-full h-full object-contain relative z-10 bg-black" : "w-full h-full object-cover"}
+                    className={(contentType === 'video' || isLogoMode) ? "w-full h-full object-contain relative z-10" : "w-full h-full object-cover"}
                     style={{ 
                       transform: 'translate3d(0, 0, 0)',
                       willChange: 'transform',
@@ -737,8 +740,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     style={{ 
                       backgroundColor: isOverlayGroup
                         ? 'transparent'
-                        : (resolvedStyles.backgroundColor === '#000000' && group?.id !== 'group-congregation') 
-                          ? 'transparent' 
+                        : isProjectorMode
+                          ? (resolvedStyles.backgroundColor && resolvedStyles.backgroundColor !== '#000000' ? resolvedStyles.backgroundColor : 'transparent')
                           : (resolvedStyles.backgroundColor || '#000000') 
                     }} 
                   />
@@ -746,8 +749,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 </motion.div>
               </AnimatePresence>
 
-              {/* Tint Overlay - Omit for secondary router overlays without background */}
-              {contentType !== 'video' && (!isOverlayGroup || effectiveBackgroundUrl || videoSrc) && (
+              {/* Tint Overlay - Omit on projector mode when no explicit background media is present */}
+              {contentType !== 'video' && (!isProjectorMode || effectiveBackgroundUrl || videoSrc || isGradient) && (
                 <div 
                   className="absolute inset-0 pointer-events-none"
                   style={{
@@ -930,6 +933,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     pptxAction={presentationState.pptxAction}
                     pptxActionTimestamp={presentationState.pptxActionTimestamp}
                     onActiveSlideChange={handlePptxSlideChange}
+                    isProjectorMode={isProjectorMode}
                   />
               </motion.div>
             )}

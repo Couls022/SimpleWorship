@@ -1049,10 +1049,9 @@ export default function TopToolbar({
                   <button
                     onClick={() => {
                       const nextIndex = routerPanels.length + 1;
-                      const targetGroup = outputGroups[(nextIndex - 1) % outputGroups.length] || outputGroups[0];
                       useStore.getState().addRouterPanel({
                         routerId: `router-${Date.now()}`,
-                        targetOutputGroupId: targetGroup?.id || 'group-congregation',
+                        targetOutputGroupId: null,
                         active: true,
                         visible: true,
                         focused: true

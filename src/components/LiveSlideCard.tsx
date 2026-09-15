@@ -31,7 +31,8 @@ export interface LiveSlideCardProps {
   mediaFormat: string;
   resolvedStyles: ThemeStyles;
   systemOptions: any;
-  activeControlState?: any;
+  isVideoPlaying?: boolean;
+  videoDuration?: number;
   isPublicLive?: boolean;
   onSelect: (idx: number) => void;
 }
@@ -47,7 +48,8 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
   mediaFormat,
   resolvedStyles,
   systemOptions,
-  activeControlState,
+  isVideoPlaying,
+  videoDuration,
   isPublicLive,
   onSelect,
 }) => {
@@ -227,7 +229,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                   <span>VIDEO {mediaFormat ? `• ${mediaFormat}` : ''}</span>
                 </div>
                 <div className="absolute bottom-1.5 right-2 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono text-gray-300">
-                  {formatTime(activeControlState?.videoDuration || 0)}
+                  {formatTime(videoDuration || 0)}
                 </div>
               </div>
             ) : isAudio ? (
@@ -243,7 +245,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                       <div
                         key={bar}
                         className={`w-1.5 rounded-t-sm bg-gradient-to-t from-purple-600 to-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)] ${heights[bar - 1]} ${
-                          activeControlState?.isVideoPlaying !== false ? 'animate-pulse' : 'opacity-40'
+                          isVideoPlaying !== false ? 'animate-pulse' : 'opacity-40'
                         }`}
                         style={{ animationDuration: `${0.6 + (bar % 3) * 0.2}s` }}
                       />
@@ -260,12 +262,12 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
                     {mediaFormat || 'AUDIO'}
                   </span>
                   <span className={`text-[9px] font-mono font-semibold flex items-center gap-1 ${
-                    activeControlState?.isVideoPlaying !== false ? 'text-emerald-400' : 'text-amber-400'
+                    isVideoPlaying !== false ? 'text-emerald-400' : 'text-amber-400'
                   }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${
-                      activeControlState?.isVideoPlaying !== false ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                      isVideoPlaying !== false ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
                     }`} />
-                    {activeControlState?.isVideoPlaying !== false ? 'PLAYING' : 'PAUSED'}
+                    {isVideoPlaying !== false ? 'PLAYING' : 'PAUSED'}
                   </span>
                 </div>
               </div>

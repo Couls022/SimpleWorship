@@ -149,7 +149,6 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
           >
             <div className="h-full w-full overflow-hidden flex bg-[#111319]">
               <LivePanel 
-                key={`live-control-${effectiveTargetGroupId}`}
                 groupId={effectiveTargetGroupId} 
                 routerId={activeRouterId || undefined}
                 showPreviewDisplay={false} 

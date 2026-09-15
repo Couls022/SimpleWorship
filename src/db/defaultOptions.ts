@@ -30,7 +30,7 @@ export const defaultBaseFont: FontStyleOptions = {
 export const defaultSystemOptions: SystemOptions = {
   mainOutput: {
     general: {
-      outputMonitor: 'Monitor 1 (Secondary)',
+      outputMonitor: '',
       alphaChannel: 'Disabled',
       position: { left: 1920, top: 0, width: 1920, height: 1080 },
       margins: { left: 0, top: 0, right: 0, bottom: 0 },
@@ -126,7 +126,7 @@ export const defaultSystemOptions: SystemOptions = {
   },
   alternateOutput: {
     enabled: false,
-    outputMonitor: 'Monitor 2',
+    outputMonitor: '',
     position: { left: 0, top: 0, width: 1920, height: 1080 },
     margins: { left: 0, top: 0, right: 0, bottom: 0 },
     defaultFont: { ...defaultBaseFont, maxSize: 72 },
@@ -138,8 +138,8 @@ export const defaultSystemOptions: SystemOptions = {
     showCountdown: true,
   },
   foldback: {
-    enabled: true,
-    outputMonitor: 'Monitor 3 (Stage)',
+    enabled: false,
+    outputMonitor: '',
     position: { left: 0, top: 0, width: 1920, height: 1080 },
     margins: { left: 0, top: 0, right: 0, bottom: 0 },
     defaultFont: { ...defaultBaseFont, family: 'Segoe UI', color: '#E2E8F0' },
