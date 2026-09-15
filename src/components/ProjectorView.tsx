@@ -191,8 +191,10 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         }
       });
     } else if (routedGroupId) {
-      // Standalone preview with explicit groupId
-      candidateSet.add(routedGroupId);
+      // Standalone preview with explicit groupId ONLY if it actually exists in valid output groups
+      if (outputGroups.some(g => g.id === routedGroupId)) {
+        candidateSet.add(routedGroupId);
+      }
     } else {
       // Standalone web preview fallback when no displayId and no groupId is provided
       const defaultGroup = outputGroups.find(g => g.role !== 'confidence' && g.id !== 'group-stage') || outputGroups[0];
@@ -232,9 +234,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     };
   }, [routedGroupId, displayId, outputGroups, groupStates, activeControlGroupId, currentRouteGroupId, routerPanels, activeRouterId, screens, routeActivationStack]);
 
-  // Standby indicator when no live routes are active
-  const isStandby = liveGroupIds.length === 0;
-
   // Determine what state to pass to the canvas
   const winningState = winningGroupId ? (groupStates[winningGroupId] || stagedGroupStates[winningGroupId]) : undefined;
   const winningGroup = winningGroupId ? (outputGroups.find(g => g.id === winningGroupId) || outputGroups[0]) : undefined;
@@ -244,64 +243,23 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       data-canvas-preview="true"
       className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
     >
-      {/* Hardware-accelerated presentation surfaces: renders candidate canvases with GPU isolation and zero-flicker stability */}
-      {candidateGroupIds.map((groupId) => {
-        // Stack rank for this group among live groups targeting this monitor:
-        // rank 0 = UNA (Topmost layer)
-        // rank 1 = PANGALAWA (Second layer)
-        // rank 2 = PANGATLO (Third layer)
-        const stackRank = stackedLiveGroupIds.indexOf(groupId);
-        const isLive = stackRank !== -1;
-        
-        // If not live, this route is completely hidden and will never clash or overlay
-        if (!isLive) {
-          return (
-            <div 
-              key={groupId}
-              className="absolute inset-0 hidden pointer-events-none"
-              style={{ display: 'none', zIndex: 0 }}
-            />
-          );
-        }
-
-        // Layer calculation:
-        // Topmost (UNA) has highest z-index (e.g. 50)
-        // PANGALAWA has z-index 40
-        // PANGATLO has z-index 30
-        const zIndex = Math.max(10, 50 - stackRank * 10);
-
-        // A group is an overlay if there is another live group beneath it on this display
-        // Bottom-most live route in the stack serves as the base layer (isOverlayLayer: false)
-        const isBaseLayer = stackRank === (stackedLiveGroupIds.length - 1);
-        const isOverlayLayer = !isBaseLayer;
-
-        const state = groupStates[groupId] || stagedGroupStates[groupId];
-        const group = outputGroups.find(g => g.id === groupId) || outputGroups[0];
-        
-        return (
-          <div 
-            key={groupId}
-            className="absolute inset-0 pointer-events-auto" 
-            style={{ 
-              zIndex,
-              transform: 'translateZ(0)',
-              backfaceVisibility: 'hidden',
-            }}
-          >
-            <MonitorPreviewCanvas
-              groupId={groupId}
-              customGroup={group}
-              customState={state}
-              isProjectorMode={true}
-              isOverlayLayer={isOverlayLayer}
-              className="w-full h-full"
-            />
-          </div>
-        );
-      })}
-
-      {/* Standby black backdrop when no routes are live */}
-      {isStandby && (
+      {/* Physical Monitor Arbitration: Render ONLY the single winning active route's canvas for this physical display */}
+      {winningGroupId ? (
+        <div 
+          className="absolute inset-0 pointer-events-auto z-10" 
+          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+        >
+          <MonitorPreviewCanvas
+            groupId={winningGroupId}
+            customGroup={winningGroup}
+            customState={winningState}
+            isProjectorMode={true}
+            isOverlayLayer={false}
+            className="w-full h-full"
+          />
+        </div>
+      ) : (
+        /* Standby black backdrop when no routes are live */
         <div className="absolute inset-0 z-10 bg-black pointer-events-none" />
       )}
 

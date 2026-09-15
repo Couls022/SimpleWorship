@@ -156,11 +156,12 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
         
         <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
           <div>
-            <label className="block text-xs font-bold text-gray-300 mb-1">Route Name (Panel Name)</label>
+            <label className="block text-xs font-bold text-gray-300 mb-1">Route Name</label>
             <input 
               type="text" 
               value={name}
               onChange={e => setName(e.target.value)}
+              placeholder="e.g. Route 1, Scripture, Main Display..."
               className="w-full bg-[#141519] border border-[#323642] rounded px-3 py-2 text-sm text-gray-200"
             />
           </div>
@@ -319,7 +320,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
               Duplicate Route
             </button>
 
-            {outputGroups.length > 1 && (
+            {outputGroups.length > 2 && groupId !== 'group-congregation' && groupId !== 'group-r2' && groupId !== 'group-stage' && (
               <button 
                 onClick={() => {
                   useStore.getState().removeOutputGroup(groupId);

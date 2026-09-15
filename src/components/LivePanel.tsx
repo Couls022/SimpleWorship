@@ -25,7 +25,9 @@ import {
   VolumeX,
   Presentation,
   Clock,
-  Zap
+  Zap,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from './ResizeHandle';
@@ -86,6 +88,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const addOutputGroup = useStore(state => state.addOutputGroup);
   const removeOutputGroup = useStore(state => state.removeOutputGroup);
   const reorderOutputGroups = useStore(state => state.reorderOutputGroups);
+  const updateOutputGroup = useStore(state => state.updateOutputGroup);
+  const updateRouterPanel = useStore(state => state.updateRouterPanel);
+  const routerPanels = useStore(state => state.routerPanels);
   
   const activeRouterId = useStore(state => state.activeRouterId);
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
@@ -96,6 +101,33 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const activeGroup = outputGroups.find(g => g.id === groupId) || outputGroups[0];
   const groupIndex = outputGroups.findIndex(g => g.id === groupId);
+
+  const matchedRouter = routerPanels.find(p => p.routerId === routerId || p.targetOutputGroupId === groupId);
+  const routerIndex = routerPanels.findIndex(p => p.routerId === (matchedRouter?.routerId || routerId));
+  const fallbackRouteName = routerIndex !== -1 ? `Route ${routerIndex + 1}` : (groupIndex !== -1 ? `Route ${groupIndex + 1}` : 'Route');
+  const displayTitle = matchedRouter?.name || activeGroup?.name || fallbackRouteName;
+
+  const [isRenamingTitle, setIsRenamingTitle] = useState(false);
+  const [editingTitleText, setEditingTitleText] = useState('');
+
+  const saveTitleRename = () => {
+    const trimmed = editingTitleText.trim();
+    const finalTitle = trimmed || fallbackRouteName;
+    if (activeGroup) {
+      updateOutputGroup(activeGroup.id, { name: finalTitle });
+    }
+    if (matchedRouter) {
+      updateRouterPanel(matchedRouter.routerId, { name: finalTitle });
+    }
+    setIsRenamingTitle(false);
+    setEditingTitleText('');
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Renamed to ${finalTitle}` 
+      })
+    );
+  };
+
   const activeControlState = stagedGroupState;
   const isTargetedGroup = activeRouterId === routerId || (!routerId && activeControlGroupId === groupId);
   const isActiveControlGroup = activeControlGroupId === groupId;
@@ -107,13 +139,15 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     const targetRouter = routerId || useStore.getState().activeRouterId || 'router-1';
     useStore.getState().setActiveRouterId(targetRouter);
     useStore.getState().setActiveControlGroupId(groupId);
+    useStore.getState().bringRouteToTop(groupId);
   };
 
   const handleAddPanel = () => {
+    const nextNum = outputGroups.length + 1;
     const newGroup = {
       id: `group-${Date.now()}`,
-      name: `Display ${outputGroups.length + 1}`,
-      role: 'confidence' as const,
+      name: `Route ${nextNum}`,
+      role: 'broadcast' as const,
       displayIds: []
     };
     addOutputGroup(newGroup);
@@ -446,9 +480,57 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           </div>
 
           <div className="flex items-center gap-1.5 min-w-0 shrink overflow-hidden">
-            <span className="text-[11px] font-bold text-sky-400 tracking-wider uppercase truncate max-w-[100px] min-[420px]:max-w-[140px] sm:max-w-[180px]" title={activeGroup?.name || 'Output'}>
-              {activeGroup?.name || 'Output'}
-            </span>
+            {isRenamingTitle ? (
+              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                <input
+                  type="text"
+                  value={editingTitleText}
+                  onChange={e => setEditingTitleText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveTitleRename();
+                    if (e.key === 'Escape') setIsRenamingTitle(false);
+                  }}
+                  onBlur={saveTitleRename}
+                  autoFocus
+                  className="bg-[#0f1118] border border-sky-500 rounded px-1.5 py-0 text-[11px] text-white font-bold w-[110px] outline-none"
+                />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    saveTitleRename();
+                  }}
+                  className="p-0.5 rounded hover:bg-emerald-800 text-emerald-300 cursor-pointer"
+                  title="Save name"
+                >
+                  <Check size={11} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 min-w-0">
+                <span 
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTitleText(displayTitle);
+                    setIsRenamingTitle(true);
+                  }}
+                  className="text-[11px] font-bold text-sky-400 tracking-wider uppercase truncate max-w-[100px] min-[420px]:max-w-[140px] sm:max-w-[180px] cursor-pointer" 
+                  title={`${displayTitle} (Double-click to rename)`}
+                >
+                  {displayTitle}
+                </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTitleText(displayTitle);
+                    setIsRenamingTitle(true);
+                  }}
+                  className="opacity-40 hover:opacity-100 p-0.5 rounded hover:bg-sky-950 text-sky-300 transition-opacity cursor-pointer"
+                  title="Rename Route"
+                >
+                  <Pencil size={10} />
+                </button>
+              </div>
+            )}
             {liveItem?.name && (
               <>
                 <span className="text-gray-500 shrink-0 hidden min-[520px]:inline">•</span>
@@ -461,10 +543,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         </div>
 
         <div 
-          className="flex items-center space-x-1" 
+          className="flex items-center gap-1.5 shrink-0" 
           onClick={(e) => e.stopPropagation()} 
           onMouseDown={(e) => e.stopPropagation()}
         >
+          {/* View Options Menu */}
           <div className="relative">
             <button
               onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
@@ -510,8 +593,11 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
             )}
           </div>
 
-          {/* Remove Panel */}
-          {outputGroups.length > 1 && (
+          {/* Remove Panel - only for user-created dynamic routes */}
+          {outputGroups.length > 2 && activeGroup && 
+           activeGroup.id !== 'group-congregation' && 
+           activeGroup.id !== 'group-r2' && 
+           activeGroup.id !== 'group-stage' && (
             <button
               onClick={handleRemovePanel}
               className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-rose-400 transition-colors cursor-pointer"
@@ -529,8 +615,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           >
             <Settings size={13} />
           </button>
-
-
         </div>
       </div>
 
@@ -684,21 +768,6 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
               <div className="h-full bg-[#111216] border-t border-[#262832] p-2 flex flex-col overflow-hidden relative">
                 {/* Header Bar for Live Monitor Output */}
                 <div className="text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5 px-2 py-1 bg-[#181920] rounded border border-[#252834] flex items-center justify-between shrink-0 shadow-xs">
-  
-  <div className="flex items-center">
-    <button
-      onClick={(e) => { e.stopPropagation(); useStore.getState().toggleMasterLive(groupId); }}
-      className={`px-3 py-1 rounded text-[10px] font-black tracking-widest transition-all ${
-        activeControlState?.isLiveEnabled
-          ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'
-          : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
-      }`}
-    >
-      {activeControlState?.isLiveEnabled ? 'LIVE ON • PROJECTOR' : 'LIVE OFF (STANDBY)'}
-    </button>
-  </div>
-  
-
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${
                       activeControlState?.isBlack || activeControlState?.isClear 

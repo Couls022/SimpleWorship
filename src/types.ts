@@ -580,6 +580,7 @@ export interface OutputGroup {
 
 export interface RouterPanelState {
   routerId: string;
+  name?: string;
   targetOutputGroupId: string | null;
   active: boolean;
   visible: boolean;

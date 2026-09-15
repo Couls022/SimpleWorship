@@ -644,6 +644,7 @@ export const useStore = create<AppState>((set, get) => ({
   routerPanels: [
     {
       routerId: 'router-1',
+      name: 'Route 1',
       targetOutputGroupId: 'group-congregation',
       active: true,
       visible: true,
@@ -653,6 +654,7 @@ export const useStore = create<AppState>((set, get) => ({
     },
     {
       routerId: 'router-2',
+      name: 'Route 2',
       targetOutputGroupId: 'group-r2',
       active: false,
       visible: true,
@@ -721,9 +723,10 @@ export const useStore = create<AppState>((set, get) => ({
       }
 
       const defaultDisplayIds = state.outputGroups[0]?.displayIds || [];
+      const cleanRouteName = panel.name || `Route ${count}`;
       const newGroup: OutputGroup = {
         id: createdGroupId,
-        name: `Router ${count} (Overlay R${count})`,
+        name: cleanRouteName,
         role: 'broadcast',
         themeId: count % 2 === 0 ? 'theme-scripture' : 'theme-global',
         displayIds: defaultDisplayIds.length > 0 ? [...defaultDisplayIds] : [],
@@ -779,9 +782,13 @@ export const useStore = create<AppState>((set, get) => ({
       };
     }
 
+    const targetGroup = newGroups.find(g => g.id === targetGroupId);
+    const resolvedName = panel.name || targetGroup?.name || `Route ${state.routerPanels.length + 1}`;
+
     const updatedPanel: RouterPanelState = {
       ...panel,
       routerId: panel.routerId || `router-${Date.now()}`,
+      name: resolvedName,
       targetOutputGroupId: targetGroupId,
       active: true,
       visible: true,
@@ -821,7 +828,17 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   removeRouterPanel: (id) => set((state) => {
     const panelToRemove = state.routerPanels.find(p => p.routerId === id);
-    const targetGroupId = panelToRemove?.targetOutputGroupId;
+    if (!panelToRemove) return state;
+
+    const targetGroupId = panelToRemove.targetOutputGroupId;
+
+    // Protection: Built-in permanent routes (R1 and R2) can NEVER be removed
+    const isProtected = id === 'router-1' || id === 'router-2' || 
+      targetGroupId === 'group-congregation' || targetGroupId === 'group-r2';
+    if (isProtected) {
+      console.warn(`[useStore] Refusing to remove permanent built-in router panel: ${id}`);
+      return state;
+    }
 
     const panels = state.routerPanels.filter(p => p.routerId !== id);
     const newActiveId = state.activeRouterId === id ? (panels[0]?.routerId || null) : state.activeRouterId;
@@ -833,16 +850,46 @@ export const useStore = create<AppState>((set, get) => ({
     let newStagedStates = { ...state.stagedGroupStates };
 
     // If removing a dynamically created router group (not the default main congregation, r2, or stage)
-    if (targetGroupId && targetGroupId !== 'group-congregation' && targetGroupId !== 'group-r2' && targetGroupId !== 'group-stage') {
+    if (targetGroupId && targetGroupId !== 'group-congregation' && targetGroupId !== 'group-r2' && targetGroupId !== 'group-stage' && targetGroupId !== 'group-alternate') {
       newOutputGroups = state.outputGroups.filter(g => g.id !== targetGroupId);
       delete newGroupStates[targetGroupId];
       delete newStagedStates[targetGroupId];
       try {
         dbApi.deleteOutputGroup(targetGroupId).catch(() => {});
       } catch (e) {}
+    } else if (targetGroupId && newGroupStates[targetGroupId]) {
+      // Disengage live state for this group immediately so target monitor stops presenting
+      newGroupStates[targetGroupId] = {
+        ...newGroupStates[targetGroupId],
+        isLiveEnabled: false,
+        activeItemId: null,
+        renderFrame: undefined,
+        timestamp: Date.now()
+      };
+      if (newStagedStates[targetGroupId]) {
+        newStagedStates[targetGroupId] = {
+          ...newStagedStates[targetGroupId],
+          isLiveEnabled: false
+        };
+      }
     }
 
+    // Clean up routeActivationStack to remove the deleted route group
+    const nextStack = (state.routeActivationStack || []).filter(gid => gid !== targetGroupId);
+
     scheduleGroupStatesSave(newGroupStates);
+    try {
+      localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+    } catch (e) {}
+
+    // Immediately synchronize physical displays to close or re-route displays without leaving ghost routes
+    DisplayManager.syncPhysicalDisplays(
+      newOutputGroups,
+      newGroupStates,
+      newActiveTarget,
+      nextStack
+    ).catch(() => {});
+
     broadcastStateChange({
       type: 'SYNC_STATE',
       data: {
@@ -851,6 +898,7 @@ export const useStore = create<AppState>((set, get) => ({
         routerPanels: panels.map(p => ({ ...p, active: p.routerId === newActiveId })),
         activeControlGroupId: newActiveTarget,
         activeRouterId: newActiveId,
+        routeActivationStack: nextStack,
       }
     });
 
@@ -864,12 +912,25 @@ export const useStore = create<AppState>((set, get) => ({
       })),
       activeRouterId: newActiveId,
       activeControlGroupId: newActiveTarget,
+      routeActivationStack: nextStack,
       previewItemId: activePanel?.previewItemId ?? null,
       previewSlideIndex: activePanel?.previewSlideIndex ?? 0
     };
   }),
   updateRouterPanel: (id, updates) => set((state) => {
     const panels = state.routerPanels.map(p => p.routerId === id ? { ...p, ...updates } : p);
+    const targetPanel = state.routerPanels.find(p => p.routerId === id);
+    const targetGroupId = updates.targetOutputGroupId !== undefined ? updates.targetOutputGroupId : targetPanel?.targetOutputGroupId;
+
+    let updatedGroups = state.outputGroups;
+    if (updates.name && targetGroupId) {
+      updatedGroups = state.outputGroups.map(g => g.id === targetGroupId ? { ...g, name: updates.name! } : g);
+      const targetGroup = updatedGroups.find(g => g.id === targetGroupId);
+      if (targetGroup) {
+        dbApi.saveOutputGroup(targetGroup).catch(() => {});
+      }
+    }
+
     const activePanel = panels.find(p => p.routerId === state.activeRouterId);
     const activeTarget = activePanel?.targetOutputGroupId || null;
 
@@ -877,12 +938,14 @@ export const useStore = create<AppState>((set, get) => ({
       type: 'SYNC_STATE',
       data: {
         routerPanels: panels,
+        outputGroups: updatedGroups,
         activeControlGroupId: activeTarget,
       }
     });
 
     return { 
       routerPanels: panels,
+      outputGroups: updatedGroups,
       activeControlGroupId: activeTarget,
       previewItemId: activePanel?.previewItemId ?? state.previewItemId,
       previewSlideIndex: activePanel?.previewSlideIndex ?? state.previewSlideIndex
@@ -1027,14 +1090,30 @@ export const useStore = create<AppState>((set, get) => ({
       newGroups[groupIndex] = updatedGroup;
       dbApi.saveOutputGroup(updatedGroup);
 
+      let updatedPanels = state.routerPanels;
+      if (updates.name) {
+        updatedPanels = state.routerPanels.map(p => p.targetOutputGroupId === id ? { ...p, name: updates.name! } : p);
+      }
+
       broadcastStateChange({
         type: 'SYNC_STATE',
         data: {
-          outputGroups: newGroups
+          outputGroups: newGroups,
+          routerPanels: updatedPanels
         }
       });
 
-      return { outputGroups: newGroups };
+      // Synchronize physical displays if target assignments changed
+      if (updates.targetDisplayId !== undefined || updates.displayIds !== undefined) {
+        DisplayManager.syncPhysicalDisplays(
+          newGroups,
+          state.groupStates,
+          state.activeControlGroupId,
+          state.routeActivationStack
+        ).catch(() => {});
+      }
+
+      return { outputGroups: newGroups, routerPanels: updatedPanels };
     });
   },
   setGroupTargetDisplay: (groupId, targetDisplayId) => {
@@ -1056,6 +1135,13 @@ export const useStore = create<AppState>((set, get) => ({
           outputGroups: newGroups
         }
       });
+
+      DisplayManager.syncPhysicalDisplays(
+        newGroups,
+        state.groupStates,
+        state.activeControlGroupId,
+        state.routeActivationStack
+      ).catch(() => {});
 
       window.dispatchEvent(
         new CustomEvent('simpleworship:notify', { 
@@ -1139,6 +1225,12 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
   removeOutputGroup: (id) => set((state) => {
+    // Permanent default groups (R1, R2, Stage) cannot be deleted
+    if (id === 'group-congregation' || id === 'group-r2' || id === 'group-stage') {
+      console.warn(`[useStore] Refusing to remove permanent built-in output group: ${id}`);
+      return state;
+    }
+
     const newGroups = state.outputGroups.filter(g => g.id !== id);
     const newStates = { ...state.groupStates };
     delete newStates[id];
@@ -1936,6 +2028,14 @@ export const useStore = create<AppState>((set, get) => ({
       ? [groupId] 
       : outputGroups.filter(g => g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2').map(g => g.id);
 
+    let nextStack = get().routeActivationStack || [];
+    if (groupId && nextLive) {
+      nextStack = [groupId, ...nextStack.filter(id => id !== groupId)];
+      try {
+        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+      } catch (e) {}
+    }
+
     targetGroupIds.forEach(targetGroupId => {
       const currentState = groupStates[targetGroupId] || defaultState;
       const targetGroup = outputGroups.find(g => g.id === targetGroupId);
@@ -2028,25 +2128,37 @@ export const useStore = create<AppState>((set, get) => ({
       }
     });
 
-    set({ groupStates: updatedStates, stagedGroupStates: updatedStaged });
+    set({ 
+      groupStates: updatedStates, 
+      stagedGroupStates: updatedStaged,
+      routeActivationStack: nextStack
+    });
 
     scheduleGroupStatesSave(updatedStates);
 
     broadcastStateChange({
-      type: 'GROUP_STATES_UPDATE',
-      data: { groupStates: updatedStates }
+      type: 'SYNC_STATE',
+      data: { 
+        groupStates: updatedStates,
+        routeActivationStack: nextStack,
+        outputGroups,
+        activeControlGroupId
+      }
     });
 
     // Synchronize physical projector windows immediately
-    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId, get().routeActivationStack).catch(err => {
+    DisplayManager.syncPhysicalDisplays(outputGroups, updatedStates, activeControlGroupId, nextStack).catch(err => {
       console.error('[useStore] DisplayManager.syncPhysicalDisplays error on toggleMasterLive:', err);
     });
+
+    const targetGroup = groupId ? outputGroups.find(g => g.id === groupId) : null;
+    const routeLabel = targetGroup?.name || 'Presentation Route';
 
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextLive 
-          ? 'LIVE ON: Projector is now actively mirroring the Live Display Canvas' 
-          : 'LIVE OFF: Projector is in Standby/Black. Canvas is open for staging.' 
+          ? `${routeLabel}: LIVE ON (Mirroring to locked monitor)` 
+          : `${routeLabel}: LIVE OFF (Standby Mode)` 
       })
     );
   },
@@ -2509,13 +2621,13 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ scripturesList: mergedScriptures.length > 0 ? mergedScriptures : defaultScriptures });
 
-    // Load or initialize output groups efficiently without deleting DB records
+    // 1. Output Groups: preserve all persistent output groups from IndexedDB (or fallback to defaults)
     let finalOutputGroups = [...outputGroups];
     if (!finalOutputGroups || finalOutputGroups.length === 0) {
       finalOutputGroups = [...defaultOutputGroups];
       await Promise.all(defaultOutputGroups.map(g => dbApi.saveOutputGroup(g)));
     } else {
-      // Ensure default groups like group-r2 exist
+      // Ensure standard default groups like group-congregation and group-r2 exist
       for (const dg of defaultOutputGroups) {
         if (!finalOutputGroups.some(g => g.id === dg.id)) {
           finalOutputGroups.push(dg);
@@ -2533,49 +2645,149 @@ export const useStore = create<AppState>((set, get) => ({
         return g;
       });
     }
+
+    // Sanitize any legacy verbose default names from DB (e.g. "Main Presentation Display (R1)", "(Overlay R2)")
+    finalOutputGroups = finalOutputGroups.map(g => {
+      let cleanName = g.name;
+      if (cleanName === 'Main Presentation Display (R1)' || cleanName.startsWith('Main Presentation Display')) {
+        cleanName = 'Route 1';
+      } else if (cleanName === 'Router 2 (Scripture / Overlay R2)' || cleanName.includes('Overlay R2')) {
+        cleanName = 'Route 2';
+      } else if (cleanName.includes('(Overlay R')) {
+        const match = cleanName.match(/R(\d+)/i) || cleanName.match(/(\d+)/);
+        cleanName = match ? `Route ${match[1]}` : 'Route';
+      }
+      return { ...g, name: cleanName };
+    });
+
     set({ outputGroups: finalOutputGroups });
 
-    // Initialize or rehydrate group states
-    let initialStates: Record<string, any> = {};
+    const isProjectorEnv = typeof window !== 'undefined' && (
+      window.location.hash.includes('projector') || 
+      window.location.hash.includes('stage') || 
+      window.location.hash.includes('remote') ||
+      window.location.search.includes('projector=true') ||
+      window.location.search.includes('remote=true')
+    );
+
+    if (isProjectorEnv) {
+      // The projector/remote only needs to load core DB data (assets, songs, themes).
+      // It MUST NOT reset the global route state or command Electron to close physical displays.
+      return;
+    }
+
+    // 2. Build Route Panels from all non-stage broadcast output groups (Route 1, Route 2, Route 3, etc.)
+    // Ensure deterministic ordering: group-congregation (R1) first, group-r2 (R2) second, followed by others
+    const orderedBroadcastGroups = [
+      ...finalOutputGroups.filter(g => g.id === 'group-congregation'),
+      ...finalOutputGroups.filter(g => g.id === 'group-r2'),
+      ...finalOutputGroups.filter(g => g.id !== 'group-congregation' && g.id !== 'group-r2' && g.role !== 'confidence' && g.id !== 'group-stage')
+    ];
+
+    const cleanRouterPanels: RouterPanelState[] = orderedBroadcastGroups.map((g, idx) => ({
+      routerId: `router-${idx + 1}`,
+      name: g.name || `Route ${idx + 1}`,
+      targetOutputGroupId: g.id,
+      active: idx === 0,
+      visible: true,
+      focused: idx === 0,
+      previewItemId: null,
+      previewSlideIndex: 0
+    }));
+
+    if (cleanRouterPanels.length === 0) {
+      cleanRouterPanels.push({
+        routerId: 'router-1',
+        name: 'Route 1',
+        targetOutputGroupId: 'group-congregation',
+        active: true,
+        visible: true,
+        focused: true,
+        previewItemId: null,
+        previewSlideIndex: 0
+      });
+    }
+
+    // Ensure built-in R1/R2 specifically have exact static IDs
+    const r1Panel = cleanRouterPanels.find(p => p.targetOutputGroupId === 'group-congregation');
+    if (r1Panel) r1Panel.routerId = 'router-1';
+    
+    const r2Panel = cleanRouterPanels.find(p => p.targetOutputGroupId === 'group-r2');
+    if (r2Panel) r2Panel.routerId = 'router-2';
+
+    // 3. Auto-Reset ALL Group Presentation States (Zero Live, Zero Ghost Slides, Standby Mode)
+    // Every application startup starts strictly with isLiveEnabled: false, activeItemId: null,
+    // and pristine standby state so no previous presentation or deleted route ever leaks to monitors.
+    const cleanGroupStates: Record<string, PresentationState> = {};
+    const cleanStagedStates: Record<string, PresentationState> = {};
+
+    finalOutputGroups.forEach(g => {
+      cleanGroupStates[g.id] = {
+        ...defaultState,
+        isLiveEnabled: false,
+        activeItemId: null,
+        activeSlideIndex: 0,
+        nextSlideIndex: 1,
+        isBlack: false,
+        isClear: false,
+        showLogo: false,
+        renderFrame: undefined,
+        timestamp: Date.now()
+      };
+      cleanStagedStates[g.id] = {
+        ...defaultState,
+        isLiveEnabled: false,
+        activeItemId: null,
+        activeSlideIndex: 0,
+        nextSlideIndex: 1,
+        isBlack: false,
+        isClear: false,
+        showLogo: false,
+        renderFrame: undefined,
+        timestamp: Date.now()
+      };
+    });
+
+    const cleanRouteStack = finalOutputGroups.map(g => g.id);
+
+    // Overwrite localStorage with pristine clean states
     try {
-      const stored = localStorage.getItem('simpleworship_group_states_v1');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object') {
-          initialStates = parsed;
-        }
-      }
+      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(cleanGroupStates));
+      localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(cleanRouteStack));
+      localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(finalOutputGroups.map(g => g.id)));
     } catch (e) {}
-
-    finalOutputGroups.forEach(g => {
-      if (!initialStates[g.id]) {
-        initialStates[g.id] = { ...defaultState, isLiveEnabled: false, timestamp: Date.now() };
-      }
-    });
-
-    const initialStaged: Record<string, any> = {};
-    finalOutputGroups.forEach(g => {
-      initialStaged[g.id] = { ...(initialStates[g.id] || defaultState) };
-    });
-
-    // Ensure router-2 routes to group-r2 if currently set to group-stage
-    const currentPanels = get().routerPanels.map(p => {
-      if (p.routerId === 'router-2' && p.targetOutputGroupId === 'group-stage') {
-        return { ...p, targetOutputGroupId: 'group-r2' };
-      }
-      return p;
-    });
 
     set({ 
-      groupStates: initialStates,
-      stagedGroupStates: initialStaged,
-      routerPanels: currentPanels,
-      activeControlGroupId: finalOutputGroups[0]?.id || 'group-congregation' 
+      groupStates: cleanGroupStates,
+      stagedGroupStates: cleanStagedStates,
+      routerPanels: cleanRouterPanels,
+      activeRouterId: 'router-1',
+      activeControlGroupId: 'group-congregation',
+      routeActivationStack: cleanRouteStack,
+      previewItemId: null,
+      previewSlideIndex: 0
     });
 
-    try {
-      localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(defaultOutputGroups.map(g => g.id)));
-    } catch (e) {}
+    // 4. Immediately synchronize physical displays with clean standby state
+    // Guarantees all connected displays start in black/standby without ghost routes
+    DisplayManager.syncPhysicalDisplays(
+      finalOutputGroups,
+      cleanGroupStates,
+      'group-congregation',
+      cleanRouteStack
+    ).catch(() => {});
+
+    broadcastStateChange({
+      type: 'SYNC_STATE',
+      data: {
+        outputGroups: finalOutputGroups,
+        groupStates: cleanGroupStates,
+        routerPanels: cleanRouterPanels,
+        activeControlGroupId: 'group-congregation',
+        activeRouterId: 'router-1',
+        routeActivationStack: cleanRouteStack
+      }
+    });
     // Note: When the system starts/boots, schedule panel remains blank (0 items) by default
     // so operators start fresh for the service session.
   },

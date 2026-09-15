@@ -375,7 +375,7 @@ export const defaultAssets: Asset[] = [
 export const defaultOutputGroups: OutputGroup[] = [
   {
     id: 'group-congregation',
-    name: 'Main Presentation Display (R1)',
+    name: 'Route 1',
     themeId: 'theme-global',
     role: 'broadcast',
     displayIds: [],
@@ -386,7 +386,7 @@ export const defaultOutputGroups: OutputGroup[] = [
   },
   {
     id: 'group-r2',
-    name: 'Router 2 (Scripture / Overlay R2)',
+    name: 'Route 2',
     themeId: 'theme-scripture',
     role: 'broadcast',
     displayIds: [],

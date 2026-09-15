@@ -28,6 +28,7 @@ import { PresentationCore } from '../../core/PresentationCore';
 import { ThemeEngine } from '../../core/ThemeEngine';
 import { PresentationContentResolver } from '../../core/PresentationContentResolver';
 import { processDroppedFileList } from '../../utils/fileDropHandler';
+import { Settings } from 'lucide-react';
 
 interface FixedLiveDisplayProps {
   forcedGroupId?: string;
@@ -197,12 +198,19 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
         {/* Left: Master Live Switch / Router Authority Status */}
         <div className="flex items-center gap-2 min-w-0">
           {(() => {
+            const currentRouter = routerPanels.find(p => p.routerId === activeRouterId);
             const currentRouterIndex = routerPanels.findIndex(p => p.routerId === activeRouterId);
             const routerBadge = currentRouterIndex !== -1 ? `R${currentRouterIndex + 1}` : 'R1';
+            const routeName = currentRouter?.name || activeGroup?.name || (currentRouterIndex !== -1 ? `Route ${currentRouterIndex + 1}` : 'Route 1');
             return (
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-500/40 shrink-0 shadow-xs">
-                {routerBadge}
-              </span>
+              <div className="flex items-center gap-1.5 min-w-0 shrink-0">
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-300 border border-sky-500/40 shrink-0 shadow-xs">
+                  {routerBadge}
+                </span>
+                <span className="text-[11px] font-bold text-sky-200 truncate max-w-[110px] sm:max-w-[160px]" title={routeName}>
+                  {routeName}
+                </span>
+              </div>
             );
           })()}
           <span className={`text-[10px] font-bold uppercase tracking-wider shrink-0 hidden min-[480px]:inline ${
@@ -212,37 +220,24 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
           </span>
         </div>
 
-        {/* Right: Aspect Tag + 1:1 Target Monitor Quick Tag */}
-        <div className="flex items-center gap-1 shrink-0 overflow-hidden">
+        {/* Right: Aspect Tag, Settings */}
+        <div className="flex items-center gap-1.5 shrink-0 overflow-visible">
           {/* Aspect ratio tag */}
           <span 
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1b1e29] text-gray-300 border border-[#2b3042] shrink-0 hidden min-[540px]:inline-block"
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1b1e29] text-gray-300 border border-[#2b3042] shrink-0 hidden min-[600px]:inline-block"
             title={`Resolution Aspect: ${resInfo.aspectLabel} (${resInfo.width}×${resInfo.height})`}
           >
             {resInfo.aspectLabel}
           </span>
 
-          {/* 1:1 Target Monitor Quick Tag */}
-          {(() => {
-            const hasTarget = Boolean((activeGroup?.displayIds && activeGroup.displayIds.length > 0) || activeGroup?.targetDisplayId);
-            const targetText = activeGroup?.displayIds && activeGroup.displayIds.length > 0
-              ? (activeGroup.displayIds.length > 1 ? `${activeGroup.displayIds.length} Monitors` : activeGroup.displayIds[0])
-              : (activeGroup?.targetDisplayId || 'None');
-
-            return (
-              <button
-                onClick={() => setIsConfigOpen(true)}
-                className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-[#151722] hover:bg-[#1f2230] border border-[#2a2e40] text-[10px] text-gray-300 transition-colors cursor-pointer shrink-0"
-                title={hasTarget ? `Current 1:1 Target Monitor: ${targetText} (Click to change)` : "No target monitor selected (Click to configure)"}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${hasTarget ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`} />
-                <span className="text-gray-400 hidden min-[560px]:inline">1:1 Target:</span>
-                <span className={`font-mono font-semibold truncate max-w-[55px] min-[560px]:max-w-[85px] ${hasTarget ? 'text-cyan-300' : 'text-gray-400'}`}>
-                  {targetText}
-                </span>
-              </button>
-            );
-          })()}
+          {/* Configure Route Settings button */}
+          <button
+            onClick={() => setIsConfigOpen(true)}
+            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
+            title="Configure Output Route"
+          >
+            <Settings size={13} />
+          </button>
         </div>
       </div>
 

@@ -138,6 +138,35 @@ export default function App() {
     window.addEventListener('dragover', preventGlobalDrop);
     window.addEventListener('drop', preventGlobalDrop);
 
+    // Operator window shutdown & reload cleanup: ensure all live states disengage and displays close cleanly
+    const handleAppShutdown = () => {
+      if (isProjector || isRemote) return;
+      try {
+        const currentStates = useStore.getState().groupStates || {};
+        const resetStates: Record<string, any> = {};
+        for (const [gid, st] of Object.entries(currentStates)) {
+          resetStates[gid] = {
+            ...(st as any),
+            isLiveEnabled: false,
+            activeItemId: null,
+            activeSlideIndex: 0,
+            renderFrame: undefined
+          };
+        }
+        localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(resetStates));
+        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(['group-congregation', 'group-r2', 'group-stage']));
+      } catch (e) {}
+
+      // Proactively close all projector windows on app quit
+      if (typeof window !== 'undefined' && (window as any).electronAPI?.syncProjectorDisplays) {
+        try {
+          (window as any).electronAPI.syncProjectorDisplays([]);
+        } catch (e) {}
+      }
+    };
+    window.addEventListener('beforeunload', handleAppShutdown);
+    window.addEventListener('unload', handleAppShutdown);
+
     // When in projector mode, ensure document and body have transparency enabled
     if (isProjector) {
       document.documentElement.classList.add('projector-mode');
@@ -154,6 +183,8 @@ export default function App() {
     return () => {
       window.removeEventListener('dragover', preventGlobalDrop);
       window.removeEventListener('drop', preventGlobalDrop);
+      window.removeEventListener('beforeunload', handleAppShutdown);
+      window.removeEventListener('unload', handleAppShutdown);
       cleanupThemeListener?.();
       unsubscribeStore();
     };

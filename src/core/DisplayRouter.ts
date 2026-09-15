@@ -140,6 +140,21 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
     if (group.role === 'confidence' || group.id === 'group-stage') {
       return isTargetStage;
     }
+    
+    // For standard broadcast routes (like R1, R2), if no explicit target is set,
+    // they implicitly target the FIRST non-primary display (or primary if only one exists).
+    if (group.role === 'broadcast' || group.id === 'group-congregation' || group.id === 'group-r2') {
+      const displays = cachedDisplays || 
+        (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
+      
+      if (displays && displays.length > 0) {
+        const defaultDisplay = displays.find((d: any) => !d.isPrimary) || displays[0];
+        if (defaultDisplay && String(defaultDisplay.id) === String(displayId)) {
+          return true;
+        }
+      }
+    }
+    
     // Strict isolation: unconfigured routes do NOT target physical presentation displays
     return false;
   }

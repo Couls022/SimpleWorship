@@ -284,15 +284,48 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  mainWindow.on('close', () => {
+    // Proactively close all projector windows when main window begins closing
     displayWindows.forEach(win => {
-      if (win && !win.isDestroyed()) win.close();
+      if (win && !win.isDestroyed()) {
+        try { win.close(); } catch (e) {}
+      }
     });
     displayWindows.clear();
     displayRouteMap.clear();
   });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    displayWindows.forEach(win => {
+      if (win && !win.isDestroyed()) {
+        try { win.close(); } catch (e) {}
+      }
+    });
+    displayWindows.clear();
+    displayRouteMap.clear();
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
 }
+
+// Ensure app quits and closes all projectors when all windows close or before quit
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  displayWindows.forEach(win => {
+    if (win && !win.isDestroyed()) {
+      try { win.close(); } catch (e) {}
+    }
+  });
+  displayWindows.clear();
+  displayRouteMap.clear();
+});
 
 // -------------------------------------------------------------
 // WINDOW MANAGEMENT IPC HANDLERS
@@ -673,12 +706,14 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
   }
 
   win.on('closed', () => {
-    displayWindows.delete(canonicalDisplayId);
-    displayRouteMap.delete(canonicalDisplayId);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
-      mainWindow.focus();
-      mainWindow.moveTop();
+    if (displayWindows.get(canonicalDisplayId) === win) {
+      displayWindows.delete(canonicalDisplayId);
+      displayRouteMap.delete(canonicalDisplayId);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
+        mainWindow.focus();
+        mainWindow.moveTop();
+      }
     }
   });
 
@@ -830,12 +865,14 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
     }
 
     win.on('closed', () => {
-      displayWindows.delete(canonicalDisplayId);
-      displayRouteMap.delete(canonicalDisplayId);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
-        mainWindow.focus();
-        mainWindow.moveTop();
+      if (displayWindows.get(canonicalDisplayId) === win) {
+        displayWindows.delete(canonicalDisplayId);
+        displayRouteMap.delete(canonicalDisplayId);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('projector:status-changed', { groupId, displayId: canonicalDisplayId, status: 'DISCONNECTED' });
+          mainWindow.focus();
+          mainWindow.moveTop();
+        }
       }
     });
 

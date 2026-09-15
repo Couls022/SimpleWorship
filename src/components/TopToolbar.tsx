@@ -1010,33 +1010,35 @@ export default function TopToolbar({
                     >
                       <button
                         onClick={() => {
+                          const routeLabel = router.name || targetGroup?.name || `Route ${index + 1}`;
                           useStore.getState().setActiveRouterId(router.routerId);
                           workspace.setPanelVisibility('live', true);
                           window.dispatchEvent(
                             new CustomEvent('simpleworship:notify', { 
-                              detail: `Focused Output Panel: R-${index + 1} (${targetGroup?.name || 'Main Display'})` 
+                              detail: `Focused: ${routeLabel}` 
                             })
                           );
                           setActiveMenu(null);
                         }}
                         className="flex-1 flex items-center gap-1.5 truncate text-gray-200 hover:text-white cursor-pointer"
                       >
-                        <span className="text-[10px] text-gray-500 font-mono">R-{index + 1}</span>
-                        <span className="truncate">{targetGroup?.name || `Target: Display ${index + 1}`}</span>
+                        <span className="text-[10px] text-gray-500 font-mono">R{index + 1}</span>
+                        <span className="truncate">{router.name || targetGroup?.name || `Route ${index + 1}`}</span>
                         {isSelected && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
                       </button>
 
-                      {routerPanels.length > 1 && (
+                      {routerPanels.length > 2 && router.routerId !== 'router-1' && router.routerId !== 'router-2' && router.targetOutputGroupId !== 'group-congregation' && router.targetOutputGroupId !== 'group-r2' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            const routeLabel = router.name || targetGroup?.name || `Route ${index + 1}`;
                             useStore.getState().removeRouterPanel(router.routerId);
                             window.dispatchEvent(
-                              new CustomEvent('simpleworship:notify', { detail: `Removed Router Panel R-${index + 1}` })
+                              new CustomEvent('simpleworship:notify', { detail: `Removed ${routeLabel}` })
                             );
                           }}
                           className="p-1 text-gray-500 hover:text-rose-400 opacity-0 group-hover/panel:opacity-100 transition-opacity ml-1 cursor-pointer"
-                          title={`Remove Router Panel R-${index + 1}`}
+                          title={`Remove Route ${index + 1}`}
                         >
                           <Trash2 size={11} />
                         </button>
@@ -1049,41 +1051,47 @@ export default function TopToolbar({
                   <button
                     onClick={() => {
                       const nextIndex = routerPanels.length + 1;
+                      const cleanRouteName = `Route ${nextIndex}`;
                       useStore.getState().addRouterPanel({
                         routerId: `router-${Date.now()}`,
+                        name: cleanRouteName,
                         targetOutputGroupId: null,
                         active: true,
                         visible: true,
                         focused: true
                       });
                       window.dispatchEvent(
-                        new CustomEvent('simpleworship:notify', { detail: `Added Live Output Panel R-${nextIndex}` })
+                        new CustomEvent('simpleworship:notify', { detail: `Added ${cleanRouteName}` })
                       );
                       setActiveMenu(null);
                     }}
                     className="flex-1 text-left py-0.5 text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 text-[11px] cursor-pointer"
                   >
                     <Plus size={12} />
-                    <span>Add Panel</span>
+                    <span>Add Route</span>
                   </button>
 
-                  {routerPanels.length > 1 && (
+                  {routerPanels.length > 2 && (
                     <button
                       onClick={() => {
-                        const lastRouter = routerPanels[routerPanels.length - 1];
+                        const removablePanels = routerPanels.filter(p => 
+                          p.routerId !== 'router-1' && p.routerId !== 'router-2' &&
+                          p.targetOutputGroupId !== 'group-congregation' && p.targetOutputGroupId !== 'group-r2'
+                        );
+                        const lastRouter = removablePanels[removablePanels.length - 1];
                         if (lastRouter) {
                           useStore.getState().removeRouterPanel(lastRouter.routerId);
                           window.dispatchEvent(
-                            new CustomEvent('simpleworship:notify', { detail: 'Removed last Router Panel' })
+                            new CustomEvent('simpleworship:notify', { detail: `Removed ${lastRouter.name || 'Route'}` })
                           );
                         }
                         setActiveMenu(null);
                       }}
                       className="py-0.5 px-2 text-rose-400 hover:text-rose-300 font-medium flex items-center gap-1 text-[11px] cursor-pointer"
-                      title="Remove last Router Panel"
+                      title="Remove last Route"
                     >
                       <Minus size={12} />
-                      <span>Remove Panel</span>
+                      <span>Remove Route</span>
                     </button>
                   )}
                 </div>

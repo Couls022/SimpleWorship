@@ -183,9 +183,11 @@ function SettingsModal({ onClose }: SettingsModalProps) {
                         <div className="font-bold text-gray-200 text-sm">{group.name}</div>
                         <div className="text-gray-400 mt-1">Role: <span className="uppercase text-xs">{group.role}</span> | Aspect Ratio: {group.aspectRatio} | Target: {group.targetDisplayId || 'Windowed'}</div>
                       </div>
-                      <button onClick={() => useStore.getState().removeOutputGroup(group.id)} className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded">
-                        <Trash2 size={14} />
-                      </button>
+                      {group.id !== 'group-congregation' && group.id !== 'group-r2' && group.id !== 'group-stage' && (
+                        <button onClick={() => useStore.getState().removeOutputGroup(group.id)} className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 rounded" title="Delete output router">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

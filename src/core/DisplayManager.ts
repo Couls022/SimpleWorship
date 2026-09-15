@@ -313,13 +313,26 @@ export class DisplayManager {
 
     // Collect ONLY the target displays explicitly selected/configured in output groups
     const configuredTargetDisplayIds = new Set<string>();
+    let hasUnconfiguredBroadcast = false;
+
     outputGroups.forEach(g => {
       if (g.displayIds && g.displayIds.length > 0) {
         g.displayIds.forEach(id => configuredTargetDisplayIds.add(id));
       } else if (g.targetDisplayId) {
         configuredTargetDisplayIds.add(g.targetDisplayId);
+      } else if (g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2') {
+        hasUnconfiguredBroadcast = true;
       }
     });
+
+    // If we have broadcast routes without an explicit target monitor lock, 
+    // they should implicitly target the default secondary display.
+    if (hasUnconfiguredBroadcast) {
+      const defaultDisplay = displays.find(d => !d.isPrimary) || displays[0];
+      if (defaultDisplay) {
+        configuredTargetDisplayIds.add(defaultDisplay.id);
+      }
+    }
 
     // If NO target displays are configured across all output panels, close any open projector windows
     if (configuredTargetDisplayIds.size === 0) {
@@ -350,10 +363,13 @@ export class DisplayManager {
 
     // 1. Native Electron Shell
     if (typeof window !== 'undefined' && window.electronAPI?.isElectron) {
-      const assignmentList = Array.from(assignments.values()).map(a => ({
-        displayId: a.displayId,
-        groupId: operatorBlockedDisplayIds.has(a.displayId) ? null : a.assignedGroupId
-      }));
+      const assignmentList = Array.from(assignments.values()).map(a => {
+        const effectiveGroupId = a.assignedGroupId || null;
+        return {
+          displayId: a.displayId,
+          groupId: operatorBlockedDisplayIds.has(a.displayId) ? null : effectiveGroupId
+        };
+      });
 
       try {
         if (typeof window.electronAPI.syncProjectorDisplays === 'function') {
@@ -375,11 +391,13 @@ export class DisplayManager {
       assignments.forEach((assignment, displayId) => {
         if (operatorBlockedDisplayIds.has(displayId)) return;
 
-        if (assignment.assignedGroupId) {
-          this.localStatuses[assignment.assignedGroupId] = 'CONNECTED';
+        const effectiveGroupId = assignment.assignedGroupId || null;
+
+        if (effectiveGroupId) {
+          this.localStatuses[effectiveGroupId] = 'CONNECTED';
           window.dispatchEvent(
             new CustomEvent('simpleworship:projector-route-changed', {
-              detail: { displayId, groupId: assignment.assignedGroupId }
+              detail: { displayId, groupId: effectiveGroupId }
             })
           );
           opened.push(displayId);
@@ -431,6 +449,10 @@ export class DisplayManager {
    */
   static getLocalStatus(groupId: string): ProjectorStatus {
     return this.localStatuses[groupId] || 'DISCONNECTED';
+  }
+
+  static getStatus(groupId: string): ProjectorStatus {
+    return this.getLocalStatus(groupId);
   }
 
   /**
