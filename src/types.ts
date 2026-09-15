@@ -210,6 +210,7 @@ export interface Asset {
   url: string;
   thumbnail?: string;
   thumbnailUrl?: string;
+  localPath?: string;
   tags?: string[];
   blob?: Blob;
   duration?: number;

@@ -1,4 +1,3 @@
-import { PptxRenderOverlay } from './PptxRenderOverlay';
 import React, { useRef, useState, useEffect } from 'react';
 import { Slide, PresentationItem, ThemeStyles } from '../types';
 import { PresentationSlideView } from './PresentationSlideView';
@@ -18,9 +17,6 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
   liveItem,
   themeStyles,
 }) => {
-  const fileBytes = liveItem?.data?.fileBytes;
-  const contentId = liveItem?.contentId || liveItem?.id;
-
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(0.2);
   const [hasIntersected, setHasIntersected] = useState(false);
@@ -87,17 +83,7 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
           contain: 'layout size style paint',
         }}
       >
-
-        {(fileBytes || contentId) && hasIntersected ? (
-          <div className="w-full h-full pointer-events-none">
-            <PptxRenderOverlay 
-              activeSlideIndex={slideIndex} 
-              fileBytes={fileBytes} 
-              contentId={contentId} 
-              isThumbnail={true}
-            />
-          </div>
-        ) : (
+        {hasIntersected ? (
           <PresentationSlideView 
             slide={slide} 
             slideIndex={slideIndex} 
@@ -105,6 +91,10 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
             mode="thumbnail" 
             themeStyles={themeStyles} 
           />
+        ) : (
+          <div className="w-full h-full bg-black flex items-center justify-center text-gray-600 text-xs font-mono select-none">
+            Slide {slideIndex + 1}
+          </div>
         )}
       </div>
       <div className="absolute bottom-1 right-2 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono text-amber-300 border border-amber-500/30 pointer-events-none z-20">
@@ -118,7 +108,6 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
     prevProps.totalSlides === nextProps.totalSlides &&
     prevProps.liveItem?.id === nextProps.liveItem?.id &&
     prevProps.liveItem?.contentId === nextProps.liveItem?.contentId &&
-    prevProps.liveItem?.data?.fileBytes === nextProps.liveItem?.data?.fileBytes &&
     prevProps.slide === nextProps.slide
   );
 });

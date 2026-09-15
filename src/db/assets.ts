@@ -145,13 +145,19 @@ export async function processAssetFile(file: File): Promise<Asset> {
     }
   }
 
+  const localPath = (file as any).path;
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
+  // In Electron, if we have a local path, we prefer 'file://' and avoid storing massive Blobs in IndexedDB.
+  const finalUrl = (isElectron && localPath) ? `file://${localPath}` : objectUrl;
+
   const asset: Asset = {
     id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name: file.name.replace(/\.[^/.]+$/, ''),
     type: assetType,
-    url: objectUrl,
-    thumbnailUrl: isVideo ? videoPoster : (isAudio ? undefined : objectUrl),
-    blob: file,
+    url: finalUrl,
+    thumbnailUrl: isVideo ? videoPoster : (isAudio ? undefined : finalUrl),
+    blob: (isElectron && localPath) ? undefined : file,
+    localPath: localPath,
     hash,
     tags: ['uploaded', assetType],
     createdAt: Date.now()

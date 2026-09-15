@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore';
 import { useMediaProgressStore } from '../store/useMediaProgressStore';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
-import { dbApi, resolveAssetUrl, unresolveAssetUrl } from '../db';
+import { dbApi, resolveAssetUrl, unresolveAssetUrl, getDB } from '../db';
 import { Sparkles, Music, Volume2 } from 'lucide-react';
 import { OutputGroup, PresentationState, SystemOptions, NativeDisplayTarget, Slide, RenderFrame, PresentationItem } from '../types';
 import { DisplayManager } from '../core/DisplayManager';
@@ -15,7 +15,6 @@ import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
 import { isValidPptxBinary } from '../utils/pptxValidator';
 import { SlideTransitionManager } from '../core/SlideTransitionManager';
-import { MediaStreamController } from '../core/MediaStreamController';
 import { SlideAnnotationLayer } from './SlideAnnotationLayer';
 import { MainDisplayCountdownOverlay } from './workspace/MainDisplayCountdownOverlay';
 import { PresentationCanvas } from './presentation/PresentationCanvas';
@@ -100,16 +99,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     return PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
   }, [activeSchedule, presentationState]);
 
-  const mediaControllerRef = useRef<MediaStreamController | null>(null);
-  if (!mediaControllerRef.current) {
-    mediaControllerRef.current = new MediaStreamController();
-  }
-  const mediaController = mediaControllerRef.current;
-  const [managedVideoSrc, setManagedVideoSrc] = useState<string | null>(null);
-
   useEffect(() => {
     return () => {
-      mediaController.dispose();
       const videoEl = videoRef.current;
       if (videoEl) {
         videoEl.pause();
@@ -123,7 +114,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
         audioEl.load();
       }
     };
-  }, [mediaController]);
+  }, []);
 
   // Hydration logic removed from MonitorPreviewCanvas.
   // PptxRenderOverlay dynamically fetches binaries.
@@ -399,6 +390,14 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const [localBackgroundUrl, setLocalBackgroundUrl] = useState<string>(syncBg);
   const [localAudioSrc, setLocalAudioSrc] = useState<string>('');
 
+  const getValidMediaSrc = (src: string | null | undefined): string | undefined => {
+    if (!src) return undefined;
+    if (src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:') || src.startsWith('file:')) return src;
+    return undefined;
+  };
+
+  const effectiveAudioSrc = localAudioSrc || getValidMediaSrc(resolveAssetUrl(audioSrc)) || getValidMediaSrc(audioSrc) || '';
+
   const lastValidBgRef = useRef<string>(syncBg || backgroundUrl);
   if (isOverlayGroup && !hasExplicitCustomBackground) {
     lastValidBgRef.current = '';
@@ -430,26 +429,36 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     }
     
     if (activeItem?.contentId) {
-      const cachedAudio = audioSrc && audioSrc.startsWith('blob:') ? dbApi.getCachedUrl(activeItem.contentId) : null;
+      const cachedAudio = dbApi.getCachedUrl(activeItem.contentId) || resolveAssetUrl(activeItem.contentId);
       if (cachedAudio) setLocalAudioSrc(cachedAudio);
     }
     
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
-      if (!url) return '';
-      const assets = useStore.getState().assetsList || [];
-      const directAsset = assets.find(a => a.url === url || (a as any)._oldUrl === url || a.id === url);
-      if (directAsset?.url) return directAsset.url;
+      if (!url && !contentId) return '';
       if (contentId) {
-        const byId = assets.find(a => a.id === contentId);
-        if (byId?.url) return byId.url;
-        const cached = dbApi.getCachedUrl(contentId);
-        if (cached) return cached;
+        const mem = resolveAssetUrl(contentId) || dbApi.getCachedUrl(contentId);
+        if (mem) return mem;
+      }
+      if (url) {
+        const mem = resolveAssetUrl(url) || dbApi.getCachedUrl(url);
+        if (mem) return mem;
+      }
+      const assets = useStore.getState().assetsList || [];
+      const directAsset = assets.find(a => a.id === contentId || a.url === url || (a as any)._oldUrl === url || a.id === url);
+      if (directAsset?.url) return directAsset.url;
+      const targetId = contentId || unresolveAssetUrl(url);
+      if (targetId) {
         try {
-          const asset = await dbApi.getAsset(contentId);
-          if (asset?.url) return asset.url;
+          const db = await getDB();
+          const asset: any = await db.get('assets', targetId);
+          if (asset?.blob) {
+            return dbApi.getOrCreateAssetUrl(targetId, asset.blob) || asset.url || '';
+          } else if (asset?.url) {
+            return asset.url;
+          }
         } catch (e) {}
       }
-      return url;
+      return url || '';
     };
 
     if (!syncBg && backgroundUrl) {
@@ -483,51 +492,23 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   );
 
   useEffect(() => {
-    let sourceIdToLoad = isExplicitVideoItem ? activeItem?.contentId : undefined;
-    if (isLogoMode) {
-      sourceIdToLoad = undefined; // Force it to use videoSrc (the Logo video) instead of the active item
-    } else if (!sourceIdToLoad && videoSrc) {
-      const potentialId = unresolveAssetUrl(videoSrc);
-      if (potentialId && potentialId !== videoSrc) {
-        sourceIdToLoad = potentialId;
+    if (!isVideo) {
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
       }
     }
+  }, [isVideo]);
 
-    if (isVideo && (sourceIdToLoad || videoSrc)) {
-      mediaController.replace(
-        sourceIdToLoad,
-        videoSrc
-      ).then(url => {
-        if (url) setManagedVideoSrc(url);
-      });
-    } else {
-      mediaController.dispose();
-      setManagedVideoSrc(null);
+  // Release audio decoder only when not in audio presentation mode
+  useEffect(() => {
+    if (contentType !== 'audio' && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute('src');
+      audioRef.current.load();
     }
-  }, [isVideo, activeItem?.contentId, videoSrc, isExplicitVideoItem, mediaController, isLogoMode]);
-
-  // Aggressive hardware decoder flush when media changes or unmounts
-  useEffect(() => {
-    const el = videoRef.current;
-    return () => {
-      if (el) {
-        el.pause();
-        el.removeAttribute('src');
-        el.load();
-      }
-    };
-  }, [managedVideoSrc, videoSrc, isVideo]);
-
-  useEffect(() => {
-    const el = audioRef.current;
-    return () => {
-      if (el) {
-        el.pause();
-        el.removeAttribute('src');
-        el.load();
-      }
-    };
-  }, [audioSrc]);
+  }, [contentType]);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -540,7 +521,20 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     if (presentationState.isVideoPlaying === false) {
       videoEl.pause();
     } else {
-      videoEl.play().catch(() => {});
+      const playPromise = videoEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          if (err.name !== 'AbortError') {
+            console.warn('[MonitorPreviewCanvas] Video play() rejected:', err.name, err.message, {
+              groupId,
+              src: videoEl.src,
+              readyState: videoEl.readyState,
+              networkState: videoEl.networkState,
+              paused: videoEl.paused
+            });
+          }
+        });
+      }
     }
   }, [
     presentationState.isVideoPlaying,
@@ -548,7 +542,6 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     presentationState.isVideoLooping,
     presentationState.videoVolume,
     videoSrc,
-    managedVideoSrc,
     isThumbnail
   ]);
 
@@ -618,14 +611,27 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     if (presentationState.isVideoPlaying === false) {
       audioEl.pause();
     } else {
-      audioEl.play().catch(() => {});
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          if (err.name !== 'AbortError') {
+            console.warn('[MonitorPreviewCanvas] Audio play() rejected:', err.name, err.message, {
+              groupId,
+              src: audioEl.src,
+              readyState: audioEl.readyState,
+              networkState: audioEl.networkState,
+              paused: audioEl.paused
+            });
+          }
+        });
+      }
     }
   }, [
     presentationState.isVideoPlaying,
     presentationState.isVideoMuted,
     presentationState.isVideoLooping,
     presentationState.videoVolume,
-    localAudioSrc
+    effectiveAudioSrc
   ]);
 
   useEffect(() => {
@@ -717,7 +723,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 {isVideo && videoSrc ? (
                   <video
                     ref={videoRef}
-                    src={managedVideoSrc || resolveAssetUrl(videoSrc) || videoSrc}
+                    src={getValidMediaSrc(resolveAssetUrl(videoSrc)) || getValidMediaSrc(videoSrc) || ''}
                     autoPlay
                     loop={presentationState.isVideoLooping ?? true}
                     muted={isThumbnail ? true : (presentationState.isVideoMuted ?? false)}
@@ -725,6 +731,14 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     preload={isThumbnail ? "none" : "auto"}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
+                    onCanPlay={(e) => {
+                      const v = e.currentTarget;
+                      if (presentationState.isVideoPlaying !== false && v.paused) {
+                        v.play().catch(err => {
+                          if (err.name !== 'AbortError') console.warn('[MonitorPreviewCanvas] Video onCanPlay play rejected:', err);
+                        });
+                      }
+                    }}
                     onEnded={() => {
                       if (!isProjectorMode && !isThumbnail && !(presentationState.isVideoLooping ?? true)) {
                         setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
@@ -847,12 +861,20 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-8 select-none">
               <audio
                 ref={audioRef}
-                src={localAudioSrc}
+                src={effectiveAudioSrc}
                 autoPlay
                 loop={presentationState.isVideoLooping ?? true}
                 muted={presentationState.isVideoMuted ?? false}
                 onTimeUpdate={handleAudioTimeUpdate}
                 onLoadedMetadata={handleAudioLoadedMetadata}
+                onCanPlay={(e) => {
+                  const a = e.currentTarget;
+                  if (presentationState.isVideoPlaying !== false && a.paused) {
+                    a.play().catch(err => {
+                      if (err.name !== 'AbortError') console.warn('[MonitorPreviewCanvas] Audio onCanPlay play rejected:', err);
+                    });
+                  }
+                }}
                 onEnded={() => {
                   if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
                     setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
@@ -961,7 +983,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
           {/* Slide Content Layer with Margins for Songs, Scriptures, Announcements */}
           {(() => {
-            const computedRenderFrame = buildRenderFrame(
+            const computedRenderFrame = presentationState.renderFrame || buildRenderFrame(
               groupId,
               presentationState,
               activeSchedule,

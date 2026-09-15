@@ -372,12 +372,28 @@ ipcMain.handle('window:close', () => {
 
 const { exec } = require('child_process');
 
-function getWindowsMonitorNames() {
-  return new Promise((resolve) => {
-    if (process.platform !== 'win32') {
-      return resolve([]);
-    }
-    
+let cachedWinMonitors = null;
+let monitorFetchPromise = null;
+
+function invalidateMonitorCache() {
+  cachedWinMonitors = null;
+  monitorFetchPromise = null;
+}
+
+function getWindowsMonitorNames(forceRefresh = false) {
+  if (process.platform !== 'win32') {
+    return Promise.resolve([]);
+  }
+  
+  if (!forceRefresh && cachedWinMonitors !== null) {
+    return Promise.resolve(cachedWinMonitors);
+  }
+
+  if (monitorFetchPromise) {
+    return monitorFetchPromise;
+  }
+
+  monitorFetchPromise = new Promise((resolve) => {
     // WmiMonitorID contains ManufacturerName and UserFriendlyName as character code arrays.
     // Convert them to ASCII string characters and join them.
     const cmd = `powershell -NoProfile -Command "Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorID | ForEach-Object { $m = [System.Text.Encoding]::ASCII.GetString($_.ManufacturerName -notmatch 0).Trim(); $n = [System.Text.Encoding]::ASCII.GetString($_.UserFriendlyName -notmatch 0).Trim(); Write-Output \\"\\$m|\\$n\\" }"`;
@@ -387,28 +403,36 @@ function getWindowsMonitorNames() {
         // Fallback: query Win32_DesktopMonitor
         const cmdFallback = `powershell -NoProfile -Command "Get-CimInstance Win32_DesktopMonitor | ForEach-Object { Write-Output (\\"\\" + $_.MonitorManufacturer + \\"|\\" + $_.Name) }"`;
         exec(cmdFallback, { timeout: 2000 }, (err2, stdout2) => {
+          monitorFetchPromise = null;
           if (err2 || !stdout2) {
-            return resolve([]);
+            cachedWinMonitors = cachedWinMonitors || [];
+            return resolve(cachedWinMonitors);
           }
           const lines = stdout2.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          const monitors = lines.map(line => {
+          cachedWinMonitors = lines.map(line => {
             const parts = line.split('|');
             return { brand: parts[0] || '', model: parts[1] || '' };
           });
-          resolve(monitors);
+          resolve(cachedWinMonitors);
         });
         return;
       }
       
-      if (!stdout) return resolve([]);
+      monitorFetchPromise = null;
+      if (!stdout) {
+        cachedWinMonitors = cachedWinMonitors || [];
+        return resolve(cachedWinMonitors);
+      }
       const lines = stdout.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      const monitors = lines.map(line => {
+      cachedWinMonitors = lines.map(line => {
         const parts = line.split('|');
         return { brand: parts[0] || '', model: parts[1] || '' };
       });
-      resolve(monitors);
+      resolve(cachedWinMonitors);
     });
   });
+
+  return monitorFetchPromise;
 }
 
 const MANUFACTURER_MAP = {
@@ -432,10 +456,10 @@ const MANUFACTURER_MAP = {
   'HEW': 'HP'
 };
 
-async function getFormattedDisplays() {
+async function getFormattedDisplays(forceRefresh = false) {
   const displays = screen.getAllDisplays();
   const primaryDisplay = screen.getPrimaryDisplay();
-  const winMonitors = await getWindowsMonitorNames();
+  const winMonitors = await getWindowsMonitorNames(forceRefresh);
 
   return displays.map((d, index) => {
     const isPrimary = d.id === primaryDisplay.id;
@@ -487,14 +511,18 @@ async function getFormattedDisplays() {
 
 // Display Enumeration
 ipcMain.handle('display:get-all', async () => {
-  return await getFormattedDisplays();
+  return await getFormattedDisplays(false);
 });
 
 // Display Hot-Plug & Metrics Monitoring
 app.whenReady().then(() => {
+  // Pre-warm monitor metadata cache in background so projector sync never waits
+  getWindowsMonitorNames().catch(() => {});
+
   const notifyDisplaysChanged = async () => {
+    invalidateMonitorCache();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      const displays = await getFormattedDisplays();
+      const displays = await getFormattedDisplays(true);
       mainWindow.webContents.send('displays:changed', displays);
       mainWindow.webContents.send('display:changed', { type: 'metrics-changed', displays });
     }

@@ -15,12 +15,6 @@ interface ProjectorViewProps {
 
 export default function ProjectorView({ groupId: initialGroupId, displayId: propDisplayId }: ProjectorViewProps = {}) {
   const outputGroups = useStore(state => state.outputGroups);
-  const groupStates = useStore(state => state.groupStates);
-  const stagedGroupStates = useStore(state => state.stagedGroupStates);
-  const activeControlGroupId = useStore(state => state.activeControlGroupId);
-  const activeRouterId = useStore(state => state.activeRouterId);
-  const routerPanels = useStore(state => state.routerPanels);
-  const routeActivationStack = useStore(state => state.routeActivationStack) || [];
 
   const { screens } = useScreens();
   const [identifyActive, setIdentifyActive] = useState(false);
@@ -98,7 +92,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('simpleworship:projector-route-changed', handleRouteChanged);
     };
-  }, []);
+  }, [displayId]);
 
   // Listen for screen identification events and display enumeration
   useEffect(() => {
@@ -161,82 +155,81 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     return 1;
   }, [screens, displayId, identifyNumber]);
 
-  // Resolve winning active route and all overlay routes targeting this physical display
-  const { winningGroupId, isLiveActive, candidateGroupIds, liveGroupIds, stackedLiveGroupIds } = useMemo(() => {
-    const isStageWindow = routedGroupId === 'group-stage' || 
-      (displayId && (displayId.toLowerCase().includes('stage') || displayId.toLowerCase().includes('foldback')));
+  // Stage / Confidence Monitor Mode: Dedicated to stage
+  const isStageWindow = Boolean(
+    currentRouteGroupId === 'group-stage' || 
+    routedGroupId === 'group-stage' || 
+    (displayId && (displayId.toLowerCase().includes('stage') || displayId.toLowerCase().includes('foldback')))
+  );
 
-    // 1. Stage / Confidence Monitor Mode: Dedicated to stage
+  // Candidate Output Groups targeted to THIS physical display (recalculated only when display/groups topology changes)
+  const candidateGroupIds = useMemo<string[]>(() => {
     if (isStageWindow) {
-      const isLive = Boolean(groupStates['group-stage']?.isLiveEnabled);
-      return {
-        winningGroupId: 'group-stage',
-        isLiveActive: isLive,
-        candidateGroupIds: ['group-stage'],
-        liveGroupIds: isLive ? ['group-stage'] : [],
-        stackedLiveGroupIds: isLive ? ['group-stage'] : [],
-      };
+      return ['group-stage'];
     }
 
-    // 2. Strict Physical Presentation Display Pipeline Isolation
-    // Only output groups configured to target THIS physical display are permitted as candidates.
     const candidateSet = new Set<string>();
 
     if (displayId) {
-      // Find all output groups whose configured target displays match this physical display
       outputGroups.forEach(g => {
         if (g.role === 'confidence' || g.id === 'group-stage') return;
         if (routeTargetsDisplay(g, displayId, screens)) {
           candidateSet.add(g.id);
         }
       });
-    } else if (routedGroupId) {
-      // Standalone preview with explicit groupId ONLY if it actually exists in valid output groups
-      if (outputGroups.some(g => g.id === routedGroupId)) {
-        candidateSet.add(routedGroupId);
+    } else if (currentRouteGroupId || routedGroupId) {
+      const targetGid = currentRouteGroupId || routedGroupId;
+      if (outputGroups.some(g => g.id === targetGid)) {
+        candidateSet.add(targetGid);
       }
     } else {
-      // Standalone web preview fallback when no displayId and no groupId is provided
       const defaultGroup = outputGroups.find(g => g.role !== 'confidence' && g.id !== 'group-stage') || outputGroups[0];
       if (defaultGroup) {
         candidateSet.add(defaultGroup.id);
       }
     }
 
-    const allCandidateIds = Array.from(candidateSet);
+    return Array.from(candidateSet);
+  }, [isStageWindow, displayId, currentRouteGroupId, routedGroupId, outputGroups, screens]);
 
-    // Filter candidate groups whose Live state is ON (isLiveEnabled: true)
-    const liveIds = allCandidateIds.filter(gid => Boolean(groupStates[gid]?.isLiveEnabled));
+  // Granular winning route selector: subscribes ONLY to candidate groups' live flags and routeActivationStack
+  // Returns a primitive string or null. Does NOT re-render when unrelated routes (e.g. R2 on G1 projector) change.
+  const winningGroupId = useStore(React.useCallback((state) => {
+    if (candidateGroupIds.length === 0) return null;
+    
+    if (isStageWindow) {
+      return Boolean(state.groupStates['group-stage']?.isLiveEnabled) ? 'group-stage' : null;
+    }
 
-    // Stacking Priority according to routeActivationStack (MRU order):
-    // Index 0 is UNA (most recently active route)
-    // Index 1 is PANGALAWA (previously active route)
-    // Index 2 is PANGATLO (the route before that)
+    // Filter candidate groups whose Live state is ON
+    const liveIds = candidateGroupIds.filter(gid => Boolean(state.groupStates[gid]?.isLiveEnabled));
+    if (liveIds.length === 0) return null;
+    if (liveIds.length === 1) return liveIds[0];
+
+    // Arbitration: sort by routeActivationStack MRU
     const stackRankMap = new Map<string, number>();
-    (routeActivationStack || []).forEach((id, idx) => stackRankMap.set(id, idx));
+    (state.routeActivationStack || []).forEach((id, idx) => stackRankMap.set(id, idx));
 
-    // Sort live candidates by MRU stack rank
-    const stackedLiveGroupIds = [...liveIds].sort((a, b) => {
+    const sorted = [...liveIds].sort((a, b) => {
       const rankA = stackRankMap.has(a) ? stackRankMap.get(a)! : 999;
       const rankB = stackRankMap.has(b) ? stackRankMap.get(b)! : 999;
       return rankA - rankB;
     });
 
-    // The topmost active route (UNA)
-    const winning = stackedLiveGroupIds[0] || null;
+    return sorted[0] || null;
+  }, [candidateGroupIds, isStageWindow]));
 
-    return {
-      winningGroupId: winning,
-      isLiveActive: Boolean(winning && groupStates[winning]?.isLiveEnabled),
-      candidateGroupIds: allCandidateIds,
-      liveGroupIds: liveIds,
-      stackedLiveGroupIds,
-    };
-  }, [routedGroupId, displayId, outputGroups, groupStates, activeControlGroupId, currentRouteGroupId, routerPanels, activeRouterId, screens, routeActivationStack]);
+  // Granular winning state selector: subscribes ONLY to the winning route's state
+  // If winningGroupId is R1, changes to R2 or Stage state produce ZERO re-renders on R1's projector.
+  const winningState = useStore(React.useCallback((state) => {
+    if (!winningGroupId) return undefined;
+    return state.groupStates[winningGroupId] || state.stagedGroupStates[winningGroupId];
+  }, [winningGroupId]));
 
-  // Determine what state to pass to the canvas
-  const winningState = winningGroupId ? (groupStates[winningGroupId] || stagedGroupStates[winningGroupId]) : undefined;
-  const winningGroup = winningGroupId ? (outputGroups.find(g => g.id === winningGroupId) || outputGroups[0]) : undefined;
+  const winningGroup = useMemo(() => {
+    if (!winningGroupId) return undefined;
+    return outputGroups.find(g => g.id === winningGroupId) || outputGroups[0];
+  }, [winningGroupId, outputGroups]);
 
   return (
     <div 
