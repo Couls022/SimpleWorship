@@ -215,7 +215,7 @@ export default function TargetMonitorLock({ groupId, onOpenConfig, compact = fal
           </div>
 
           {/* List of Monitors */}
-          <div className="p-1 space-y-1 max-h-56 overflow-y-auto custom-scrollbar">
+          <div className="p-1 space-y-1 max-h-56 overflow-y-auto min-h-0 custom-scrollbar">
             {availableDisplays.map((disp, i) => {
               const dispId = disp.id;
               const isSelected = selectedDisplayIds.includes(dispId) || selectedDisplayIds.includes(disp.label);

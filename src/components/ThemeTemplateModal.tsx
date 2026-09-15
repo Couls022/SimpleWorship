@@ -248,10 +248,10 @@ function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-[#1a1d24] border border-[#2e3340] rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-[#1a1d24] border border-[#2e3340] rounded-xl shadow-2xl w-full max-w-4xl max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d323e] bg-[#14161c]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d323e] bg-[#14161c] shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-400">
               <Sliders size={20} />
@@ -274,7 +274,7 @@ function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps
         <div className="flex-1 flex overflow-hidden min-h-0">
           
           {/* Left Sidebar: Theme List & Presets */}
-          <div className="w-64 border-r border-[#2d323e] bg-[#16181e] flex flex-col p-3 space-y-3 overflow-y-auto">
+          <div className="w-64 border-r border-[#2d323e] bg-[#16181e] flex flex-col p-3 space-y-3 overflow-y-auto min-h-0">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Themes ({themesList.length})</span>
               <button
@@ -326,7 +326,7 @@ function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps
           </div>
 
           {/* Center/Right: Live Preview & Style Controls */}
-          <div className="flex-1 flex flex-col overflow-y-auto p-5 space-y-5 bg-[#1a1d24]">
+          <div className="flex-1 flex flex-col overflow-y-auto min-h-0 p-5 space-y-5 bg-[#1a1d24]">
             
             {/* Live WYSIWYG Preview Box */}
             <div className="space-y-1.5">
@@ -531,7 +531,7 @@ function ThemeTemplateModal({ onClose, initialThemeId }: ThemeTemplateModalProps
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-[#2d323e] bg-[#14161c] flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-[#2d323e] bg-[#14161c] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <button
               type="button"

@@ -69,7 +69,7 @@ export default function MultiGroupPreviewBar() {
       </div>
 
       {/* Dynamic List of Live Preview Panels (No hardcoded count!) */}
-      <div className="flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar pr-1">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto min-h-0 custom-scrollbar pr-1">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
         {outputGroups.map((group, groupIdx) => {
           const isFirst = groupIdx <= 0;
@@ -293,6 +293,7 @@ export default function MultiGroupPreviewBar() {
                   customGroup={group} 
                   customState={groupState} 
                   showResolutionTag={false} 
+                  isThumbnail={true}
                   className="h-full w-full"
                 />
               </div>

@@ -761,9 +761,9 @@ function TemplateGalleryModalBase({
 
   return (
     <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden text-slate-100 animate-in fade-in zoom-in-95 duration-200">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-sky-500/10 rounded-lg text-sky-400">
               <Sparkles size={20} />
@@ -783,7 +783,7 @@ function TemplateGalleryModalBase({
         </div>
 
         {/* Category Filters */}
-        <div className="px-6 py-3 border-b border-slate-800/80 bg-slate-950/30 flex items-center gap-2 text-xs">
+        <div className="px-6 py-3 border-b border-slate-800/80 bg-slate-950/30 flex items-center gap-2 text-xs shrink-0">
           {[
             { id: 'all', label: 'All Templates' },
             { id: 'general', label: 'General & Business' },
@@ -805,7 +805,7 @@ function TemplateGalleryModalBase({
         </div>
 
         {/* Template Cards Grid */}
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 custom-scrollbar bg-slate-950/40">
+        <div className="flex-1 overflow-y-auto min-h-0 p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 custom-scrollbar bg-slate-950/40">
           {filtered.map((tmpl) => (
             <div
               key={tmpl.id}
@@ -838,7 +838,7 @@ function TemplateGalleryModalBase({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
+        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
           <span>Click any slide template card to insert into your active presentation deck.</span>
           <button
             onClick={onClose}

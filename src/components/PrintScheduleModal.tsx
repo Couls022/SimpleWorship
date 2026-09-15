@@ -47,11 +47,11 @@ function PrintScheduleModal({ onClose }: PrintScheduleModalProps) {
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-2xl bg-[#1c1e26] border border-[#353b4c] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-gray-200 select-none animate-in zoom-in-95 duration-150"
+        className="w-full max-w-2xl bg-[#1c1e26] border border-[#353b4c] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] text-gray-200 select-none animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e3344] bg-[#222632]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e3344] bg-[#222632] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
               <Printer size={20} />
@@ -70,7 +70,7 @@ function PrintScheduleModal({ onClose }: PrintScheduleModalProps) {
         </div>
 
         {/* Printable View Area */}
-        <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-[#161820]">
+        <div className="flex-1 p-6 overflow-y-auto min-h-0 custom-scrollbar bg-[#161820]">
           <div 
             ref={printAreaRef}
             className="bg-white text-gray-900 rounded-lg p-8 shadow-md font-sans text-xs space-y-6 max-w-xl mx-auto"
@@ -126,7 +126,7 @@ function PrintScheduleModal({ onClose }: PrintScheduleModalProps) {
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-3 border-t border-[#2e3344] bg-[#20232e] flex items-center justify-between">
+        <div className="px-6 py-3 border-t border-[#2e3344] bg-[#20232e] flex items-center justify-between shrink-0">
           <button
             onClick={handleExportText}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d3240] hover:bg-[#3b4152] text-gray-200 rounded-lg text-xs font-semibold transition-colors"

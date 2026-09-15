@@ -447,7 +447,7 @@ export default function MediaTab() {
       )}
 
       {/* Main View: Grid or List */}
-      <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto min-h-0 p-3 custom-scrollbar">
         {filteredAssets.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-gray-500">
             <Film size={36} className="text-gray-600 mb-3" />

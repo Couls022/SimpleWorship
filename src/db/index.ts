@@ -27,6 +27,9 @@ export function unresolveAssetUrl(url: string | undefined): string | undefined {
   for (const [id, cachedUrl] of objectUrlCache.entries()) {
     if (cachedUrl === url) return id;
   }
+  for (const [key, mappedUrl] of assetUrlMap.entries()) {
+    if (mappedUrl === url) return key;
+  }
   return url;
 }
 
@@ -161,7 +164,7 @@ export const dbApi = {
     const db = await getDB();
     const asset = await db.get('assets', id);
     if (asset) {
-      if (asset.blob && asset.url && asset.url.startsWith('blob:')) {
+      if (asset.blob) {
         if (!objectUrlCache.has(asset.id)) {
           objectUrlCache.set(asset.id, URL.createObjectURL(asset.blob));
         }
@@ -177,18 +180,30 @@ export const dbApi = {
   getCachedUrl(id: string): string | undefined {
     return objectUrlCache.get(id);
   },
+  getOrCreateAssetUrl(id: string, blob?: Blob): string | undefined {
+    if (objectUrlCache.has(id)) return objectUrlCache.get(id);
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      objectUrlCache.set(id, url);
+      assetUrlMap.set(id, url);
+      return url;
+    }
+    return undefined;
+  },
   async getAllAssets() {
     const db = await getDB();
     // Getting all assets can be slow if there are massive blobs.
     const assets = await db.getAll('assets');
     return assets.map(a => {
-      if (a.blob && a.url && a.url.startsWith('blob:')) {
+      if (a.blob) {
         if (!objectUrlCache.has(a.id)) {
           objectUrlCache.set(a.id, URL.createObjectURL(a.blob));
         }
         (a as any)._oldUrl = a.url;
         a.url = objectUrlCache.get(a.id)!;
-        assetUrlMap.set((a as any)._oldUrl, a.url);
+        if ((a as any)._oldUrl) {
+          assetUrlMap.set((a as any)._oldUrl, a.url);
+        }
         assetUrlMap.set(a.id, a.url);
         assetUrlMap.set(a.url, a.url);
         if (a.thumbnailUrl && a.thumbnailUrl.startsWith('blob:')) {

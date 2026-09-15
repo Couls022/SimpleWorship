@@ -125,9 +125,17 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     themeColorMap: (blocks.canvasProps as any)?.themeColorMap
   });
 
-  // Track slide transition and seed entrance animations
+  const renderedSlideId = blocks.canvasProps?.activeSlide?.id;
+  
+  const actualRenderedIndex = useMemo(() => {
+    if (!renderedSlideId || !slides || slides.length === 0) return -1;
+    return slides.findIndex(s => s.id === renderedSlideId);
+  }, [renderedSlideId, slides]);
+
+  // Track slide transition and seed entrance animations ONLY when the renderer has caught up
   useLayoutEffect(() => {
     if (isThumbnail || !slides || slides.length === 0) return;
+    if (actualRenderedIndex !== activeSlideIndex) return; // Wait until blocks.canvasProps is updated
     
     let isCancelled = false;
     let rAF1: number;
@@ -155,7 +163,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
       if (rAF2) cancelAnimationFrame(rAF2);
       clearPresentationTimers();
     };
-  }, [activeSlideIndex, isThumbnail, slides, seedSlideAnimations, runPresentationEntranceAnimations, clearPresentationTimers]);
+  }, [actualRenderedIndex, activeSlideIndex, isThumbnail, slides, seedSlideAnimations, runPresentationEntranceAnimations, clearPresentationTimers]);
 
   // Mouse wheel listener with discrete debounced stepping
   useEffect(() => {

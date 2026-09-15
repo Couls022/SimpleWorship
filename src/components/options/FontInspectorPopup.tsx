@@ -97,7 +97,7 @@ export default function FontInspectorPopup({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="bg-[#242730] border border-[#3b404d] rounded-lg shadow-2xl w-full max-w-md flex flex-col text-xs text-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+      <div className="bg-[#242730] border border-[#3b404d] rounded-lg shadow-2xl w-full max-w-md max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col text-xs text-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
         {/* Header Tabs (Font, Outline, Shadow, Margins, Format) matching screenshot */}
         <div className="bg-[#1c1e24] border-b border-[#303440] flex items-center justify-between px-2 pt-1.5 shrink-0 select-none">
           <div className="flex space-x-1">
@@ -124,7 +124,7 @@ export default function FontInspectorPopup({
         </div>
 
         {/* Tab Content Body */}
-        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+        <div className="p-4 space-y-4 flex-1 overflow-y-auto min-h-0 custom-scrollbar">
           {activeTab === 'Font' && (
             <div className="space-y-3.5">
               {/* Font Family Dropdown */}

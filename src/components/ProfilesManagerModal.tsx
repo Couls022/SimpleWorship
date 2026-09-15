@@ -283,7 +283,7 @@ function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesMa
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`bg-[#1c1f26] border ${dragOver ? 'border-cyan-400 ring-4 ring-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.4)]' : 'border-[#2d313a]'} rounded-xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-all relative`}
+        className={`bg-[#1c1f26] border ${dragOver ? 'border-cyan-400 ring-4 ring-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.4)]' : 'border-[#2d313a]'} rounded-xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-all relative max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)]`}
       >
         {/* Hidden File Input for Portable Profile Import */}
         <input 
@@ -295,7 +295,7 @@ function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesMa
         />
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d313a] bg-[#16181e]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d313a] bg-[#16181e] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-cyan-950/80 border border-cyan-800/60 text-cyan-400">
               <FolderArchive size={20} />
@@ -316,7 +316,7 @@ function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesMa
         </div>
         
         {/* Main Content Body */}
-        <div className="p-6 flex-1 overflow-y-auto max-h-[60vh] space-y-4">
+        <div className="p-6 flex-1 overflow-y-auto min-h-0 custom-scrollbar space-y-4">
           
           {/* Error / Warning Alert Banner */}
           {errorMessage && (
@@ -626,7 +626,7 @@ function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesMa
         </div>
         
         {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-[#2d313a] bg-[#16181e] flex flex-wrap justify-between items-center gap-2">
+        <div className="px-6 py-4 border-t border-[#2d313a] bg-[#16181e] flex flex-wrap justify-between items-center gap-2 shrink-0">
           <div className="flex items-center gap-2">
             {!showCreateDialog && (
               <button 
@@ -671,7 +671,7 @@ function ProfilesManagerModal({ onClose, initialCreateOpen = false }: ProfilesMa
         {/* In-App Delete Confirmation Modal Overlay */}
         {deleteConfirmTarget && (
           <div className="absolute inset-0 bg-black/85 backdrop-blur-xs flex items-center justify-center p-6 z-[100] animate-in fade-in duration-150">
-            <div className="bg-[#20181b] border-2 border-rose-600/80 rounded-xl p-5 max-w-sm w-full shadow-[0_0_30px_rgba(225,29,72,0.3)] space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="bg-[#20181b] border-2 border-rose-600/80 rounded-xl p-5 max-w-sm w-full shadow-[0_0_30px_rgba(225,29,72,0.3)] space-y-4 animate-in zoom-in-95 duration-150 max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto min-h-0">
               <div className="flex items-center gap-3 text-rose-400 border-b border-rose-900/60 pb-3">
                 <div className="p-2 rounded-lg bg-rose-950/90 border border-rose-700/60">
                   <Trash2 size={20} className="text-rose-400" />

@@ -121,7 +121,7 @@ const ImagePickerModalBase = ({
   return (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-150">
       <div 
-        className="bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden text-slate-100"
+        className="bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl w-full max-w-4xl max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* MODAL HEADER */}
@@ -195,7 +195,7 @@ const ImagePickerModalBase = ({
         </div>
 
         {/* MODAL BODY */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto min-h-0 p-6">
           {/* TAB 1: CURATED WORSHIP & PRESENTATION WALLPAPERS */}
           {activeTab === 'curated' && (
             <div className="space-y-4">

@@ -97,12 +97,12 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-start justify-center pt-24 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-[99999] bg-black/75 flex items-start justify-center pt-12 sm:pt-20 p-3 sm:p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-2xl bg-[#1c1e24] border border-[#2d3039] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-top-10 zoom-in-95"
+        className="w-full max-w-2xl bg-[#1c1e24] border border-[#2d3039] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-4rem)] max-h-[calc(100dvh-4rem)] animate-in slide-in-from-top-10 zoom-in-95"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2d3039] bg-[#22252c]">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2d3039] bg-[#22252c] shrink-0">
           <Search size={20} className="text-gray-400 shrink-0" />
           <input
             ref={inputRef}
@@ -122,7 +122,7 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
 
         <div 
           ref={listRef}
-          className="max-h-[60vh] overflow-y-auto"
+          className="flex-1 overflow-y-auto min-h-0 custom-scrollbar"
         >
           {filteredSongs.length > 0 ? (
             <div className="py-2">
@@ -193,7 +193,7 @@ function QuickSongSearchModal({ onClose }: QuickSongSearchModalProps) {
           )}
         </div>
         
-        <div className="px-4 py-2 border-t border-[#2d3039] bg-[#181a1f] flex items-center justify-between text-[10px] text-gray-500 font-medium">
+        <div className="px-4 py-2 border-t border-[#2d3039] bg-[#181a1f] flex items-center justify-between text-[10px] text-gray-500 font-medium shrink-0">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1"><kbd className="bg-[#2d3039] px-1.5 py-0.5 rounded text-gray-300 font-mono">↑</kbd> <kbd className="bg-[#2d3039] px-1.5 py-0.5 rounded text-gray-300 font-mono">↓</kbd> to navigate</span>
             <span className="flex items-center gap-1"><kbd className="bg-[#2d3039] px-1.5 py-0.5 rounded text-gray-300 font-mono">Enter</kbd> to add</span>

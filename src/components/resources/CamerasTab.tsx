@@ -74,7 +74,7 @@ export default function CamerasTab() {
 
   return (
     <div className="h-full flex flex-col bg-[#141519] overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col">
+      <div className="flex-1 overflow-y-auto min-h-0 p-3 custom-scrollbar flex flex-col">
         {availableCameras.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
             <div className="w-full max-w-xs flex flex-col items-center justify-center p-6 border border-[#2b2f3d] bg-[#171922]/80 rounded-xl shadow-md">
@@ -120,7 +120,7 @@ export default function CamerasTab() {
                   onDragStart={(e) => handleDragStart(e, cam)}
                   onClick={() => setSelectedCameraId(cam.deviceId)}
                   onDoubleClick={() => fireLive(cam)}
-                  className={`bg-[#1c1e26] border rounded overflow-hidden flex flex-col transition-all cursor-grab active:cursor-grabbing group ${
+                  className={`bg-[#1c1e26] border rounded overflow-hidden flex flex-col max-h-full transition-all cursor-grab active:cursor-grabbing group ${
                     isSelected
                       ? 'border-pink-500 ring-2 ring-pink-500/40 shadow-md'
                       : 'border-[#2a2d39] hover:border-[#3c4252]'

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Film } from 'lucide-react';
+import { resolveAssetUrl } from '../../db';
 
 interface LazyVideoThumbnailProps {
   src: string;
@@ -26,23 +27,33 @@ export const LazyVideoThumbnail: React.FC<LazyVideoThumbnailProps> = React.memo(
   autoPlayOnHover = true,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const resolvedSrc = resolveAssetUrl(src) || src;
   const [posterUrl, setPosterUrl] = useState<string | null>(() => {
     if (poster) return poster;
-    if (src && posterCache.has(src)) return posterCache.get(src)!;
+    if (resolvedSrc && posterCache.has(resolvedSrc)) return posterCache.get(resolvedSrc)!;
     return null;
   });
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Immediately release hardware decoder when hover ends
+  useEffect(() => {
+    if (!isHovered && videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.removeAttribute('src');
+      videoRef.current.load();
+    }
+  }, [isHovered]);
+
   // Lazy snapshot extraction for first frame if no poster is provided
   useEffect(() => {
-    if (posterUrl || !src) return;
+    if (posterUrl || !resolvedSrc || !resolvedSrc.startsWith('blob:') && !resolvedSrc.startsWith('http') && !resolvedSrc.startsWith('/')) return;
 
     let isMounted = true;
     let video: HTMLVideoElement | null = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.muted = true;
     video.preload = 'metadata';
-    video.src = src;
+    video.src = resolvedSrc;
 
     const handleLoadedData = () => {
       if (!video) return;
@@ -54,14 +65,14 @@ export const LazyVideoThumbnail: React.FC<LazyVideoThumbnailProps> = React.memo(
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          posterCache.set(src, dataUrl);
+          posterCache.set(resolvedSrc, dataUrl);
           if (isMounted) setPosterUrl(dataUrl);
         }
       } catch {
         // CORS or sandbox restriction - fallback gracefully
       } finally {
         if (video) {
-          video.src = '';
+          video.removeAttribute('src');
           video.load();
           video = null;
         }
@@ -75,12 +86,12 @@ export const LazyVideoThumbnail: React.FC<LazyVideoThumbnailProps> = React.memo(
       isMounted = false;
       if (video) {
         video.removeEventListener('loadeddata', handleLoadedData);
-        video.src = '';
+        video.removeAttribute('src');
         video.load();
         video = null;
       }
     };
-  }, [src, posterUrl]);
+  }, [resolvedSrc, posterUrl]);
 
   return (
     <div 
@@ -88,10 +99,10 @@ export const LazyVideoThumbnail: React.FC<LazyVideoThumbnailProps> = React.memo(
       onMouseEnter={() => autoPlayOnHover && setIsHovered(true)}
       onMouseLeave={() => autoPlayOnHover && setIsHovered(false)}
     >
-      {isHovered && src ? (
+      {isHovered && resolvedSrc ? (
         <video
           ref={videoRef}
-          src={src}
+          src={resolvedSrc}
           muted
           loop
           autoPlay

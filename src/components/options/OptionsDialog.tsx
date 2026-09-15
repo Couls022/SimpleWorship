@@ -520,7 +520,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-3 animate-in fade-in duration-150">
-      <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] max-h-[750px] min-h-[500px] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100 keep-dark">
+      <div className="bg-[#242730] border border-[#3d4251] rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] flex flex-col text-xs text-gray-200 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100 keep-dark">
         
         {/* Title Bar */}
         <div className="h-9 bg-[#1c1e24] border-b border-[#303440] flex items-center justify-between px-3 shrink-0">
@@ -537,10 +537,10 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
         </div>
 
         {/* Main Body Grid: Left Category Sidebar + Right Content Area */}
-        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
           
           {/* Left Category Sidebar */}
-          <div className="w-full md:w-52 bg-[#1b1c22] border-b md:border-b-0 md:border-r border-[#303440] p-2 md:space-y-1 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto custom-scrollbar shrink-0">
+          <div className="w-full md:w-52 bg-[#1b1c22] border-b md:border-b-0 md:border-r border-[#303440] p-2 md:space-y-1 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-y-auto min-h-0 custom-scrollbar shrink-0">
             {categories.map((cat) => (
               <button
                 key={cat.id}
@@ -558,7 +558,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
           </div>
 
           {/* Right Configuration Panel */}
-          <div className="flex-1 flex flex-col bg-[#20222a] overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col bg-[#20222a] overflow-hidden">
             
             {/* Contextual Top Tabs or Category Sub-header */}
             {activeCategory === 'Main Output' ? (
@@ -602,7 +602,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
             )}
 
             {/* Scrollable Settings Form */}
-            <div className="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-4">
+            <div className="flex-1 p-4 overflow-y-auto min-h-0 custom-scrollbar space-y-4">
               
               {/* ================= MAIN OUTPUT -> GENERAL ================= */}
               {activeCategory === 'Main Output' && activeOutputTab === 'General' && (
@@ -3370,7 +3370,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                         <div className="col-span-2 text-right">Badge & Action</div>
                       </div>
 
-                      <div className="max-h-80 overflow-y-auto divide-y divide-[#222530] custom-scrollbar">
+                      <div className="max-h-80 overflow-y-auto min-h-0 divide-y divide-[#222530] custom-scrollbar">
                         {(localOptions.slideLabels || []).map((lbl, index) => {
                           const isHighlighted = lbl.id === highlightedLabelId;
                           return (

@@ -316,7 +316,7 @@ export default function MediaLibraryPanel() {
         </div>
       )}
       
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto min-h-0 p-2">
         <div className="text-[10px] text-gray-400 mb-2 italic px-1 flex items-center justify-between">
           <span>Click to select, Shift/Ctrl to multi-select. Double-click to Go Live.</span>
         </div>

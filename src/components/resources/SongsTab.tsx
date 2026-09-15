@@ -733,7 +733,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
       {/* Main Full-Width Song Table */}
       <div className="flex-1 flex flex-col bg-[#141519] overflow-hidden relative">
         {/* Scrollable Container with Sticky Table Header */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+        <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar relative">
           {/* Table Header - Sticky at the top */}
           <div className="sticky top-0 flex h-8 bg-[#20232a] border-b border-[#282b34] text-[11px] font-bold text-gray-400 items-center shrink-0 select-none z-30">
             {/* Index Column */}

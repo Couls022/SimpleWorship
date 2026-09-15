@@ -604,7 +604,7 @@ export default function TopToolbar({
                     <ChevronRight size={12} className="text-gray-400" />
                   </button>
                   {activeSubmenu === 'recent' && (
-                    <div className="absolute left-full top-0 ml-0.5 w-60 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl py-1 text-[11px] max-h-64 overflow-y-auto z-50">
+                    <div className="absolute left-full top-0 ml-0.5 w-60 bg-[#22252c] border border-[#3b404d] rounded-xs shadow-2xl py-1 text-[11px] max-h-64 overflow-y-auto min-h-0 z-50">
                       {recentSchedules.length === 0 ? (
                         <div className="px-3 py-1.5 text-gray-500 italic">No recent schedules</div>
                       ) : (

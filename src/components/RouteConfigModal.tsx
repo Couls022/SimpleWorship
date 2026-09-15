@@ -144,17 +144,17 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
   return createPortal(
     <div className="fixed inset-0 bg-black/75 z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={onClose}>
       <div 
-        className="bg-[#1a1c23] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden"
+        className="bg-[#1a1c23] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-4 py-3 bg-[#20222a] border-b border-[#2d313d]">
+        <div className="flex items-center justify-between px-4 py-3 bg-[#20222a] border-b border-[#2d313d] shrink-0">
           <h2 className="text-sm font-bold text-gray-200">Configure Output Route</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <X size={16} />
           </button>
         </div>
         
-        <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+        <div className="p-4 space-y-4 flex-1 overflow-y-auto min-h-0 custom-scrollbar">
           <div>
             <label className="block text-xs font-bold text-gray-300 mb-1">Route Name</label>
             <input 
@@ -209,7 +209,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
             </div>
             
             {/* Multi-Target 1-to-1 Target Monitor Selection */}
-            <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+            <div className="space-y-2 max-h-52 overflow-y-auto min-h-0 custom-scrollbar pr-1">
               {availableDisplays.map((disp, i) => {
                 const label = disp.label || disp.name;
                 const dispId = disp.id;
@@ -300,7 +300,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
           </div>
         </div>
 
-        <div className="p-3 bg-[#16171c] border-t border-[#2d313d] flex justify-between gap-2 items-center flex-wrap">
+        <div className="p-3 bg-[#16171c] border-t border-[#2d313d] flex justify-between gap-2 items-center flex-wrap shrink-0">
           <div className="flex gap-2">
             <button 
               onClick={() => {

@@ -242,7 +242,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 select-none animate-in fade-in duration-150">
-      <div className="bg-[#1c1f26] border border-[#343b4c] rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-[#1c1f26] border border-[#343b4c] rounded-xl shadow-2xl w-full max-w-4xl max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150">
         
         {/* Header */}
         <div className="h-13 bg-[#242832] border-b border-[#2e3444] px-5 flex items-center justify-between shrink-0">
@@ -308,14 +308,14 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
 
         {/* Action / Success Banner */}
         {actionMessage && (
-          <div className="bg-emerald-950/80 border-b border-emerald-700/60 px-5 py-2 text-xs text-emerald-300 flex items-center gap-2">
+          <div className="bg-emerald-950/80 border-b border-emerald-700/60 px-5 py-2 text-xs text-emerald-300 flex items-center gap-2 shrink-0">
             <CheckCircle2 size={14} />
             <span>{actionMessage}</span>
           </div>
         )}
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-xs">
+        <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-6 custom-scrollbar text-xs">
           
           {/* TAB 0: HARDWARE ACCELERATION & REAL DEVICE SYSTEM ENGINE */}
           {activeTab === 'hardware' && (
@@ -872,7 +872,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
                     Clear Logs
                   </button>
                 </div>
-                <div className="h-40 bg-[#0d0f13] p-3 rounded font-mono text-[10px] overflow-y-auto space-y-1 custom-scrollbar text-gray-300 border border-[#20232c]">
+                <div className="h-40 bg-[#0d0f13] p-3 rounded font-mono text-[10px] overflow-y-auto min-h-0 space-y-1 custom-scrollbar text-gray-300 border border-[#20232c]">
                   {serverStatus?.serverLogs && serverStatus.serverLogs.length > 0 ? (
                     serverStatus.serverLogs.map((log: any) => (
                       <div key={log.id} className="flex items-start gap-2">

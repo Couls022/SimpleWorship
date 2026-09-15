@@ -52,6 +52,74 @@ export async function findDuplicateAsset(hash: string): Promise<Asset | null> {
 }
 
 /**
+ * Generates a lightweight, low-resolution poster frame (JPEG) for a video file/blob.
+ * Runs once upon import to eliminate video decoder thrashing in media libraries and previews.
+ */
+export async function generateVideoPosterFrame(file: File | Blob): Promise<string | undefined> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return undefined;
+  return new Promise((resolve) => {
+    let resolved = false;
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    const tempUrl = URL.createObjectURL(file);
+    video.src = tempUrl;
+
+    const cleanup = () => {
+      video.removeAttribute('src');
+      video.load();
+      URL.revokeObjectURL(tempUrl);
+    };
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        cleanup();
+        resolve(undefined);
+      }
+    }, 2000);
+
+    video.onloadeddata = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.min(video.videoWidth || 320, 320);
+        canvas.height = Math.min(video.videoHeight || 180, 180);
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            cleanup();
+            resolve(dataUrl);
+            return;
+          }
+        }
+      } catch (e) {}
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        cleanup();
+        resolve(undefined);
+      }
+    };
+
+    video.onerror = () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        cleanup();
+        resolve(undefined);
+      }
+    };
+
+    video.currentTime = 0.1;
+  });
+}
+
+/**
  * Processes a File into an Asset object using instant ObjectURLs and IndexedDB Blob storage.
  * Eliminates heavy Base64 conversion to prevent memory leaks and UI lag.
  */
@@ -68,12 +136,21 @@ export async function processAssetFile(file: File): Promise<Asset> {
   const objectUrl = URL.createObjectURL(file);
   const hash = await computeFileHash(file);
 
+  let videoPoster: string | undefined = undefined;
+  if (isVideo) {
+    try {
+      videoPoster = await generateVideoPosterFrame(file);
+    } catch (e) {
+      console.warn('[processAssetFile] Failed to generate video poster:', e);
+    }
+  }
+
   const asset: Asset = {
     id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     name: file.name.replace(/\.[^/.]+$/, ''),
     type: assetType,
     url: objectUrl,
-    thumbnailUrl: (isVideo || isAudio) ? undefined : objectUrl,
+    thumbnailUrl: isVideo ? videoPoster : (isAudio ? undefined : objectUrl),
     blob: file,
     hash,
     tags: ['uploaded', assetType],

@@ -51,11 +51,10 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
     const router = routerPanels.find(p => p.routerId === routerId);
     if (router?.targetOutputGroupId) {
       useStore.getState().setActiveControlGroupId(router.targetOutputGroupId);
-      useStore.getState().bringRouteToTop(router.targetOutputGroupId);
     }
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
-        detail: `Activated: ${routeLabel}` 
+        detail: `Selected: ${routeLabel}` 
       })
     );
   };

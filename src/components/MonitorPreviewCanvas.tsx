@@ -4,7 +4,7 @@ import { useStore } from '../store/useStore';
 import { useMediaProgressStore } from '../store/useMediaProgressStore';
 import { PresentationCore } from '../core/PresentationCore';
 import { ThemeEngine } from '../core/ThemeEngine';
-import { dbApi } from '../db';
+import { dbApi, resolveAssetUrl, unresolveAssetUrl } from '../db';
 import { Sparkles, Music, Volume2 } from 'lucide-react';
 import { OutputGroup, PresentationState, SystemOptions, NativeDisplayTarget, Slide, RenderFrame, PresentationItem } from '../types';
 import { DisplayManager } from '../core/DisplayManager';
@@ -30,6 +30,7 @@ interface MonitorPreviewCanvasProps {
   className?: string;
   isProjectorMode?: boolean;
   isOverlayLayer?: boolean;
+  isThumbnail?: boolean;
 }
 
 const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
@@ -40,6 +41,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   className = '',
   isProjectorMode = false,
   isOverlayLayer,
+  isThumbnail = false,
 }: MonitorPreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -84,7 +86,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   // If this group is a confidence / foldback stage monitor, render the specialized high-contrast Stage Display UI
   if (group?.role === 'confidence' || groupId === 'group-stage') {
     return (
-      <div className={`w-full h-full bg-black overflow-hidden flex flex-col ${className}`}>
+      <div className={`w-full h-full bg-black overflow-hidden flex flex-col max-h-full ${className}`}>
         <StageMonitorContent isProjectorMode={isProjectorMode} />
       </div>
     );
@@ -108,6 +110,18 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   useEffect(() => {
     return () => {
       mediaController.dispose();
+      const videoEl = videoRef.current;
+      if (videoEl) {
+        videoEl.pause();
+        videoEl.removeAttribute('src');
+        videoEl.load();
+      }
+      const audioEl = audioRef.current;
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.removeAttribute('src');
+        audioEl.load();
+      }
     };
   }, [mediaController]);
 
@@ -472,6 +486,11 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     let sourceIdToLoad = isExplicitVideoItem ? activeItem?.contentId : undefined;
     if (isLogoMode) {
       sourceIdToLoad = undefined; // Force it to use videoSrc (the Logo video) instead of the active item
+    } else if (!sourceIdToLoad && videoSrc) {
+      const potentialId = unresolveAssetUrl(videoSrc);
+      if (potentialId && potentialId !== videoSrc) {
+        sourceIdToLoad = potentialId;
+      }
     }
 
     if (isVideo && (sourceIdToLoad || videoSrc)) {
@@ -479,7 +498,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
         sourceIdToLoad,
         videoSrc
       ).then(url => {
-        setManagedVideoSrc(url);
+        if (url) setManagedVideoSrc(url);
       });
     } else {
       mediaController.dispose();
@@ -487,12 +506,35 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     }
   }, [isVideo, activeItem?.contentId, videoSrc, isExplicitVideoItem, mediaController, isLogoMode]);
 
+  // Aggressive hardware decoder flush when media changes or unmounts
+  useEffect(() => {
+    const el = videoRef.current;
+    return () => {
+      if (el) {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      }
+    };
+  }, [managedVideoSrc, videoSrc, isVideo]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    return () => {
+      if (el) {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      }
+    };
+  }, [audioSrc]);
+
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
     videoEl.loop = presentationState.isVideoLooping ?? true;
-    videoEl.muted = presentationState.isVideoMuted ?? false;
+    videoEl.muted = isThumbnail ? true : (presentationState.isVideoMuted ?? false);
     videoEl.volume = presentationState.videoVolume ?? 1;
 
     if (presentationState.isVideoPlaying === false) {
@@ -506,7 +548,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     presentationState.isVideoLooping,
     presentationState.videoVolume,
     videoSrc,
-    managedVideoSrc
+    managedVideoSrc,
+    isThumbnail
   ]);
 
   useEffect(() => {
@@ -515,46 +558,33 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     videoEl.currentTime = presentationState.videoSeekTime;
   }, [presentationState.videoSeekTime]);
 
-  const lastVideoTimeUpdateRef = useRef<number>(0);
   const handleTimeUpdate = () => {
-    if (isProjectorMode) return;
+    if (isProjectorMode || isThumbnail) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const now = Date.now();
     
-    // Update fast UI store every 250ms (doesn't trigger massive re-renders)
+    // Update fast UI store every 250ms for smooth progress bar (bypasses full React tree re-renders)
     if (now - (videoEl as any)._lastFastUpdate > 250 || !(videoEl as any)._lastFastUpdate) {
       (videoEl as any)._lastFastUpdate = now;
       useMediaProgressStore.getState().setProgress(groupId, videoEl.currentTime, videoEl.duration || 0);
     }
-    
-    // Update global drift sync store only every 4 seconds
-    if (now - lastVideoTimeUpdateRef.current >= 4000) {
-      lastVideoTimeUpdateRef.current = now;
-      if (setStagedGroupState) {
-        setStagedGroupState(groupId, {
-          videoCurrentTime: videoEl.currentTime,
-          videoDuration: videoEl.duration || 0,
-        });
-      }
-    }
   };
 
   const handleLoadedMetadata = () => {
-    if (isProjectorMode) return;
+    if (isProjectorMode || isThumbnail) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
+    useMediaProgressStore.getState().setProgress(groupId, videoEl.currentTime, videoEl.duration || 0);
     if (setStagedGroupState) {
       setStagedGroupState(groupId, {
-        videoCurrentTime: videoEl.currentTime,
         videoDuration: videoEl.duration || 0,
       });
     }
   };
 
-  const lastAudioTimeUpdateRef = useRef<number>(0);
   const handleAudioTimeUpdate = () => {
-    if (isProjectorMode) return;
+    if (isProjectorMode || isThumbnail) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
     const now = Date.now();
@@ -563,25 +593,15 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
       (audioEl as any)._lastFastUpdate = now;
       useMediaProgressStore.getState().setProgress(groupId, audioEl.currentTime, audioEl.duration || 0);
     }
-
-    if (now - lastAudioTimeUpdateRef.current >= 4000) {
-      lastAudioTimeUpdateRef.current = now;
-      if (setStagedGroupState) {
-        setStagedGroupState(groupId, {
-          videoCurrentTime: audioEl.currentTime,
-          videoDuration: audioEl.duration || 0,
-        });
-      }
-    }
   };
 
   const handleAudioLoadedMetadata = () => {
-    if (isProjectorMode) return;
+    if (isProjectorMode || isThumbnail) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
+    useMediaProgressStore.getState().setProgress(groupId, audioEl.currentTime, audioEl.duration || 0);
     if (setStagedGroupState) {
       setStagedGroupState(groupId, {
-        videoCurrentTime: audioEl.currentTime,
         videoDuration: audioEl.duration || 0,
       });
     }
@@ -697,16 +717,16 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 {isVideo && videoSrc ? (
                   <video
                     ref={videoRef}
-                    src={managedVideoSrc || videoSrc}
+                    src={managedVideoSrc || resolveAssetUrl(videoSrc) || videoSrc}
                     autoPlay
                     loop={presentationState.isVideoLooping ?? true}
-                    muted={presentationState.isVideoMuted ?? false}
+                    muted={isThumbnail ? true : (presentationState.isVideoMuted ?? false)}
                     playsInline
-                    preload="auto"
+                    preload={isThumbnail ? "none" : "auto"}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
                     onEnded={() => {
-                      if (!isProjectorMode && !(presentationState.isVideoLooping ?? true)) {
+                      if (!isProjectorMode && !isThumbnail && !(presentationState.isVideoLooping ?? true)) {
                         setStagedGroupState?.(groupId, { isVideoPlaying: false, videoCurrentTime: 0 });
                       }
                     }}

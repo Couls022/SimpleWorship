@@ -377,7 +377,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-3 min-h-0">
+      <main className="flex-1 overflow-y-auto min-h-0 p-3.5 flex flex-col gap-3 min-h-0">
         
         {/* Navigation Tabs */}
         <div className="grid grid-cols-3 bg-[#131620] p-1 rounded-xl border border-[#212635] shrink-0">
@@ -585,7 +585,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
               Schedule Playlist ({activeSchedule?.items?.length || 0})
             </h3>
             
-            <div className="flex-1 overflow-y-auto space-y-2 pr-0.5">
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-0.5">
               {activeSchedule?.items.map((item, idx) => {
                 const isStaged = item.id === stagedState?.activeItemId;
                 const isLive = item.id === groupState?.activeItemId && groupState?.isLiveEnabled;
@@ -672,7 +672,7 @@ export default function RemoteView({ pinFromUrl = '' }: RemoteViewProps) {
 
         {/* TAB 3: ALERTS TRIGGER */}
         {activeTab === 'alert' && (
-          <div className="flex-1 flex flex-col gap-3.5 overflow-y-auto">
+          <div className="flex-1 flex flex-col gap-3.5 overflow-y-auto min-h-0">
             {/* Active Alert Banner */}
             {alert?.active && (
               <div className="bg-amber-500/15 border border-amber-500/40 p-3 rounded-xl flex items-center justify-between">

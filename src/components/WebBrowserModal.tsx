@@ -47,11 +47,11 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-5xl h-[88vh] bg-[#1a1c23] border border-[#2d3240] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-5xl h-[88vh] bg-[#1a1c23] border border-[#2d3240] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[#2d3240] bg-[#21242e]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-[#2d3240] bg-[#21242e] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
               <Globe size={18} />
@@ -80,7 +80,7 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
         </div>
 
         {/* URL Address Control Ribbon */}
-        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#2d3240] bg-[#16181f]">
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#2d3240] bg-[#16181f] shrink-0">
           <span className="text-xs font-semibold text-gray-400 shrink-0">URL / Stream:</span>
           <div className="flex-1 flex items-center bg-[#0d0e12] border border-[#2c3140] focus-within:border-emerald-500 rounded-lg px-3 py-1.5 transition-colors">
             <Globe size={14} className="text-emerald-400 mr-2 shrink-0" />
@@ -114,7 +114,7 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
         </div>
 
         {/* Quick Presets Bar */}
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-[#292d3a] bg-[#181a21] overflow-x-auto">
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-[#292d3a] bg-[#181a21] overflow-x-auto shrink-0">
           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider shrink-0 mr-1">Quick Links:</span>
           {POPULAR_WORSHIP_WEB_LINKS.map((link, idx) => (
             <button
@@ -132,7 +132,7 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
         </div>
 
         {/* Embedded Browser Frame */}
-        <div className="flex-1 bg-black relative overflow-hidden">
+        <div className="flex-1 min-h-0 bg-black relative overflow-hidden">
           <iframe
             src={activeIframeUrl}
             title="Embedded Web Presentation Browser"
@@ -142,7 +142,7 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
         </div>
 
         {/* Footer Info Bar */}
-        <div className="flex items-center justify-between px-5 py-2.5 border-t border-[#2d3240] bg-[#16181f] text-xs text-gray-400">
+        <div className="flex items-center justify-between px-5 py-2.5 border-t border-[#2d3240] bg-[#16181f] text-xs text-gray-400 shrink-0">
           <div className="flex items-center gap-2">
             <ShieldCheck size={14} className="text-emerald-400" />
             <span>Secure Web Engine Integration</span>

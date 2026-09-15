@@ -321,7 +321,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
       }}
     >
       <div 
-        className="w-full max-w-5xl h-[88vh] max-h-[860px] bg-[#161820] border border-[#2e3344] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-5xl h-[88vh] bg-[#161820] border border-[#2e3344] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] animate-in zoom-in-95 duration-150"
         onClick={(e) => {
           e.stopPropagation();
           setContextMenu(null);
@@ -419,7 +419,7 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
         </div>
 
         {/* Media Grid View */}
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-[#13141a]">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4 custom-scrollbar bg-[#13141a]">
           {filteredAssets.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-[#272b38] rounded-xl text-gray-500">
               <Film size={44} className="mb-3 text-[#33384a]" />

@@ -21,7 +21,7 @@ function UnsavedChangesModal({
 
   return (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 p-4 animate-in fade-in duration-150">
-      <div className="bg-[#18191f] border border-[#2b2d38] rounded-xl shadow-2xl max-w-md w-full p-6 text-gray-200">
+      <div className="bg-[#18191f] border border-[#2b2d38] rounded-xl shadow-2xl max-w-md w-full p-6 text-gray-200 max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto min-h-0 custom-scrollbar flex flex-col">
         <div className="flex items-start gap-4">
           <div className="p-3 bg-amber-500/10 rounded-full text-amber-400">
             <AlertCircle size={28} />

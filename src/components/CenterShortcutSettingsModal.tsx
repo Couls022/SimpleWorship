@@ -515,8 +515,8 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 select-none animate-in fade-in duration-150">
-      <div className="bg-[#1a1c24] border border-[#323646] rounded-xl shadow-2xl w-[94vw] max-w-4xl h-[86vh] max-h-[740px] flex flex-col overflow-hidden text-gray-200">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 select-none animate-in fade-in duration-150 p-3 sm:p-4">
+      <div className="bg-[#1a1c24] border border-[#323646] rounded-xl shadow-2xl w-[94vw] max-w-4xl h-[86vh] max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden text-gray-200">
         {/* Modal Top Bar */}
         <div className="h-12 bg-[#232732] border-b border-[#2d3242] flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -610,7 +610,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
 
         {/* Tab 1: Key Bindings List */}
         {activeTab === 'shortcuts' && (
-          <div className="flex-1 flex flex-col p-4 overflow-hidden gap-3">
+          <div className="flex-1 min-h-0 flex flex-col p-4 overflow-hidden gap-3">
             {/* Search Filter */}
             <div className="relative max-w-md">
               <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
@@ -632,7 +632,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto rounded-lg border border-[#2b3040] bg-[#14161c] divide-y divide-[#222634] custom-scrollbar">
+            <div className="flex-1 overflow-y-auto min-h-0 rounded-lg border border-[#2b3040] bg-[#14161c] divide-y divide-[#222634] custom-scrollbar">
               {/* Customizable Actions */}
               <div className="bg-[#1b1e28] px-3 py-1.5 text-[11px] font-bold text-cyan-300 uppercase tracking-wider flex justify-between items-center sticky top-0 z-10 border-b border-[#2b3040]">
                 <span>Customizable Live Hotkeys</span>
@@ -730,7 +730,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
 
         {/* Tab 2: Live & Arrow Move Behavior Settings */}
         {activeTab === 'behavior' && (
-          <div className="flex-1 p-5 overflow-y-auto space-y-4 custom-scrollbar">
+          <div className="flex-1 p-5 overflow-y-auto min-h-0 space-y-4 custom-scrollbar">
             <div className="bg-[#14161c] border border-[#2b3040] rounded-xl p-4 space-y-3">
               <h3 className="text-xs font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2 pb-1 border-b border-[#242938]">
                 <Play size={13} />
@@ -855,7 +855,7 @@ function CenterShortcutSettingsModal({ onClose }: CenterShortcutSettingsModalPro
 
         {/* Tab 3: Interactive Live Key Tester */}
         {activeTab === 'tester' && (
-          <div className="flex-1 p-6 flex flex-col items-center justify-center text-center gap-4 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 p-6 flex flex-col items-center justify-center text-center gap-4 overflow-y-auto min-h-0 custom-scrollbar">
             <div className="max-w-md space-y-1.5">
               <h3 className="text-base font-bold text-gray-100 flex items-center justify-center gap-2">
                 <Zap size={18} className="text-cyan-400" />

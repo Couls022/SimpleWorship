@@ -961,12 +961,15 @@ export const useStore = create<AppState>((set, get) => ({
       }));
       const activePanel = panels.find(p => p.routerId === id);
       const newActiveTarget = activePanel?.targetOutputGroupId || null;
+      
+      // Explicit route activation determines physical overlay priority
       if (newActiveTarget) {
         nextStack = [newActiveTarget, ...nextStack.filter(g => g !== newActiveTarget)];
         try {
           localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
         } catch (e) {}
       }
+      
       return {
         activeRouterId: id,
         routerPanels: panels,
@@ -978,7 +981,7 @@ export const useStore = create<AppState>((set, get) => ({
     });
     const { outputGroups, groupStates, activeControlGroupId, routerPanels, routeActivationStack } = get();
     
-    // Broadcast active router, stack, and active control group to all projector windows
+    // Broadcast active router and active control group to all projector windows
     broadcastStateChange({
       type: 'SYNC_STATE',
       data: {
@@ -1390,21 +1393,21 @@ export const useStore = create<AppState>((set, get) => ({
 
       if (!isOnlyPlaybackTimeUpdate) {
         scheduleGroupStatesSave(updatedGroupStates);
-      }
 
-      if (updatedPublicGroup.isLiveEnabled === true) {
-        const prevStack = get().routeActivationStack || [];
-        const nextStack = [groupId, ...prevStack.filter(id => id !== groupId)];
-        try {
-          localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
-        } catch (e) {}
-        set({ routeActivationStack: nextStack });
-      }
+        if (updatedPublicGroup.isLiveEnabled === true) {
+          const prevStack = get().routeActivationStack || [];
+          const nextStack = [groupId, ...prevStack.filter(id => id !== groupId)];
+          try {
+            localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+          } catch (e) {}
+          set({ routeActivationStack: nextStack });
+        }
 
-      broadcastStateChange({
-        type: 'GROUP_STATES_UPDATE',
-        data: { groupStates: updatedGroupStates, routeActivationStack: get().routeActivationStack }
-      });
+        broadcastStateChange({
+          type: 'GROUP_STATES_UPDATE',
+          data: { groupStates: updatedGroupStates, routeActivationStack: get().routeActivationStack }
+        });
+      }
 
       return {
         stagedGroupStates: updatedStaged,
@@ -1493,19 +1496,16 @@ export const useStore = create<AppState>((set, get) => ({
       } catch (e) {}
     }
     set((state) => {
-      if (!state.activeRouterId) return { activeControlGroupId: id, routeActivationStack: nextStack };
-      const panels = state.routerPanels.map(p => 
-        p.routerId === state.activeRouterId ? { ...p, targetOutputGroupId: id } : p
-      );
+      const matchedPanel = state.routerPanels.find(p => p.targetOutputGroupId === id);
       return { 
-        routerPanels: panels,
+        activeControlGroupId: id,
         routeActivationStack: nextStack,
-        activeControlGroupId: id 
+        activeRouterId: matchedPanel ? matchedPanel.routerId : state.activeRouterId
       };
     });
     const { outputGroups, groupStates, routerPanels, routeActivationStack } = get();
     
-    // Broadcast active control change with current states so ProjectorView can mirror the active tab without dropping state
+    // Broadcast active control change with current states
     broadcastStateChange({ 
       type: 'SYNC_STATE', 
       data: { 
@@ -2047,8 +2047,8 @@ export const useStore = create<AppState>((set, get) => ({
         let effectiveActiveItemId = staged.activeItemId || currentState.activeItemId;
         let effectiveDirectLiveItem = staged.directLiveItem || currentState.directLiveItem;
 
-        // If activeItemId is still not set, default to first item in schedule or song list for congregation
-        if (!effectiveActiveItemId && !effectiveDirectLiveItem && targetGroupId === 'group-congregation') {
+        // If activeItemId is still not set, default to first item in schedule or song list
+        if (!effectiveActiveItemId && !effectiveDirectLiveItem) {
           if (activeSchedule?.items && activeSchedule.items.length > 0) {
             effectiveActiveItemId = activeSchedule.items[0].id;
             effectiveDirectLiveItem = activeSchedule.items[0];

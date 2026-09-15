@@ -351,7 +351,7 @@ function AlertModal({ onClose }: AlertModalProps) {
   return (
     <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
       <div 
-        className="bg-[#1b1e27] border border-[#2d3242] rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh]"
+        className="bg-[#1b1e27] border border-[#2d3242] rounded-2xl shadow-2xl w-full max-w-xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -382,7 +382,7 @@ function AlertModal({ onClose }: AlertModalProps) {
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1 custom-scrollbar">
+        <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1 custom-scrollbar">
           {/* Active Banner Status Toggle */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-[#13151b] border border-[#2a2e3d]">
             <div className="flex items-center gap-3">
@@ -504,7 +504,7 @@ function AlertModal({ onClose }: AlertModalProps) {
             )}
 
             {/* Presets List */}
-            <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5 custom-scrollbar">
+            <div className="space-y-1.5 max-h-[160px] overflow-y-auto min-h-0 pr-0.5 custom-scrollbar">
               {alertPresets.map((preset) => {
                 const isSelected = activePresetId === preset.id || message === preset.message;
                 const isEditing = editingPresetId === preset.id;

@@ -121,7 +121,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="bg-[#1c1f26] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 text-xs" style={{ height: '80vh' }}>
+      <div className="bg-[#1c1f26] border border-[#2d313d] rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 text-xs">
         {/* Header */}
         <div className="px-4 py-3 bg-[#242833] border-b border-[#181a20] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
 
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Sidebar Tabs */}
-          <div className="w-full md:w-48 bg-[#181a20] border-b md:border-b-0 md:border-r border-[#2d313d] flex flex-row md:flex-col p-2 gap-1 overflow-x-auto md:overflow-y-auto shrink-0">
+          <div className="w-full md:w-48 bg-[#181a20] border-b md:border-b-0 md:border-r border-[#2d313d] flex flex-row md:flex-col p-2 gap-1 overflow-x-auto md:overflow-y-auto min-h-0 shrink-0">
             <button 
               onClick={() => setActiveTab('displays')}
               className={`flex items-center gap-2 px-3 py-2 rounded text-left transition-colors whitespace-nowrap ${activeTab === 'displays' ? 'bg-indigo-500/20 text-indigo-300 font-bold' : 'text-gray-400 hover:bg-[#252937] hover:text-gray-200'}`}
@@ -165,7 +165,7 @@ function SettingsModal({ onClose }: SettingsModalProps) {
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 p-5 overflow-y-auto bg-[#1c1f26] custom-scrollbar">
+          <div className="flex-1 p-5 overflow-y-auto min-h-0 bg-[#1c1f26] custom-scrollbar">
             
             {activeTab === 'displays' && (
               <div className="max-w-2xl">

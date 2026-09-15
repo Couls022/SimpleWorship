@@ -510,7 +510,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
                 <span>Bible Books</span>
                 <span className="text-gray-500 font-normal">{filteredBooks.length}</span>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
+              <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar p-1 space-y-0.5">
                 {filteredBooks.map((book) => {
                   const isSelected = book.id === selectedBookId && !isSearchActive;
                   const displayName = selectedTranslation === 'Tagalog' ? book.nameTagalog : book.name;
@@ -623,7 +623,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
                             </div>
 
                             {/* Enterprise Fitted Compact Grid (Tight Gap & Height) */}
-                            <div className={`max-h-52 overflow-y-auto custom-scrollbar p-1.5 grid gap-1 scroll-smooth ${
+                            <div className={`max-h-52 overflow-y-auto min-h-0 custom-scrollbar p-1.5 grid gap-1 scroll-smooth ${
                               activeBook.chapters > 40 ? 'grid-cols-6' : 'grid-cols-5'
                             }`}>
                               {Array.from({ length: activeBook.chapters }, (_, i) => i + 1).map((ch) => {
@@ -663,7 +663,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
               </div>
 
               {/* Verses Feed */}
-              <div className={`flex-1 overflow-y-auto p-2 custom-scrollbar ${
+              <div className={`flex-1 overflow-y-auto min-h-0 p-2 custom-scrollbar ${
                 viewOptions.density === 'compact' ? 'space-y-1' : viewOptions.density === 'spacious' ? 'space-y-2.5' : 'space-y-1.5'
               }`}>
                 {currentVerses.length === 0 ? (

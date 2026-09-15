@@ -149,11 +149,11 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
   return (
     <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-3xl bg-[#181a22] border border-[#2e3344] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-3xl bg-[#181a22] border border-[#2e3344] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#292e3e] bg-[#202430]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#292e3e] bg-[#202430] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-400 shadow-inner">
               <Radio size={20} className="animate-pulse" />
@@ -177,7 +177,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
         </div>
 
         {/* Content Body */}
-        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto max-h-[75vh]">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto min-h-0 flex-1 custom-scrollbar">
           {/* Left Column: Real Pairing QR Code & Link */}
           <div className="space-y-4 flex flex-col justify-between">
             <div className="bg-[#12141a] border border-[#2b2f3d] rounded-xl p-5 flex flex-col items-center text-center">
@@ -367,7 +367,7 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#292e3e] bg-[#14161d]">
+        <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#292e3e] bg-[#14161d] shrink-0">
           <span className="text-xs text-gray-400 flex items-center gap-1.5">
             <Wifi size={13} className="text-emerald-400" />
             Wireless Protocol: <strong className="text-purple-300">REST & Broadcast Channel Sync Active</strong>

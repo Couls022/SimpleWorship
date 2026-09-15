@@ -886,7 +886,7 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
           onDragOver={handleContainerDragOver}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e)}
-          className={`flex-1 overflow-y-auto p-1 space-y-1.5 custom-scrollbar transition-all relative ${
+          className={`flex-1 overflow-y-auto min-h-0 p-1 space-y-1.5 custom-scrollbar transition-all relative ${
             isDropTargetActive ? 'bg-[#1b2230] ring-2 ring-cyan-500/40 ring-inset' : ''
           }`}
         >

@@ -862,7 +862,7 @@ function SongEditorModal({
     
     <div className={`fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center select-none animate-in fade-in duration-150 ${isMaximized ? 'p-0' : 'p-2'}`}>
       <div className={`bg-[#1f2229] border border-[#363a47] shadow-2xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 ${
-        isMaximized ? 'w-full h-full rounded-none' : 'w-full max-w-7xl h-[94vh] rounded-md'
+        isMaximized ? 'w-full h-full rounded-none' : 'w-full max-w-7xl h-[94vh] max-h-[calc(100vh-1rem)] max-h-[calc(100dvh-1rem)] rounded-md'
       }`}>
         
         {/* 1. Header Title Bar */}
@@ -1389,7 +1389,7 @@ function SongEditorModal({
               ) : (
                 /* Slides Thumbnail List */
                 <div 
-                  className="flex-1 overflow-y-auto pr-1 custom-scrollbar space-y-2"
+                  className="flex-1 overflow-y-auto min-h-0 pr-1 custom-scrollbar space-y-2"
                   onDragOver={(e) => e.preventDefault()}
                 >
                   {parsedSlides.map((slide, idx) => (
@@ -1445,7 +1445,7 @@ function SongEditorModal({
             {/* Canvas Viewport (Interactive Stage Preview) */}
             <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
               <div
-                className={`relative rounded-md shadow-2xl overflow-hidden flex flex-col justify-between transition-all duration-150 border border-gray-700 ${
+                className={`relative rounded-md shadow-2xl overflow-hidden flex flex-col max-h-full justify-between transition-all duration-150 border border-gray-700 ${
                   aspectRatio === '16:9' ? 'aspect-video w-full max-w-4xl' : 'aspect-4/3 w-full max-w-3xl'
                 }`}
                 style={{

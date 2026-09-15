@@ -119,7 +119,7 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#121317] border border-[#2a2d36] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-[#121317] border border-[#2a2d36] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] relative" onClick={(e) => e.stopPropagation()}>
         <div className="bg-[#181a20] px-4 py-3 border-b border-[#2a2d36] flex justify-between items-center shrink-0">
           <div className="flex items-center gap-2 text-gray-200">
             <Clock size={16} className="text-amber-400" />
@@ -133,7 +133,7 @@ export default function ServiceIntervalsModal({ onClose }: ServiceIntervalsModal
           </button>
         </div>
 
-        <div className="p-4 space-y-4 text-sm bg-[#121317] overflow-y-auto">
+        <div className="p-4 space-y-4 text-sm bg-[#121317] overflow-y-auto min-h-0 flex-1 custom-scrollbar">
           {/* Main Controls */}
           <div className="flex justify-between items-center bg-[#18191f] border border-[#323642] p-3 rounded-md">
              <div className="flex flex-col gap-1">

@@ -79,7 +79,7 @@ export default function StageMonitorContent({ isProjectorMode = false }: StageMo
   };
 
   return (
-    <div className={`h-full w-full bg-black text-white ${isProjectorMode ? 'p-6 md:p-8' : 'p-3'} flex flex-col justify-between select-none overflow-y-auto custom-scrollbar font-sans`}>
+    <div className={`h-full w-full bg-black text-white ${isProjectorMode ? 'p-6 md:p-8' : 'p-3'} flex flex-col justify-between select-none overflow-y-auto min-h-0 custom-scrollbar font-sans`}>
       {/* Top Header: Current Time & Service Interval Countdown */}
       <div className={`flex items-center justify-between border-b border-gray-800 ${isProjectorMode ? 'pb-4 mb-4' : 'pb-2 mb-2'}`}>
         <div className="flex items-center gap-4 flex-wrap">
@@ -202,7 +202,7 @@ export default function StageMonitorContent({ isProjectorMode = false }: StageMo
           </div>
 
           <div 
-            className={`flex-1 flex items-center justify-center text-center p-3 font-black whitespace-pre-line overflow-y-auto custom-scrollbar leading-snug ${
+            className={`flex-1 flex items-center justify-center text-center p-3 font-black whitespace-pre-line overflow-y-auto min-h-0 custom-scrollbar leading-snug ${
               isProjectorMode ? 'text-2xl sm:text-4xl md:text-5xl lg:text-6xl' : 'text-base sm:text-xl md:text-2xl'
             }`}
             style={{
@@ -245,7 +245,7 @@ export default function StageMonitorContent({ isProjectorMode = false }: StageMo
           </div>
 
           <div 
-            className={`flex-1 flex items-center justify-center text-center p-2 font-semibold text-slate-200 whitespace-pre-line overflow-y-auto custom-scrollbar leading-snug ${
+            className={`flex-1 flex items-center justify-center text-center p-2 font-semibold text-slate-200 whitespace-pre-line overflow-y-auto min-h-0 custom-scrollbar leading-snug ${
               isProjectorMode ? 'text-xl sm:text-3xl md:text-4xl' : 'text-sm sm:text-base md:text-lg'
             }`}
             style={{

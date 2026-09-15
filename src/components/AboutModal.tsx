@@ -20,11 +20,11 @@ function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalP
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-lg bg-[#1a1c23] border border-[#353a4a] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150 text-gray-200 select-none"
+        className="w-full max-w-lg bg-[#1a1c23] border border-[#353a4a] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] animate-in zoom-in-95 duration-150 text-gray-200 select-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with gradient banner */}
-        <div className="relative bg-gradient-to-r from-[#172033] via-[#1b2742] to-[#121927] p-6 border-b border-[#2d3345] flex items-center justify-between">
+        <div className="relative bg-gradient-to-r from-[#172033] via-[#1b2742] to-[#121927] p-6 border-b border-[#2d3345] flex items-center justify-between shrink-0">
           <SimpleWorshipLogo size={42} showText={true} subtitle="Pro Presentation Suite v7.4 (RC-2)" />
           <button
             onClick={onClose}
@@ -35,7 +35,7 @@ function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalP
         </div>
 
         {/* Body content */}
-        <div className="p-6 space-y-5 text-xs">
+        <div className="p-6 space-y-5 text-xs flex-1 min-h-0 overflow-y-auto custom-scrollbar">
           <div>
             <h3 className="font-bold text-sm text-white mb-1">SimpleWorship Presentation Engine</h3>
             <p className="text-gray-400 leading-relaxed">
@@ -127,7 +127,7 @@ function AboutModal({ onClose, onOpenShortcuts, onOpenDiagnostics }: AboutModalP
         </div>
 
         {/* Footer */}
-        <div className="bg-[#13151b] px-6 py-3 border-t border-[#2d3345] flex items-center justify-end">
+        <div className="bg-[#13151b] px-6 py-3 border-t border-[#2d3345] flex items-center justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}

@@ -1,6 +1,6 @@
 import { Asset, PresentationItem } from '../types';
 import { useStore } from '../store/useStore';
-import { getDB } from '../db';
+import { getDB, resolveAssetUrl, unresolveAssetUrl } from '../db';
 import { dbApi } from '../db';
 
 export class MediaStreamController {
@@ -18,103 +18,76 @@ export class MediaStreamController {
       return null;
     }
 
+    // Fast path: if the source has not changed and objectUrl is already valid, return immediately
+    const effectiveSourceId = sourceId || (fallbackUrl && !fallbackUrl.startsWith('http') && !fallbackUrl.startsWith('blob:') && !fallbackUrl.startsWith('data:') ? fallbackUrl : undefined);
+    const targetSource = effectiveSourceId || fallbackUrl;
+    if (targetSource && this.currentSourceId === targetSource && this.objectUrl) {
+      return this.objectUrl;
+    }
+
     try {
-      if (sourceId) {
-        // Fast path: Check the memory cache first to avoid IndexedDB latency
-        let resolvedUrl: string | undefined;
-        if (typeof dbApi !== 'undefined' && dbApi?.getCachedUrl) {
-          resolvedUrl = dbApi.getCachedUrl(sourceId);
-        }
+      // Step 1: Check memory caches first (0ms latency, zero I/O)
+      let resolvedUrl: string | undefined;
+      if (effectiveSourceId) {
+        resolvedUrl = resolveAssetUrl(effectiveSourceId) || dbApi.getCachedUrl(effectiveSourceId);
+      }
+      if (!resolvedUrl && fallbackUrl) {
+        resolvedUrl = resolveAssetUrl(fallbackUrl) || dbApi.getCachedUrl(fallbackUrl);
+      }
 
-        if (!resolvedUrl) {
-          // Check IndexedDB
-          const db = await getDB();
-          const asset: any = await db.get('assets', sourceId);
-
-          // If component unmounted or new load was requested while waiting
-          if (currentGen !== this.generation) {
-            console.warn(`[MediaStreamController] Cancelled stale load for ${sourceId}`);
-            return null;
-          }
-
-          if (asset?.blob) {
-            this.revokeCurrent();
-            this.objectUrl = URL.createObjectURL(asset.blob);
-            this.isOwnedBlob = true;
-            this.currentSourceId = sourceId;
-
-            if (this.videoElement) {
-              this.videoElement.src = this.objectUrl;
-              this.videoElement.load();
-            }
-            return this.objectUrl;
-          } else if (asset?.url) {
-            resolvedUrl = asset.url;
-          }
-        }
+      // Step 2: If not in memory cache, query IndexedDB directly by key (never getAll!)
+      if (!resolvedUrl && effectiveSourceId) {
+        const db = await getDB();
+        const asset: any = await db.get('assets', effectiveSourceId);
 
         if (currentGen !== this.generation) {
-          console.warn(`[MediaStreamController] Cancelled stale load for ${sourceId}`);
           return null;
         }
 
-        if (resolvedUrl) {
+        if (asset?.blob) {
+          resolvedUrl = dbApi.getOrCreateAssetUrl(effectiveSourceId, asset.blob);
+        } else if (asset?.url) {
+          resolvedUrl = asset.url;
+        }
+      }
+
+      // Step 3: If fallbackUrl is provided, reverse-lookup asset ID to find local window object URL
+      if (!resolvedUrl && fallbackUrl) {
+        const potentialId = unresolveAssetUrl(fallbackUrl);
+        if (potentialId && potentialId !== fallbackUrl) {
+          resolvedUrl = resolveAssetUrl(potentialId) || dbApi.getCachedUrl(potentialId);
+          if (!resolvedUrl) {
+            const db = await getDB();
+            const asset: any = await db.get('assets', potentialId);
+            if (asset?.blob) {
+              resolvedUrl = dbApi.getOrCreateAssetUrl(potentialId, asset.blob);
+            }
+          }
+        }
+        if (!resolvedUrl) {
+          resolvedUrl = fallbackUrl;
+        }
+      }
+
+      if (currentGen !== this.generation) {
+        return null;
+      }
+
+      if (resolvedUrl) {
+        if (this.objectUrl !== resolvedUrl) {
           this.revokeCurrent();
           this.objectUrl = resolvedUrl;
           this.isOwnedBlob = false;
-          this.currentSourceId = sourceId;
+          this.currentSourceId = targetSource || resolvedUrl;
 
           if (this.videoElement) {
             this.videoElement.src = this.objectUrl;
             this.videoElement.load();
           }
-          return this.objectUrl;
+        } else {
+          this.currentSourceId = targetSource || resolvedUrl;
         }
-      }
-
-      // Fallback if item itself has a valid non-blob URL
-      if (fallbackUrl && !fallbackUrl.startsWith('blob:')) {
-        this.revokeCurrent();
-        this.objectUrl = fallbackUrl;
-        this.isOwnedBlob = false;
-        this.currentSourceId = sourceId || fallbackUrl;
-        if (this.videoElement) {
-          this.videoElement.src = this.objectUrl;
-          this.videoElement.load();
-        }
-        return fallbackUrl;
-      }
-
-      // If the fallbackUrl IS a blob URL, we just have to trust the existing blob URL
-      if (fallbackUrl && fallbackUrl.startsWith('blob:')) {
-        // [FIX] Try to reverse-lookup the asset ID from the Blob URL using the global assetsList!
-        // This allows projectors to find the blob in their local IndexedDB even if only the URL was passed.
-        try {
-          const assetsList = useStore.getState().assetsList || [];
-          let matchedAsset = assetsList.find(a => a.url === fallbackUrl);
-          
-          if (!matchedAsset) {
-            // Fallback: check IndexedDB directly in case assetsList hasn't hydrated yet (Projector Window race condition)
-            const db = await getDB();
-            const allAssets = await db.getAll('assets');
-            matchedAsset = allAssets.find((a: any) => a.url === fallbackUrl);
-          }
-          
-          if (matchedAsset && matchedAsset.id) {
-            console.log('[MediaStreamController] Recovered asset ID from blob URL:', matchedAsset.id);
-            return this.load(matchedAsset.id, fallbackUrl);
-          }
-        } catch (e) {}
-
-        this.revokeCurrent();
-        this.objectUrl = fallbackUrl;
-        this.isOwnedBlob = false;
-        this.currentSourceId = sourceId || fallbackUrl;
-        if (this.videoElement) {
-          this.videoElement.src = this.objectUrl;
-          this.videoElement.load();
-        }
-        return fallbackUrl;
+        return this.objectUrl;
       }
 
       return null;
@@ -130,7 +103,7 @@ export class MediaStreamController {
 
   attach(element: HTMLVideoElement | HTMLAudioElement | null) {
     this.videoElement = element;
-    if (this.videoElement && this.objectUrl) {
+    if (this.videoElement && this.objectUrl && this.videoElement.src !== this.objectUrl) {
       this.videoElement.src = this.objectUrl;
     }
   }

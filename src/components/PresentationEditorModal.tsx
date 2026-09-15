@@ -2002,7 +2002,7 @@ export function PresentationEditorModal({
       </div>
 
       {/* MAIN WORKSPACE LAYOUT WITH ENTERPRISE RESIZABLE EQUAL DIVIDERS */}
-      <div className="flex-1 flex flex-row relative overflow-hidden bg-slate-950">
+      <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-slate-950">
         {/* LEFT PANE: THUMBNAILS DECK */}
         {!isLeftCollapsed && (
           <div style={{ width: `${leftWidth}px` }} className="h-full shrink-0 overflow-hidden">

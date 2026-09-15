@@ -82,7 +82,7 @@ export const NotesAndTimelineDrawer: React.FC<NotesAndTimelineDrawerProps> = ({
               onChange={(e) => onUpdateNotes(e.target.value)}
             />
           ) : (
-            <div className="w-full h-full overflow-y-auto custom-scrollbar">
+            <div className="w-full h-full overflow-y-auto min-h-0 custom-scrollbar">
               {allAnimations.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-slate-500 text-xs space-x-2">
                   <Clock size={16} />

@@ -78,10 +78,10 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-[#1c1f26] border border-[#2d313a] rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-[#1c1f26] border border-[#2d313a] rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2d313a] bg-[#16181e]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2d313a] bg-[#16181e] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-indigo-950/80 border border-indigo-700/60 text-indigo-400">
               <Save size={18} />
@@ -101,7 +101,7 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-5 space-y-4">
+        <form onSubmit={handleSave} className="p-5 space-y-4 flex-1 overflow-y-auto min-h-0 custom-scrollbar">
           <div>
             <label className="block text-xs font-medium text-gray-300 mb-1.5">
               Service Schedule Name

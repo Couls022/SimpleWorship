@@ -459,7 +459,7 @@ export default function SongLivePreview({
         >
           <div
             data-canvas-preview="true"
-            className="absolute top-0 left-0 origin-top-left overflow-hidden flex flex-col justify-between select-none pointer-events-none projector-canvas"
+            className="absolute top-0 left-0 origin-top-left overflow-hidden flex flex-col max-h-full justify-between select-none pointer-events-none projector-canvas"
             style={{
               width: `${width}px`,
               height: `${height}px`,

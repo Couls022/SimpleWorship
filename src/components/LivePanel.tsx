@@ -135,11 +135,10 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     ? activeGroup.displayIds
     : (activeGroup?.targetDisplayId ? [activeGroup.targetDisplayId] : []);
 
-  const handleMakeActiveOverlay = () => {
+  const handleFocusPanel = () => {
     const targetRouter = routerId || useStore.getState().activeRouterId || 'router-1';
     useStore.getState().setActiveRouterId(targetRouter);
     useStore.getState().setActiveControlGroupId(groupId);
-    useStore.getState().bringRouteToTop(groupId);
   };
 
   const handleAddPanel = () => {
@@ -468,8 +467,8 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
       >
         <div 
           className="flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer select-none overflow-hidden" 
-          onClick={handleMakeActiveOverlay}
-          title="Click to select this panel as Active Overlay for its target monitor(s)"
+          onClick={handleFocusPanel}
+          title="Click to focus this route in operator console"
         >
           {/* Drag Handle Icon */}
           <div 
@@ -621,7 +620,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
       {isConfigOpen && <RouteConfigModal groupId={groupId} onClose={() => setIsConfigOpen(false)} />}
 
       {/* Content Area */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 overflow-hidden flex flex-col max-h-full">
         {/* Presentation Presenter Toolbar */}
         {isPresentation && liveItem && (
           <div className="bg-[#14151b] border-b border-[#262832] px-2.5 py-1.5 flex items-center justify-between gap-2 shrink-0">
@@ -688,7 +687,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         {!showPreviewDisplay ? (
           /* Fixed Live Output Panel WITHOUT display: Full-height slides */
           <div className="flex-1 flex flex-col h-full overflow-hidden">
-            <div className={`flex-1 bg-[#18191e] p-2 overflow-y-auto custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
+            <div className={`flex-1 bg-[#18191e] p-2 overflow-y-auto min-h-0 custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
               {slides.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
                   <Tv size={28} className="text-gray-600 mb-2 opacity-60" />
@@ -726,7 +725,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
           <PanelGroup direction="vertical" autoSaveId={`workspace-layout-v3-live-${groupId}`}>
             {/* Top Half: Slide Thumbnails / List */}
             <Panel id={`panel-slides-${groupId}`} order={1} defaultSize={52} minSize={25}>
-              <div className={`h-full bg-[#18191e] p-2 overflow-y-auto custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
+              <div className={`h-full bg-[#18191e] p-2 overflow-y-auto min-h-0 custom-scrollbar ${viewMode === 'large' ? 'space-y-3' : viewMode === 'small' || viewMode === 'summary' ? 'space-y-1' : 'space-y-2'}`}>
                 {slides.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
                     <Tv size={28} className="text-gray-600 mb-2 opacity-60" />
@@ -802,7 +801,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 
                 {/* Speaker Notes & Metadata Section */}
                 {currentSlide && (currentSlide.notes || currentSlide.transition) && (
-                  <div className="mt-2 shrink-0 max-h-32 overflow-y-auto custom-scrollbar bg-[#181920] rounded border border-[#252834] p-2 text-xs">
+                  <div className="mt-2 shrink-0 max-h-32 overflow-y-auto min-h-0 custom-scrollbar bg-[#181920] rounded border border-[#252834] p-2 text-xs">
                     {currentSlide.transition && (
                       <div className="text-[10px] text-sky-400 font-mono mb-1.5 flex items-center gap-1">
                         <span className="font-bold uppercase">Transition:</span> 

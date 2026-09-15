@@ -159,7 +159,7 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
       {isOpen && typeof document !== 'undefined' && createPortal(
       <div 
         ref={dropdownRef}
-        className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden flex flex-col text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+        className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-full text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100"
         style={dropdownStyle}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -230,7 +230,7 @@ export const SystemFontPicker: React.FC<SystemFontPickerProps> = ({
 
           {/* Font List Categories */}
           <div 
-            className="max-h-64 overflow-y-auto custom-scrollbar p-1"
+            className="max-h-64 overflow-y-auto min-h-0 custom-scrollbar p-1"
             onScroll={(e) => {
               const target = e.currentTarget;
               if (target.scrollHeight - target.scrollTop <= target.clientHeight + 60) {

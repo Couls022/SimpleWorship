@@ -46,11 +46,11 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
   return (
     <div className="fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div 
-        className="w-full max-w-2xl bg-[#1c1e24] border border-[#2d313c] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        className="w-full max-w-2xl bg-[#1c1e24] border border-[#2d313c] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] max-h-[calc(100dvh-2rem)] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d313c] bg-gradient-to-r from-[#22252e] to-[#1c1e24]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2d313c] bg-gradient-to-r from-[#22252e] to-[#1c1e24] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-cyan-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
               <Calendar size={20} />
@@ -69,7 +69,7 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
         </div>
 
         {/* Form Body */}
-        <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
+        <div className="p-6 space-y-5 overflow-y-auto min-h-0 flex-1 custom-scrollbar">
           {/* Schedule Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
@@ -98,7 +98,7 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
                   <div
                     key={preset.id}
                     onClick={() => setSelectedPreset(preset.id)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                    className={`p-4 rounded-xl border transition-all cursor-pointer relative overflow-hidden flex flex-col max-h-full justify-between ${
                       isSelected 
                         ? 'bg-[#252834] border-cyan-500 ring-2 ring-cyan-500/30 shadow-lg' 
                         : 'bg-[#181a20] border-[#2c2f3b] hover:border-gray-600 hover:bg-[#1f222b]'
@@ -124,7 +124,7 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#2d313c] bg-[#17191f]">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#2d313c] bg-[#17191f] shrink-0">
           <span className="text-xs text-gray-400">
             Current Schedule: <strong className="text-gray-200">{activeScheduleName || 'Untitled'}</strong>
           </span>
