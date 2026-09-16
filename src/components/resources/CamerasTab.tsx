@@ -37,6 +37,15 @@ export default function CamerasTab() {
 
   useEffect(() => {
     refreshCameras();
+    
+    const handleCamerasChanged = () => {
+      refreshCameras();
+    };
+    
+    window.addEventListener('simpleworship:cameras-changed', handleCamerasChanged);
+    return () => {
+      window.removeEventListener('simpleworship:cameras-changed', handleCamerasChanged);
+    };
   }, []);
 
   const handleDragStart = (e: React.DragEvent, camera: CameraDeviceInfo) => {
@@ -81,9 +90,9 @@ export default function CamerasTab() {
               <div className="w-12 h-12 rounded-xl bg-pink-950/40 border border-pink-500/30 flex items-center justify-center mb-3 text-pink-400 shadow-inner">
                 <Camera size={22} />
               </div>
-              <h4 className="font-bold text-gray-200 text-xs mb-1">No Cameras Detected</h4>
+              <h4 className="font-bold text-gray-200 text-xs mb-1">No camera or video capture device detected.</h4>
               <p className="text-[11px] text-gray-400 leading-relaxed mb-4">
-                Connect a USB webcam or start DroidCam to broadcast live video.
+                Connect a USB webcam, capture card, or other video input device.
               </p>
               <button 
                 onClick={refreshCameras}
@@ -91,7 +100,7 @@ export default function CamerasTab() {
                 className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#262b38] hover:bg-[#323746] text-gray-200 border border-[#3c4355] rounded-md text-xs font-semibold transition-all shadow cursor-pointer active:scale-95"
               >
                 <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
-                <span>Scan for Cameras</span>
+                <span>Refresh</span>
               </button>
             </div>
           </div>

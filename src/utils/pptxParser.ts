@@ -980,8 +980,46 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
   return slides;
 }
 
-const deckParsedSlidesCache = new Map<string, Promise<ParsedSlide[]>>();
-const resolvedSlidesMap = new Map<string, ParsedSlide[]>();
+class LRUCache<K, V> {
+  private max: number;
+  private cache: Map<K, V>;
+
+  constructor(max = 5) {
+    this.max = max;
+    this.cache = new Map();
+  }
+
+  get(key: K): V | undefined {
+    if (this.cache.has(key)) {
+      const val = this.cache.get(key)!;
+      this.cache.delete(key);
+      this.cache.set(key, val);
+      return val;
+    }
+    return undefined;
+  }
+
+  set(key: K, val: V) {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.max) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey !== undefined) this.cache.delete(firstKey);
+    }
+    this.cache.set(key, val);
+  }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
+
+  delete(key: K) {
+    return this.cache.delete(key);
+  }
+}
+
+const deckParsedSlidesCache = new LRUCache<string, Promise<ParsedSlide[]>>(5);
+const resolvedSlidesMap = new LRUCache<string, ParsedSlide[]>(5);
 
 export async function getOrParsePptxSlides(
   contentId: string, 

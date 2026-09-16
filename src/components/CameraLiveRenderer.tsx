@@ -52,7 +52,15 @@ export default function CameraLiveRenderer({
       } catch (err: any) {
         if (isMounted) {
           console.error("Camera acquisition error:", err);
-          setError(err.message || 'Failed to start camera');
+          let userError = 'Failed to start camera';
+          if (err.name === 'NotReadableError') {
+            userError = 'Camera is currently unavailable (Busy or in use)';
+          } else if (err.name === 'NotFoundError' || err.message.includes('Requested device not found')) {
+            userError = 'Camera disconnected';
+          } else if (err.name === 'NotAllowedError') {
+            userError = 'Camera permission denied';
+          }
+          setError(userError);
         }
       }
     };
@@ -81,8 +89,8 @@ export default function CameraLiveRenderer({
           <div className="w-12 h-12 rounded-full bg-red-900/30 flex items-center justify-center mb-3">
             <span className="text-red-500 text-xl font-bold">!</span>
           </div>
-          <span className="text-gray-400 text-sm">Camera Disconnected / Signal Lost</span>
-          <span className="text-gray-500 text-xs mt-1">{error}</span>
+          <span className="text-gray-400 text-sm font-semibold">{error}</span>
+          <span className="text-gray-500 text-xs mt-1">Check connection and try again</span>
         </div>
       ) : (
         <video

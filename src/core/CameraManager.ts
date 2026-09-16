@@ -20,9 +20,9 @@ class CameraManager {
   
   private constructor() {
     if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
-      navigator.mediaDevices.ondevicechange = () => {
+      navigator.mediaDevices.addEventListener("devicechange", () => {
         this.enumerateCameras().catch(console.error);
-      };
+      });
     }
   }
 
@@ -33,19 +33,45 @@ class CameraManager {
     return CameraManager.instance;
   }
 
+  public async requestCameraPermission(): Promise<boolean> {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) return false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      stream.getTracks().forEach(track => track.stop());
+      return true;
+    } catch (err) {
+      console.warn('Camera permission denied or unavailable:', err);
+      return false;
+    }
+  }
+
   public async enumerateCameras(): Promise<CameraDeviceInfo[]> {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
       return [];
     }
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      this.deviceCache = devices
-        .filter(device => device.kind === 'videoinput')
-        .map(device => ({
+      let devices = await navigator.mediaDevices.enumerateDevices();
+      let videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+      // If we have video devices but no labels, we need to request permission
+      if (videoDevices.length > 0 && videoDevices.some(d => !d.label)) {
+        const granted = await this.requestCameraPermission();
+        if (granted) {
+          devices = await navigator.mediaDevices.enumerateDevices();
+          videoDevices = devices.filter(device => device.kind === 'videoinput');
+        }
+      }
+      this.deviceCache = videoDevices.map(device => ({
           deviceId: device.deviceId,
           label: device.label || `Camera (${device.deviceId.slice(0, 5)}...)`,
           kind: device.kind
         }));
+      
+      // Notify UI that cameras have updated
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('simpleworship:cameras-changed'));
+      }
+
       return this.deviceCache;
     } catch (err) {
       console.error('Failed to enumerate cameras', err);
@@ -60,7 +86,11 @@ class CameraManager {
 
     try {
       this.currentPreviewStream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: deviceId } },
+        video: { 
+          deviceId: { exact: deviceId },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
         audio: false // No audio to prevent feedback loop
       });
       return this.currentPreviewStream;
@@ -92,7 +122,11 @@ class CameraManager {
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: deviceId } },
+      video: { 
+        deviceId: { exact: deviceId },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
       audio: false
     });
 

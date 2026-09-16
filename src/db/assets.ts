@@ -133,7 +133,6 @@ export async function processAssetFile(file: File): Promise<Asset> {
   else if (isAudio) assetType = 'audio';
   else if (isDoc) assetType = 'document';
 
-  const objectUrl = URL.createObjectURL(file);
   const hash = await computeFileHash(file);
 
   let videoPoster: string | undefined = undefined;
@@ -148,7 +147,8 @@ export async function processAssetFile(file: File): Promise<Asset> {
   const localPath = (file as any).path;
   const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
   // In Electron, if we have a local path, we prefer 'file://' and avoid storing massive Blobs in IndexedDB.
-  const finalUrl = (isElectron && localPath) ? `file://${localPath}` : objectUrl;
+  const useLocalPath = isElectron && !!localPath;
+  const finalUrl = useLocalPath ? `file://${localPath}` : URL.createObjectURL(file);
 
   const asset: Asset = {
     id: `asset-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -156,7 +156,7 @@ export async function processAssetFile(file: File): Promise<Asset> {
     type: assetType,
     url: finalUrl,
     thumbnailUrl: isVideo ? videoPoster : (isAudio ? undefined : finalUrl),
-    blob: (isElectron && localPath) ? undefined : file,
+    blob: useLocalPath ? undefined : file,
     localPath: localPath,
     hash,
     tags: ['uploaded', assetType],

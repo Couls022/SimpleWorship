@@ -192,9 +192,12 @@ export const dbApi = {
   },
   async getAllAssets() {
     const db = await getDB();
-    // Getting all assets can be slow if there are massive blobs.
-    const assets = await db.getAll('assets');
-    return assets.map(a => {
+    const assets: Asset[] = [];
+    const tx = db.transaction('assets', 'readonly');
+    let cursor = await tx.store.openCursor();
+    
+    while (cursor) {
+      const a = cursor.value;
       if (a.blob) {
         if (!objectUrlCache.has(a.id)) {
           objectUrlCache.set(a.id, URL.createObjectURL(a.blob));
@@ -212,10 +215,19 @@ export const dbApi = {
       } else if (a.url) {
         registerAsset(a);
       }
-      // Strip blob to prevent JS heap exhaustion and GC lags
+      
       const { blob, ...assetWithoutBlob } = a;
-      return assetWithoutBlob as Asset;
-    });
+      // Strip fileBytes to prevent JS heap exhaustion for PPTX files
+      if (assetWithoutBlob.data && assetWithoutBlob.data.fileBytes) {
+        const { fileBytes, ...restData } = assetWithoutBlob.data;
+        assetWithoutBlob.data = restData;
+      }
+      
+      assets.push(assetWithoutBlob as Asset);
+      
+      cursor = await cursor.continue();
+    }
+    return assets;
   },
   async deleteAsset(id: string) {
     if (objectUrlCache.has(id)) {

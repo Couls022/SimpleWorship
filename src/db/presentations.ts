@@ -58,15 +58,20 @@ export async function savePresentation(
 
 export async function getAllPresentations(): Promise<Asset[]> {
   const db = await getDB();
-  const allAssets = await db.getAllFromIndex('assets', 'by-type', 'document');
-  // Strip heavy fileBytes to prevent massive memory consumption when listing presentations
-  return allAssets.map(asset => {
+  const allAssets: Asset[] = [];
+  const tx = db.transaction('assets', 'readonly');
+  const index = tx.store.index('by-type');
+  let cursor = await index.openCursor('document');
+
+  while (cursor) {
+    const asset = cursor.value;
     let returnData = asset.data;
+    
     if (asset.data && asset.data.fileBytes) {
       const { fileBytes, ...restData } = asset.data;
       returnData = restData;
     }
-    
+        
     // Resolve slide background URLs
     if (returnData && returnData.slides) {
       returnData.slides = returnData.slides.map((slide: any) => ({
@@ -75,8 +80,11 @@ export async function getAllPresentations(): Promise<Asset[]> {
       }));
     }
 
-    return { ...asset, data: returnData };
-  });
+    allAssets.push({ ...asset, data: returnData });
+    cursor = await cursor.continue();
+  }
+  
+  return allAssets;
 }
 
 export async function deletePresentation(id: string): Promise<void> {
