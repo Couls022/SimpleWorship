@@ -705,6 +705,7 @@ export interface PresentationState {
   isVideoMuted?: boolean;
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
+  pptxAnimationGroupIndex?: number;
   isVideoLooping?: boolean;
   videoVolume?: number;
   videoCurrentTime?: number;

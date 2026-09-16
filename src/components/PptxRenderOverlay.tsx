@@ -15,6 +15,8 @@ interface PptxRenderOverlayProps {
   isProjectorMode?: boolean;
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
+  pptxAnimationGroupIndex?: number;
+  onAnimationGroupChange?: (index: number) => void;
   onActiveSlideChange?: (index: number) => void;
   activeSlideIndex: number;
   currentSlide?: Slide | null;
@@ -54,6 +56,8 @@ interface PptxViewerInnerProps {
   isProjectorMode?: boolean;
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
+  pptxAnimationGroupIndex?: number;
+  onAnimationGroupChange?: (index: number) => void;
   onActiveSlideChange?: (index: number) => void;
   currentSlide?: Slide | null;
   themeStyles?: ThemeStyles;
@@ -69,6 +73,8 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
   isProjectorMode, 
   pptxAction, 
   pptxActionTimestamp, 
+  pptxAnimationGroupIndex,
+  onAnimationGroupChange,
   onActiveSlideChange, 
   currentSlide, 
   themeStyles,
@@ -248,6 +254,13 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
           if (isCancelled) return;
           try {
             runPresentationEntranceAnimations(activeSlideIndex);
+            
+            // Fast-forward to the desired animation group state if needed
+            if (pptxAnimationGroupIndex && pptxAnimationGroupIndex > 0) {
+              for (let i = 0; i < pptxAnimationGroupIndex; i++) {
+                playNextAnimationGroup();
+              }
+            }
           } catch (e) {
             console.warn('[PptxRenderOverlay] runPresentationEntranceAnimations error:', e);
           }
@@ -343,6 +356,9 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
 
       if (playedAnimation) {
         // Animation was successfully stepped forward inside current slide
+        if (onAnimationGroupChange) {
+          onAnimationGroupChange((pptxAnimationGroupIndex || 0) + 1);
+        }
         return;
       }
 
@@ -366,7 +382,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
         handleSlideChange(activeSlideIndex - 1);
       }
     }
-  }, [pptxAction, pptxActionTimestamp, activeSlideIndex, isThumbnail, playNextAnimationGroup, handleSlideChange, slides.length, slideCount]);
+  }, [pptxAction, pptxActionTimestamp, activeSlideIndex, isThumbnail, playNextAnimationGroup, handleSlideChange, slides.length, slideCount, onAnimationGroupChange, pptxAnimationGroupIndex]);
 
   // Synchronize viewer mode and active slide index
   useEffect(() => {
@@ -619,7 +635,7 @@ const PptxDirectThumbnail: React.FC<{
   );
 });
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange, currentSlide, themeStyles, targetWidth, targetHeight }) => {
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, pptxAnimationGroupIndex, onAnimationGroupChange, onActiveSlideChange, currentSlide, themeStyles, targetWidth, targetHeight }) => {
   const [cachedDeck, setCachedDeck] = useState<CachedPptxDeck | null>(() => {
     if (contentId && pptxDeckSharedCache.has(contentId)) {
       return pptxDeckSharedCache.get(contentId)!;
@@ -748,6 +764,8 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
         isProjectorMode={isProjectorMode} 
         pptxAction={pptxAction} 
         pptxActionTimestamp={pptxActionTimestamp} 
+        pptxAnimationGroupIndex={pptxAnimationGroupIndex}
+        onAnimationGroupChange={onAnimationGroupChange}
         onActiveSlideChange={onActiveSlideChange}
         currentSlide={currentSlide}
         themeStyles={themeStyles}

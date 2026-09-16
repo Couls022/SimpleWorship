@@ -82,6 +82,17 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
       useStore.getState().setStagedGroupState(groupId || 'group-congregation', {
         activeSlideIndex: index,
         pptxAction: null,
+        pptxAnimationGroupIndex: 0,
+      });
+    }
+  }, [groupId, isProjectorMode]);
+
+  const handlePptxAnimationGroupChange = useCallback((index: number) => {
+    if (isProjectorMode) return;
+    const currentState = useStore.getState().stagedGroupStates[groupId || 'group-congregation'];
+    if (currentState?.pptxAnimationGroupIndex !== index) {
+      useStore.getState().setStagedGroupState(groupId || 'group-congregation', {
+        pptxAnimationGroupIndex: index
       });
     }
   }, [groupId, isProjectorMode]);
@@ -993,6 +1004,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     themeStyles={resolvedStyles}
                     pptxAction={presentationState.pptxAction}
                     pptxActionTimestamp={presentationState.pptxActionTimestamp}
+                    pptxAnimationGroupIndex={presentationState.pptxAnimationGroupIndex}
+                    onAnimationGroupChange={handlePptxAnimationGroupChange}
                     onActiveSlideChange={handlePptxSlideChange}
                     isProjectorMode={isProjectorMode}
                     targetWidth={targetWidth}

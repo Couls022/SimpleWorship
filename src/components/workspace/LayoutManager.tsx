@@ -52,12 +52,17 @@ export default function LayoutManager({ onOpenNewSong, onEditSong, onEditSchedul
     return outputGroups[0]?.id || 'group-1';
   })();
 
-  // Synchronize store if activeControlGroupId is not yet set
+  // Synchronize store if activeControlGroupId is not yet set or when active router changes
   useEffect(() => {
     if (!activeControlGroupId && outputGroups.length > 0) {
       setActiveControlGroupId(outputGroups[0].id);
+    } else if (activeRouterId && routerPanels.length > 0) {
+      const activeRouter = routerPanels.find(p => p.routerId === activeRouterId);
+      if (activeRouter?.targetOutputGroupId && activeRouter.targetOutputGroupId !== activeControlGroupId && outputGroups.some(g => g.id === activeRouter.targetOutputGroupId)) {
+        setActiveControlGroupId(activeRouter.targetOutputGroupId);
+      }
     }
-  }, [activeControlGroupId, outputGroups, setActiveControlGroupId]);
+  }, [activeControlGroupId, activeRouterId, routerPanels, outputGroups, setActiveControlGroupId]);
 
   // Keyboard shortcut Ctrl+\ / Cmd+\ and event listener to toggle sidebar
   useEffect(() => {

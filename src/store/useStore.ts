@@ -1338,6 +1338,17 @@ export const useStore = create<AppState>((set, get) => ({
         newState.directLiveItem = stripFileBytes(newState.directLiveItem);
       }
       const current = state.stagedGroupStates[groupId] || defaultState;
+      
+      // Auto-reset animation index when item or slide changes, unless explicitly provided
+      if (
+        (newState.activeSlideIndex !== undefined && newState.activeSlideIndex !== current.activeSlideIndex) ||
+        (newState.activeItemId !== undefined && newState.activeItemId !== current.activeItemId)
+      ) {
+        if (newState.pptxAnimationGroupIndex === undefined) {
+          newState.pptxAnimationGroupIndex = 0;
+        }
+      }
+
       const combinedState = { ...current, ...newState, timestamp: Date.now() };
 
       const isOnlyPlaybackTimeUpdate = (
@@ -1389,6 +1400,7 @@ export const useStore = create<AppState>((set, get) => ({
         videoSeekTime: combinedState.videoSeekTime,
         pptxAction: combinedState.pptxAction,
         pptxActionTimestamp: combinedState.pptxActionTimestamp,
+        pptxAnimationGroupIndex: combinedState.pptxAnimationGroupIndex,
         isBlack: combinedState.isBlack ?? false,
         isClear: combinedState.isClear ?? false,
         showLogo: combinedState.showLogo ?? false,
@@ -1452,6 +1464,7 @@ export const useStore = create<AppState>((set, get) => ({
           videoSeekTime: staged.videoSeekTime,
           pptxAction: staged.pptxAction,
           pptxActionTimestamp: staged.pptxActionTimestamp,
+          pptxAnimationGroupIndex: staged.pptxAnimationGroupIndex,
           isBlack: false,
           isClear: false,
           showLogo: staged.showLogo ?? false,
@@ -2097,6 +2110,7 @@ export const useStore = create<AppState>((set, get) => ({
           videoSeekTime: staged.videoSeekTime,
           pptxAction: staged.pptxAction,
           pptxActionTimestamp: staged.pptxActionTimestamp,
+          pptxAnimationGroupIndex: staged.pptxAnimationGroupIndex,
           isBlack: false,
           isClear: false,
           showLogo: staged.showLogo ?? false,
