@@ -189,6 +189,18 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
     msgId: payload.msgId || `${payload.type}_${now}_${Math.random().toString(36).slice(2, 7)}`
   };
 
+  // DEBUG PAYLOAD VALIDATION (Phase 10-B)
+  if (process.env.NODE_ENV === 'development' && payload.type !== 'HEARTBEAT' && payload.type !== 'HEARTBEAT_ACK') {
+    try {
+      const serialized = JSON.stringify(fullPayload);
+      const sizeKB = (serialized.length / 1024).toFixed(2);
+      const hasFileBytes = serialized.includes('"fileBytes"');
+      const hasUint8Array = serialized.includes('Uint8Array'); // Just string check on serialization for simplicity
+      const hasBase64 = serialized.length > 500000; // rough heuristic
+      console.log(`[IPC Debug] ${payload.type} | Size: ${sizeKB}KB | fileBytes: ${hasFileBytes} | largeBase64: ${hasBase64}`);
+    } catch(e) {}
+  }
+
   // 1. Post to BroadcastChannel (fast in-memory IPC with zero delay and no storage quota)
   // Send fullPayload so ArrayBuffers, TypedArrays (fileBytes), and data URLs are preserved with 1:1 fidelity across windows!
   const activeChannel = getBroadcastChannel();

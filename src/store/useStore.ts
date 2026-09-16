@@ -42,6 +42,14 @@ const scheduleGroupStatesSave = (updatedGroupStates: Record<string, any>) => {
   }, 1000);
 };
 
+function stripFileBytes(item: any): any {
+  if (!item) return item;
+  if (!item.data || item.data.fileBytes === undefined) return item;
+  const stripped = { ...item, data: { ...item.data } };
+  delete stripped.data.fileBytes;
+  return stripped;
+}
+
 const defaultShortcutSettings: ShortcutSettings = {
   arrowControlsLive: true,
   spacebarAdvancesLive: true,
@@ -1326,6 +1334,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setStagedGroupState: (groupId, newState) => {
     set((state) => {
+      if (newState.directLiveItem) {
+        newState.directLiveItem = stripFileBytes(newState.directLiveItem);
+      }
       const current = state.stagedGroupStates[groupId] || defaultState;
       const combinedState = { ...current, ...newState, timestamp: Date.now() };
 
@@ -1532,8 +1543,11 @@ export const useStore = create<AppState>((set, get) => ({
         notes: item.notes || '',
         isExpanded: false,
         customBackgroundUrl: item.customBackgroundUrl,
-        data: item.data,
+        data: item.data ? { ...item.data } : undefined,
       };
+      if (newItem.data && 'fileBytes' in newItem.data) {
+        delete newItem.data.fileBytes;
+      }
       const updatedSchedule = {
         ...state.activeSchedule,
         items: [...state.activeSchedule.items, newItem]
@@ -1570,14 +1584,14 @@ export const useStore = create<AppState>((set, get) => ({
         if (newGroupStates[groupId].activeItemId === itemId && newGroupStates[groupId].directLiveItem) {
           newGroupStates[groupId] = {
             ...newGroupStates[groupId],
-            directLiveItem: {
+            directLiveItem: stripFileBytes({
               ...newGroupStates[groupId].directLiveItem!,
               ...updates,
               data: {
                 ...(newGroupStates[groupId].directLiveItem!.data || {}),
                 ...(updates.data || {})
               }
-            }
+            })
           };
           groupsUpdated = true;
         }
@@ -1645,8 +1659,11 @@ export const useStore = create<AppState>((set, get) => ({
           notes: itemOrId.notes || '',
           isExpanded: false,
           customBackgroundUrl: itemOrId.customBackgroundUrl,
-          data: itemOrId.data,
+          data: itemOrId.data ? { ...itemOrId.data } : undefined,
         };
+        if (newItem.data && 'fileBytes' in newItem.data) {
+          delete newItem.data.fileBytes;
+        }
         if (state.activeSchedule) {
           const updatedSchedule = {
             ...state.activeSchedule,
