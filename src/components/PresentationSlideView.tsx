@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Slide, SlideObject, ThemeStyles } from '../types';
 import { resolveAssetUrl } from '../db';
 
@@ -17,10 +17,8 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
   mode = 'full',
   themeStyles,
 }) => {
-  const isThumbnail = mode === 'thumbnail';
-  
   // Clean paragraphs and bullets
-  const paragraphs = React.useMemo(() => {
+  const paragraphs = useMemo(() => {
     if (Array.isArray(slide.bullets) && slide.bullets.length > 0) {
       return slide.bullets.filter(b => typeof b === 'string' && b.trim().length > 0);
     }
@@ -43,15 +41,16 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
   );
 
   // Background styling using slide background or active theme background
-  const bgStyle: React.CSSProperties = React.useMemo(() => {
+  const bgStyle: React.CSSProperties = useMemo(() => {
     // 1. Direct slide background URL (PPTX background or custom slide background)
     const resolvedSlideBg = resolveAssetUrl(slide.backgroundUrl);
     if (resolvedSlideBg) {
       return {
         backgroundImage: `url(${resolvedSlideBg})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        backgroundSize: '100% 100%',
+        backgroundPosition: 'center center',
         backgroundRepeat: 'no-repeat',
+        backgroundColor: slide.backgroundColor || '#0F172A',
       };
     }
     // 2. Direct slide background gradient or color
@@ -61,14 +60,15 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
       }
       return { backgroundColor: slide.backgroundColor };
     }
-    // 3. Fallback to active theme background image ONLY for native song/verse slides (not PPTX decks)
-    const resolvedThemeBg = resolveAssetUrl(themeStyles?.backgroundImageUrl);
-    if (!isPptxOrDeck && resolvedThemeBg) {
+    // 3. Fallback to active theme background image ONLY for native song/verse slides
+    if (!isPptxOrDeck && themeStyles?.backgroundImageUrl) {
+      const resolvedThemeBg = resolveAssetUrl(themeStyles.backgroundImageUrl);
       return {
         backgroundImage: `url(${resolvedThemeBg})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        backgroundSize: '100% 100%',
+        backgroundPosition: 'center center',
         backgroundRepeat: 'no-repeat',
+        backgroundColor: themeStyles?.backgroundColor || '#0F172A',
       };
     }
     // 4. Fallback to active theme gradient or color ONLY for native song/verse slides
@@ -81,8 +81,8 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
         return { backgroundColor: themeStyles.backgroundColor };
       }
     }
-    // 5. Presentation default canvas
-    return { backgroundColor: '#000000' };
+    // 5. Default canvas: if PPTX slide has no explicit bg, default to clean #FFFFFF; for native blackout canvas, use #000000
+    return { backgroundColor: isPptxOrDeck ? '#FFFFFF' : '#000000' };
   }, [slide.backgroundUrl, slide.backgroundColor, themeStyles, isPptxOrDeck]);
 
   // Determine light vs dark background
@@ -91,33 +91,37 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
     (!isPptxOrDeck && themeStyles?.backgroundImageUrl) ||
     (slide.backgroundColor && (slide.backgroundColor.startsWith('#0') || slide.backgroundColor.startsWith('#1') || slide.backgroundColor.startsWith('#2') || slide.backgroundColor.toLowerCase().includes('black'))) ||
     (!isPptxOrDeck && themeStyles?.backgroundColor && (themeStyles.backgroundColor.startsWith('#0') || themeStyles.backgroundColor.startsWith('#1') || themeStyles.backgroundColor.startsWith('#2') || themeStyles.backgroundColor.toLowerCase().includes('black'))) ||
-    (!slide.backgroundColor && (isPptxOrDeck || !themeStyles?.backgroundColor))
+    (!isPptxOrDeck && !slide.backgroundColor)
   );
+
+function ensureContrast(color: string | undefined, isDark: boolean): string {
+  if (!color) return isDark ? '#FFFFFF' : '#0F172A';
+  if (color.startsWith('#')) {
+    const hex = color.replace('#', '');
+    if (hex.length === 6) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      if (isDark && luminance < 0.45) return '#FFFFFF';
+      if (!isDark && luminance > 0.85) return '#0F172A';
+    }
+  }
+  return color;
+}
 
   const titleFont = slide.titleFontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
   const bodyFont = slide.fontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
-  const titleColor = slide.titleColor || themeStyles?.fontColor || (isDarkBg ? '#FFFFFF' : '#0F172A');
-  const bodyColor = slide.fontColor || themeStyles?.fontColor || (isDarkBg ? '#E2E8F0' : '#334155');
-  const accentColor = slide.accentColor || slide.headerBarColor || (themeStyles as any)?.accentColor || '#3B82F6';
+  const titleColor = ensureContrast(slide.titleColor || themeStyles?.fontColor, isDarkBg);
+  const bodyColor = ensureContrast(slide.fontColor || themeStyles?.fontColor, isDarkBg);
+  const accentColor = slide.accentColor || slide.headerBarColor || (themeStyles as any)?.accentColor || '#38BDF8';
   const textAlign = slide.textAlign || (themeStyles?.textAlign as any) || (isTitleSlide ? 'center' : 'left');
 
   const getBaseDimensions = () => {
-    if (slide.aspectRatioLabel?.includes('4:3') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 4/3) < 0.05)) {
-      return { baseWidth: 1440, baseHeight: 1080 };
-    }
-    if (slide.aspectRatioLabel?.includes('16:10') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 16/10) < 0.05)) {
-      return { baseWidth: 1920, baseHeight: 1200 };
-    }
-    if (slide.aspectRatioLabel?.includes('21:9') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 21/9) < 0.05)) {
-      return { baseWidth: 2560, baseHeight: 1080 };
-    }
-    if (slide.aspectRatioLabel?.includes('1:1') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 1) < 0.05)) {
-      return { baseWidth: 1080, baseHeight: 1080 };
-    }
-    if (slide.aspectRatioLabel?.includes('9:16') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 9/16) < 0.05)) {
-      return { baseWidth: 1080, baseHeight: 1920 };
-    }
-    return { baseWidth: 1920, baseHeight: 1080 };
+    const ratio = slide.aspectRatio || (slide.widthEmu && slide.heightEmu && slide.heightEmu > 0 ? slide.widthEmu / slide.heightEmu : 16 / 9);
+    const baseHeight = 1080;
+    const baseWidth = Math.round(baseHeight * ratio);
+    return { baseWidth, baseHeight };
   };
 
   const { baseWidth, baseHeight } = getBaseDimensions();
@@ -125,12 +129,16 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
   const hasObjects = Array.isArray(slide.objects) && slide.objects.length > 0;
 
   return (
-    <div 
-      className="w-full h-full relative flex flex-col justify-between overflow-hidden select-none"
-      style={{ ...bgStyle, containerType: 'size' }}
-    >
-      {/* Background Overlay */}
-      {(slide.backgroundUrl || themeStyles?.backgroundImageUrl) && (
+    <div className="w-full h-full relative flex items-center justify-center overflow-hidden select-none bg-black">
+      <div 
+        className="relative flex flex-col justify-between overflow-hidden shrink-0 w-full h-full"
+        style={{
+          ...bgStyle,
+          containerType: 'size'
+        }}
+      >
+      {/* Background Overlay for native song/verse slides */}
+      {!isPptxOrDeck && (slide.backgroundUrl || themeStyles?.backgroundImageUrl) && (
         <div 
           className="absolute inset-0 z-0 pointer-events-none" 
           style={{ 
@@ -144,7 +152,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
         <div 
           className="absolute top-0 left-0 right-0 z-20"
           style={{ 
-            height: isThumbnail ? '3px' : '8px', 
+            height: '8px', 
             backgroundColor: slide.headerBarColor 
           }} 
         />
@@ -166,6 +174,8 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
             const shadowCss = style.shadowEnabled
               ? `${style.shadowOffsetX || 0}px ${style.shadowOffsetY || 4}px ${style.shadowBlur || 8}px ${style.shadowColor || 'rgba(0,0,0,0.3)'}`
               : 'none';
+
+            const objColor = ensureContrast(style.fontColor, isDarkBg);
 
             return (
               <div
@@ -190,16 +200,17 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
               >
                 {obj.type === 'text' && (
                   <div
-                    className="w-full h-full leading-relaxed break-words whitespace-pre-wrap flex flex-col"
+                    className="w-full h-full leading-relaxed break-words whitespace-pre-wrap flex flex-col antialiased"
                     style={{
                       fontFamily: style.fontFamily || titleFont,
                       fontSize: `${fontSz}cqh`,
-                      color: style.fontColor || bodyColor,
-                      fontWeight: style.fontWeight || 'normal',
+                      color: objColor,
+                      fontWeight: style.fontWeight || 'bold',
                       fontStyle: style.fontStyle || 'normal',
                       textDecoration: style.textDecoration || 'none',
                       textAlign: style.textAlign || 'left',
                       justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'center' : 'flex-start',
+                      textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none',
                     }}
                   >
                     {obj.text}
@@ -217,13 +228,14 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
 
                 {obj.type === 'shape' && (
                   <div
-                    className="w-full h-full flex items-center justify-center font-semibold text-center leading-normal"
+                    className="w-full h-full flex items-center justify-center font-semibold text-center leading-normal antialiased"
                     style={{
                       borderRadius: obj.shapeType === 'ellipse' || obj.shapeType === 'circle' ? '50%' : obj.shapeType === 'rounded-rectangle' ? '12px' : undefined,
                       backgroundColor: style.backgroundColor || accentColor,
                       color: style.fontColor || '#FFFFFF',
                       fontSize: `${fontSz}cqh`,
                       fontFamily: style.fontFamily || bodyFont,
+                      textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                     }}
                   >
                     {obj.text}
@@ -254,21 +266,18 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
         </div>
       ) : (
         /* Main Slide Content Area */
-        <div className={`relative z-10 w-full h-full flex flex-col ${
-          isThumbnail ? 'p-3' : 'p-8 md:p-12 lg:p-16'
-        } ${isTitleSlide ? 'justify-center' : 'justify-start'}`}>
+        <div className={`relative z-10 w-full h-full flex flex-col p-8 md:p-12 lg:p-16 ${isTitleSlide ? 'justify-center' : 'justify-start'}`}>
 
           {isTitleSlide ? (
             /* Title Slide Layout */
-            <div className="flex flex-col justify-center h-full max-w-5xl w-full">
+            <div className="flex flex-col justify-center h-full w-full">
               <h1 
-                className={`font-bold tracking-tight leading-tight ${
-                  isThumbnail ? 'text-xs mb-1' : 'text-3xl md:text-5xl lg:text-6xl mb-4'
-                }`}
+                className="font-bold tracking-tight leading-tight text-3xl md:text-5xl lg:text-6xl mb-4 antialiased"
                 style={{
                   fontFamily: titleFont,
                   color: titleColor,
                   textAlign: textAlign,
+                  textShadow: isDarkBg ? '0 2px 4px rgba(0,0,0,0.7)' : 'none',
                 }}
               >
                 {slide.title || 'Presentation Slide'}
@@ -276,13 +285,12 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
 
               {paragraphs.length > 0 && (
                 <div 
-                  className={`font-normal leading-relaxed ${
-                    isThumbnail ? 'text-[8.5px] mt-0.5' : 'text-base md:text-2xl mt-2 max-w-3xl'
-                  }`}
+                  className="font-normal leading-relaxed text-base md:text-2xl mt-2 antialiased"
                   style={{
                     fontFamily: bodyFont,
                     color: bodyColor,
                     textAlign: textAlign,
+                    textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
                   }}
                 >
                   {paragraphs[0]}
@@ -291,19 +299,17 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
 
               {/* Template Buttons / Badges / Shapes */}
               {slide.elements && slide.elements.length > 0 && (
-                <div className={`flex flex-wrap items-center gap-1.5 ${isThumbnail ? 'mt-1.5' : 'mt-6'}`}>
+                <div className="flex flex-wrap items-center gap-2 mt-6">
                   {slide.elements.map((elem, eIdx) => {
                     if (elem.type === 'badge') {
                       return (
                         <span
                           key={eIdx}
-                          className={`inline-flex items-center justify-center font-semibold rounded ${
-                            isThumbnail ? 'px-1.5 py-0.5 text-[7px]' : 'px-4 py-2 text-sm'
-                          }`}
+                          className="inline-flex items-center justify-center font-semibold rounded px-4 py-2 text-sm shadow-md"
                           style={{
                             backgroundColor: elem.backgroundColor || accentColor,
                             color: elem.fontColor || '#FFFFFF',
-                            borderRadius: elem.borderRadius ?? (isThumbnail ? 3 : 6),
+                            borderRadius: elem.borderRadius ?? 6,
                           }}
                         >
                           {elem.text}
@@ -316,7 +322,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
                           key={eIdx}
                           src={elem.imageUrl}
                           alt=""
-                          className={`object-contain ${isThumbnail ? 'max-h-4' : 'max-h-16'}`}
+                          className="object-contain max-h-16"
                         />
                       );
                     }
@@ -330,15 +336,14 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
             <div className="flex flex-col h-full w-full">
               {/* Slide Header */}
               {slide.title && (
-                <div className={`border-b ${isDarkBg ? 'border-white/15' : 'border-gray-200'} pb-1.5 ${isThumbnail ? 'mb-1' : 'mb-4'} flex items-center justify-between`}>
+                <div className={`border-b ${isDarkBg ? 'border-white/20' : 'border-gray-200'} pb-2 mb-4 flex items-center justify-between`}>
                   <h2 
-                    className={`font-bold tracking-tight truncate ${
-                      isThumbnail ? 'text-[10px]' : 'text-2xl md:text-3xl lg:text-4xl'
-                    }`}
+                    className="font-bold tracking-tight text-2xl md:text-3xl lg:text-4xl antialiased"
                     style={{
                       fontFamily: titleFont,
                       color: titleColor,
                       textAlign: textAlign,
+                      textShadow: isDarkBg ? '0 2px 4px rgba(0,0,0,0.7)' : 'none',
                     }}
                   >
                     {slide.title}
@@ -348,29 +353,26 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
 
               {/* Slide Body / Bullets */}
               <div 
-                className={`flex-1 flex flex-col ${isThumbnail ? 'space-y-0.5' : 'space-y-3'} overflow-hidden justify-center`}
+                className="flex-1 flex flex-col space-y-3 overflow-hidden justify-center"
                 style={{ textAlign }}
               >
                 {paragraphs.map((para, pIdx) => (
                   <div 
                     key={pIdx} 
-                    className={`flex items-start gap-1.5 ${textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex items-start gap-2 ${textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : 'justify-start'}`}
                   >
                     {slide.bullets && slide.bullets.length > 0 && (
                       <span 
-                        className={`rounded-full shrink-0 ${
-                          isThumbnail ? 'w-1 h-1 mt-1' : 'w-2 h-2 mt-2.5'
-                        }`}
+                        className="rounded-full shrink-0 w-2 h-2 mt-2.5"
                         style={{ backgroundColor: accentColor }}
                       />
                     )}
                     <p 
-                      className={`font-normal leading-relaxed ${
-                        isThumbnail ? 'text-[8px]' : 'text-sm md:text-xl'
-                      }`}
+                      className="font-normal leading-relaxed text-base md:text-xl lg:text-2xl antialiased"
                       style={{
                         fontFamily: bodyFont,
                         color: bodyColor,
+                        textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
                       }}
                     >
                       {para}
@@ -381,19 +383,17 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
 
               {/* Badges / Shapes on Content Slides */}
               {slide.elements && slide.elements.length > 0 && (
-                <div className={`flex flex-wrap items-center gap-1.5 ${isThumbnail ? 'mt-1' : 'mt-4'}`}>
+                <div className="flex flex-wrap items-center gap-2 mt-4">
                   {slide.elements.map((elem, eIdx) => {
                     if (elem.type === 'badge') {
                       return (
                         <span
                           key={eIdx}
-                          className={`inline-flex items-center justify-center font-semibold rounded ${
-                            isThumbnail ? 'px-1 py-0.5 text-[6.5px]' : 'px-3 py-1.5 text-xs'
-                          }`}
+                          className="inline-flex items-center justify-center font-semibold rounded px-3 py-1.5 text-xs shadow-md"
                           style={{
                             backgroundColor: elem.backgroundColor || accentColor,
                             color: elem.fontColor || '#FFFFFF',
-                            borderRadius: elem.borderRadius ?? (isThumbnail ? 2 : 4),
+                            borderRadius: elem.borderRadius ?? 4,
                           }}
                         >
                           {elem.text}
@@ -408,18 +408,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
           )}
         </div>
       )}
-
-      {/* Slide Footer Tag for Full mode */}
-      {!isThumbnail && totalSlides && totalSlides > 1 && (
-        <div className={`relative z-10 px-8 py-1.5 flex items-center justify-between text-xs font-mono ${
-          isDarkBg ? 'text-white/50 bg-black/20' : 'text-gray-500 bg-gray-50/80 border-t border-gray-200'
-        }`}>
-          <span>{slide.title || 'Slide'}</span>
-          <span>{slideIndex + 1} / {totalSlides}</span>
-        </div>
-      )}
+      </div>
     </div>
   );
 });
-
-PresentationSlideView.displayName = 'PresentationSlideView';

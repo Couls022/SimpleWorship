@@ -60,11 +60,19 @@ export default function PresentationsTab() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || file.size === 0) {
+      window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'Please select a valid, non-empty PowerPoint (.pptx) file.' }));
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
     
     try {
       window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Parsing PPTX: ${file.name}...` }));
       const slides = await parsePptxOffline(file);
+      if (slides.length === 0) {
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'No slides could be parsed from this PPTX file.' }));
+        return;
+      }
       await savePresentation(file.name.replace('.pptx', ''), slides, file);
       await loadPresentations();
       window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Imported ${slides.length} slides from PPTX!` }));

@@ -521,8 +521,20 @@ app.whenReady().then(() => {
 
   const notifyDisplaysChanged = async () => {
     invalidateMonitorCache();
+    const displays = await getFormattedDisplays(true);
+
+    // Reposition any active projector windows to match updated target display bounds
+    for (const [canonicalDisplayId, win] of displayWindows.entries()) {
+      if (win && !win.isDestroyed()) {
+        const matched = resolveTargetDisplay(canonicalDisplayId, displays);
+        if (matched && matched.bounds) {
+          win.setBounds(matched.bounds);
+          win.setFullScreen(true);
+        }
+      }
+    }
+
     if (mainWindow && !mainWindow.isDestroyed()) {
-      const displays = await getFormattedDisplays(true);
       mainWindow.webContents.send('displays:changed', displays);
       mainWindow.webContents.send('display:changed', { type: 'metrics-changed', displays });
     }
@@ -681,10 +693,17 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
     width: targetBounds.width,
     height: targetBounds.height,
     frame: false,
-    fullscreen: false,
+    kiosk: true,
+    fullscreen: true,
+    fullscreenable: true,
+    autoHideMenuBar: true,
     alwaysOnTop: false,
     skipTaskbar: true,
     transparent: false,
+    hasShadow: false,
+    thickFrame: false,
+    titleBarStyle: 'hidden',
+    enableLargerThanScreen: true,
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -721,6 +740,7 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
     win.setSize(targetBounds.width, targetBounds.height);
     win.setBounds(targetBounds);
     win.setFullScreen(true);
+    win.setMenuBarVisibility(false);
     if (typeof win.showInactive === 'function') {
       win.showInactive();
     } else {
@@ -851,9 +871,15 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
       height: matchedDisplay.bounds.height,
       frame: false,
       fullscreen: false,
+      fullscreenable: true,
+      autoHideMenuBar: true,
       alwaysOnTop: false,
       skipTaskbar: true,
       transparent: false,
+      hasShadow: false,
+      thickFrame: false,
+      titleBarStyle: 'hidden',
+      enableLargerThanScreen: true,
       backgroundColor: '#000000',
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
@@ -886,6 +912,7 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
     win.setSize(matchedDisplay.bounds.width, matchedDisplay.bounds.height);
     win.setBounds(matchedDisplay.bounds);
     win.setFullScreen(true);
+    win.setMenuBarVisibility(false);
     if (typeof win.showInactive === 'function') {
       win.showInactive();
     } else {

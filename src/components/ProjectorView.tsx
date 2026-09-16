@@ -234,12 +234,21 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   return (
     <div 
       data-canvas-preview="true"
-      className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center"
+      className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center m-0 p-0"
+      style={{
+        width: '100vw',
+        height: '100vh',
+        maxWidth: '100vw',
+        maxHeight: '100vh',
+        margin: 0,
+        padding: 0,
+        overflow: 'hidden'
+      }}
     >
       {/* Physical Monitor Arbitration: Render ONLY the single winning active route's canvas for this physical display */}
       {winningGroupId ? (
         <div 
-          className="absolute inset-0 pointer-events-auto z-10" 
+          className="absolute inset-0 pointer-events-auto z-10 w-full h-full m-0 p-0 overflow-hidden" 
           style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
         >
           <MonitorPreviewCanvas
@@ -253,7 +262,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         </div>
       ) : (
         /* Standby black backdrop when no routes are live */
-        <div className="absolute inset-0 z-10 bg-black pointer-events-none" />
+        <div className="absolute inset-0 z-10 bg-black pointer-events-none w-full h-full m-0 p-0" />
       )}
 
       {/* Visual Identification Overlay for connected monitors */}

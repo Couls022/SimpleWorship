@@ -43,7 +43,11 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   isThumbnail = false,
 }: MonitorPreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [containerSize, setContainerSize] = useState(() => (
+    isProjectorMode && typeof window !== 'undefined'
+      ? { width: window.innerWidth, height: window.innerHeight }
+      : { width: 0, height: 0 }
+  ));
 
   const group = useStore(useCallback(state => customGroup || state.outputGroups.find(g => g.id === groupId) || state.outputGroups[0], [customGroup, groupId]));
 
@@ -125,15 +129,14 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const slides = React.useMemo(() => {
     return activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
   }, [activeItem, songsList, systemOptions]);
-  const currentSlide = slides[presentationState.activeSlideIndex] || null;
+  const currentSlide = slides[presentationState.activeSlideIndex ?? 0] || slides[0] || null;
 
   // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
   const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays());
 
-  // If active item is a presentation with template aspect ratio, adapt to the PowerPoint template ratio
+  // Target output monitor frame is authoritative (Live Display Canvas scales the authoritative target frame proportionally)
   const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
-  const templateAspectRatio = currentSlide?.aspectRatio || activeItem?.data?.aspectRatio;
-  const aspectRatio = (isPptx && templateAspectRatio && templateAspectRatio > 0) ? templateAspectRatio : groupAspectRatio;
+  const aspectRatio = groupAspectRatio;
   const aspectLabel = (isPptx && currentSlide?.aspectRatioLabel) ? currentSlide.aspectRatioLabel : groupAspectLabel;
 
   // Track parent container dimensions via ResizeObserver with rAF throttling & size equality check
@@ -163,14 +166,22 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   }, []);
 
   // Compute fitted box dimensions with letterbox/pillarbox
-  let fittedWidth = containerSize.width || 320;
-  let fittedHeight = containerSize.height || 180;
+  const effectiveContainerW = containerSize.width > 0 ? containerSize.width : (isProjectorMode && typeof window !== 'undefined' ? window.innerWidth : 0);
+  const effectiveContainerH = containerSize.height > 0 ? containerSize.height : (isProjectorMode && typeof window !== 'undefined' ? window.innerHeight : 0);
 
-  if (containerSize.width > 0 && containerSize.height > 0) {
-    const availWidth = isProjectorMode ? containerSize.width : Math.max(containerSize.width - 4, 10);
-    const availHeight = isProjectorMode ? containerSize.height : Math.max(containerSize.height - 4, 10);
+  let fittedWidth = effectiveContainerW || 320;
+  let fittedHeight = effectiveContainerH || 180;
+
+  if (effectiveContainerW > 0 && effectiveContainerH > 0) {
+    const availWidth = isProjectorMode ? effectiveContainerW : Math.max(effectiveContainerW - 4, 10);
+    const availHeight = isProjectorMode ? effectiveContainerH : Math.max(effectiveContainerH - 4, 10);
     const containerAspect = availWidth / availHeight;
-    if (containerAspect > aspectRatio) {
+    
+    // In projector mode, if the physical monitor aspect matches the presentation aspect ratio, fill 100% edge-to-edge
+    if (isProjectorMode && Math.abs(containerAspect - aspectRatio) < 0.015) {
+      fittedWidth = availWidth;
+      fittedHeight = availHeight;
+    } else if (containerAspect > aspectRatio) {
       // Height is the constraint
       fittedHeight = availHeight;
       fittedWidth = Math.round(fittedHeight * aspectRatio);
@@ -971,7 +982,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                   <PptxRenderOverlay
                     fileBytes={activeItem?.data?.fileBytes}
                     contentId={activeItem?.contentId}
-                    activeSlideIndex={presentationState.activeSlideIndex || 0}
+                    activeSlideIndex={presentationState.activeSlideIndex ?? 0}
+                    currentSlide={currentSlide}
+                    themeStyles={resolvedStyles}
                     pptxAction={presentationState.pptxAction}
                     pptxActionTimestamp={presentationState.pptxActionTimestamp}
                     onActiveSlideChange={handlePptxSlideChange}

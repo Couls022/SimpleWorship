@@ -48,20 +48,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
   const [displayTargetId, setDisplayTargetId] = useState<string>('follow-target');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-
-  // Sync fullscreen state
-  React.useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
 
   // Determine which groupId to actually display
   const effectiveGroupId = (() => {
@@ -176,17 +163,6 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
 
   // Group resolution details
   const resInfo = resolveGroupResolution(activeGroup, systemOptions);
-
-  const handleToggleFullscreen = () => {
-    const el = document.getElementById('fixed-live-display-container');
-    if (!el) return;
-
-    if (!document.fullscreenElement) {
-      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  };
 
   return (
     <section 
@@ -311,10 +287,12 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             }
           }
         }}
-        className="flex-1 w-full h-full min-h-0 bg-[#07080b] relative flex items-center justify-center overflow-hidden p-2"
+        className="flex-1 w-full h-full min-h-0 bg-[#07080b] relative flex items-center justify-center p-2 overflow-hidden"
       >
         {/* Aspect-Ratio Box containing the MonitorPreviewCanvas */}
-        <div className="w-full h-full relative rounded-lg border border-[#1d212d] overflow-hidden shadow-2xl bg-black flex items-center justify-center">
+        <div 
+          className="relative rounded-lg border border-[#1d212d] overflow-hidden shadow-2xl bg-black flex items-center justify-center shrink-0 w-full h-full"
+        >
           <MonitorPreviewCanvas 
             groupId={effectiveGroupId} 
             showResolutionTag={false}

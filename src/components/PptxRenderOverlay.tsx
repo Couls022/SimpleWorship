@@ -5,6 +5,8 @@ import { useAnimationPlayback } from 'pptx-react-viewer/internals';
 import 'pptx-react-viewer/styles';
 import { toValidPptxUint8Array, isValidPptxBinary } from '../utils/pptxValidator';
 import { useStore } from '../store/useStore';
+import { Slide, ThemeStyles } from '../types';
+import { PresentationSlideView } from './PresentationSlideView';
 
 interface PptxRenderOverlayProps {
   fileBytes?: Uint8Array | ArrayBuffer | any;
@@ -15,10 +17,13 @@ interface PptxRenderOverlayProps {
   pptxActionTimestamp?: number;
   onActiveSlideChange?: (index: number) => void;
   activeSlideIndex: number;
+  currentSlide?: Slide | null;
+  themeStyles?: ThemeStyles;
 }
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -33,7 +38,7 @@ class PptxErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
   override render() {
     if (this.state.hasError) {
-      return null;
+      return this.props.fallback || null;
     }
     return this.props.children;
   }
@@ -48,9 +53,11 @@ interface PptxViewerInnerProps {
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
   onActiveSlideChange?: (index: number) => void;
+  currentSlide?: Slide | null;
+  themeStyles?: ThemeStyles;
 }
 
-const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange }) => {
+const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange, currentSlide, themeStyles }) => {
   const handleRef = useRef<PowerPointViewerHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lastReportedSlideRef = useRef<number>(-1);
@@ -199,33 +206,46 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     const el = containerRef.current;
     if (!el) return;
     let animationFrameId: number | null = null;
+
     const getUnscaledDimensions = () => {
-      let width = el.clientWidth || el.offsetWidth;
-      let height = el.clientHeight || el.offsetHeight;
+      const rect = el.getBoundingClientRect();
+      let width = rect.width;
+      let height = rect.height;
       if (!width || !height) {
         let parent = el.parentElement;
         while (parent && (!width || !height)) {
-          width = parent.clientWidth || parent.offsetWidth;
-          height = parent.clientHeight || parent.offsetHeight;
+          const prect = parent.getBoundingClientRect();
+          width = prect.width;
+          height = prect.height;
           parent = parent.parentElement;
         }
       }
       return { width: width > 0 ? width : 1920, height: height > 0 ? height : 1080 };
     };
 
-    const updateSize = () => {
+    const updateSize = (entries?: ResizeObserverEntry[]) => {
       if (animationFrameId !== null) return;
       animationFrameId = requestAnimationFrame(() => {
         animationFrameId = null;
         if (!el) return;
-        const dims = getUnscaledDimensions();
+        
+        let dims = { width: 0, height: 0 };
+        if (entries && entries.length > 0 && entries[0].contentRect.width > 0) {
+          dims = { 
+            width: entries[0].contentRect.width, 
+            height: entries[0].contentRect.height 
+          };
+        } else {
+          dims = getUnscaledDimensions();
+        }
+
         if (dims.width > 0 && dims.height > 0) {
-          setContainerSize(prev => (prev.width === dims.width && prev.height === dims.height ? prev : dims));
+          setContainerSize(prev => (Math.abs(prev.width - dims.width) < 1 && Math.abs(prev.height - dims.height) < 1 ? prev : dims));
         }
       });
     };
 
-    const ro = new ResizeObserver(updateSize);
+    const ro = new ResizeObserver((entries) => updateSize(entries));
     ro.observe(el);
     updateSize();
 
@@ -291,8 +311,8 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     if (handleRef.current && typeof handleRef.current.goTo === 'function') {
       try {
         if (isThumbnail) {
-          if (handleRef.current.getMode && handleRef.current.getMode() !== 'preview') {
-            handleRef.current.setMode('preview');
+          if (handleRef.current.getMode && handleRef.current.getMode() !== 'present') {
+            handleRef.current.setMode('present');
           }
           handleRef.current.goTo(activeSlideIndex);
           return;
@@ -326,10 +346,29 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
 
   const customZoom = useMemo(() => {
     if (!blocks.canvasProps?.zoom) return undefined;
-    return { ...blocks.canvasProps.zoom, editorScale: 1 };
-  }, [blocks.canvasProps?.zoom]);
+    if (isThumbnail) {
+      return blocks.canvasProps.zoom;
+    }
+    return { ...blocks.canvasProps.zoom, editorScale: targetScale };
+  }, [blocks.canvasProps?.zoom, targetScale, isThumbnail]);
+
+  const effectiveActiveSlide = useMemo(() => {
+    if (slides && slides[activeSlideIndex]) {
+      return slides[activeSlideIndex];
+    }
+    return blocks.canvasProps?.activeSlide;
+  }, [slides, activeSlideIndex, blocks.canvasProps?.activeSlide]);
 
   if (blocks.loading || blocks.error || !blocks.canvasProps) {
+    if (currentSlide) {
+      return (
+        <PresentationSlideView 
+          slide={currentSlide} 
+          slideIndex={activeSlideIndex} 
+          themeStyles={themeStyles} 
+        />
+      );
+    }
     return (
       <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs select-none">
         <div className="flex items-center gap-2">
@@ -358,34 +397,25 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
         }
       }}
     >
-      <div 
-        className="flex items-center justify-center pointer-events-none select-none origin-center shrink-0 overflow-hidden"
-        style={{
-          width: `${canvasWidth}px`,
-          height: `${canvasHeight}px`,
-          transform: `scale(${targetScale}) translateZ(0)`,
-          transformOrigin: 'center center',
-          willChange: 'transform',
-          contain: 'layout size style paint',
-        }}
-      >
-        <SlideCanvas 
-          {...blocks.canvasProps} 
-          presentationElementStates={!isThumbnail ? presentationElementStates : undefined}
-          presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
-          zoom={customZoom || blocks.canvasProps.zoom} 
-          mode={isThumbnail ? "preview" : "present"}
-          showRulers={false} 
-          showGrid={false} 
-          canEdit={false} 
-        />
-      </div>
+      <SlideCanvas 
+        {...blocks.canvasProps} 
+        activeSlide={effectiveActiveSlide}
+        presentationElementStates={!isThumbnail ? presentationElementStates : undefined}
+        presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
+        zoom={customZoom} 
+        mode="present"
+        showRulers={false} 
+        showGrid={false} 
+        canEdit={false} 
+      />
     </div>
   );
 }, (prevProps, nextProps) => {
   return (
     prevProps.activeSlideIndex === nextProps.activeSlideIndex && 
     prevProps.bytes === nextProps.bytes &&
+    prevProps.isThumbnail === nextProps.isThumbnail &&
+    prevProps.isProjectorMode === nextProps.isProjectorMode &&
     prevProps.pptxAction === nextProps.pptxAction &&
     prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp
   );
@@ -394,7 +424,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
 const pptxBytesCache = new Map<string, Uint8Array>();
 const rawBytesCache = new WeakMap<object, Uint8Array>();
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange }) => {
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange, currentSlide, themeStyles }) => {
   const [localBytes, setLocalBytes] = useState<Uint8Array | null>(() => {
     if (contentId && pptxBytesCache.has(contentId)) {
       return pptxBytesCache.get(contentId)!;
@@ -444,10 +474,41 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     return () => { isMounted = false; };
   }, [fileBytes, contentId]);
 
-  if (!localBytes) return null;
+  if (!localBytes) {
+    if (currentSlide) {
+      return (
+        <PresentationSlideView 
+          slide={currentSlide} 
+          slideIndex={activeSlideIndex} 
+          themeStyles={themeStyles} 
+        />
+      );
+    }
+    return null;
+  }
+
+  const fallbackView = currentSlide ? (
+    <PresentationSlideView 
+      slide={currentSlide} 
+      slideIndex={activeSlideIndex} 
+      themeStyles={themeStyles} 
+    />
+  ) : undefined;
+
   return (
-    <PptxErrorBoundary>
-      <PptxViewerInner bytes={localBytes} activeSlideIndex={activeSlideIndex} contentId={contentId} isThumbnail={isThumbnail} isProjectorMode={isProjectorMode} pptxAction={pptxAction} pptxActionTimestamp={pptxActionTimestamp} onActiveSlideChange={onActiveSlideChange} />
+    <PptxErrorBoundary fallback={fallbackView}>
+      <PptxViewerInner 
+        bytes={localBytes} 
+        activeSlideIndex={activeSlideIndex} 
+        contentId={contentId} 
+        isThumbnail={isThumbnail} 
+        isProjectorMode={isProjectorMode} 
+        pptxAction={pptxAction} 
+        pptxActionTimestamp={pptxActionTimestamp} 
+        onActiveSlideChange={onActiveSlideChange}
+        currentSlide={currentSlide}
+        themeStyles={themeStyles}
+      />
     </PptxErrorBoundary>
   );
 }, (prevProps, nextProps) => {
@@ -456,7 +517,9 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     prevProps.contentId === nextProps.contentId &&
     prevProps.fileBytes === nextProps.fileBytes &&
     prevProps.isThumbnail === nextProps.isThumbnail &&
+    prevProps.isProjectorMode === nextProps.isProjectorMode &&
     prevProps.pptxAction === nextProps.pptxAction &&
-    prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp
+    prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp &&
+    prevProps.currentSlide === nextProps.currentSlide
   );
 });
