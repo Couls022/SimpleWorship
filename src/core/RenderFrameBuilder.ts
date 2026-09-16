@@ -6,10 +6,29 @@ import { matchSlideLabel } from '../utils/slideLabelHelper';
 export function resolveGroupResolution(
   group: OutputGroup | undefined,
   systemOptions: SystemOptions | undefined,
-  availableDisplays?: any[]
+  availableDisplays?: any[],
+  overrideRes?: { width: number; height: number }
 ): { width: number; height: number; aspectRatio: number; aspectLabel: string; margins: { left: number; top: number; right: number; bottom: number } } {
   const defaultMargins = { left: 0, top: 0, right: 0, bottom: 0 };
   
+  if (overrideRes && overrideRes.width > 0 && overrideRes.height > 0) {
+    const ratio = overrideRes.width / overrideRes.height;
+    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${overrideRes.width}×${overrideRes.height}`;
+    
+    // Determine base margins for the override
+    let baseMargins = { left: 0, top: 0, right: 0, bottom: 0 };
+    if (systemOptions) {
+      if (group?.id === 'group-alternate' || group?.role === 'lobby') {
+        if (systemOptions.alternateOutput?.margins) baseMargins = { ...systemOptions.alternateOutput.margins };
+      } else if (group?.id === 'group-stage' || group?.role === 'confidence') {
+        if (systemOptions.foldback?.margins) baseMargins = { ...systemOptions.foldback.margins };
+      } else {
+        if (systemOptions.mainOutput?.general?.margins) baseMargins = { ...systemOptions.mainOutput.general.margins };
+      }
+    }
+    return { width: overrideRes.width, height: overrideRes.height, aspectRatio: ratio, aspectLabel: label, margins: baseMargins };
+  }
+
   if (group?.customResolution && group.customResolution.width > 0 && group.customResolution.height > 0) {
     const w = group.customResolution.width;
     const h = group.customResolution.height;
@@ -73,7 +92,8 @@ export function buildRenderFrame(
   systemOptions: SystemOptions,
   songsList: any[],
   themesList: any[],
-  availableDisplays: any[]
+  availableDisplays: any[],
+  overrideRes?: { width: number; height: number }
 ): RenderFrame | undefined {
   if (state.isBlack || state.isClear || state.showLogo) return undefined;
 
@@ -93,7 +113,7 @@ export function buildRenderFrame(
   const songFontSig = so ? `${so.labelFont?.family}_${so.labelFont?.maxSize}_${so.backdropAssetUrl || ''}` : '';
   const scriptureFontSig = sc ? `${sc.referenceFont?.family}_${sc.verseFont?.family}_${sc.backdropAssetUrl || ''}` : '';
   const altOutputSig = ao ? `${ao.feedMode}_${ao.defaultFont?.family}` : '';
-  const cacheKey = `${groupId}_${activeItem.id}_${state.activeSlideIndex || 0}_${group?.themeId || ''}_${activeItem.themeId || ''}_${group?.customResolution?.width || 0}_${availableDisplays?.length || 0}_${songFontSig}_${scriptureFontSig}_${altOutputSig}`;
+  const cacheKey = `${groupId}_${activeItem.id}_${state.activeSlideIndex || 0}_${group?.themeId || ''}_${activeItem.themeId || ''}_${group?.customResolution?.width || 0}_${overrideRes?.width || 0}_${overrideRes?.height || 0}_${availableDisplays?.length || 0}_${songFontSig}_${scriptureFontSig}_${altOutputSig}`;
   const cached = frameCache.get(cacheKey);
   if (cached) {
     return { ...cached.frame, timestamp: state.timestamp };
@@ -106,7 +126,7 @@ export function buildRenderFrame(
   const currentSlide = slides[currentSlideIndex];
   if (!currentSlide) return undefined; 
 
-  const res = resolveGroupResolution(group, systemOptions, availableDisplays);
+  const res = resolveGroupResolution(group, systemOptions, availableDisplays, overrideRes);
   
   const globalTheme = themesList.find((t: any) => t.id === 'theme-global')?.styles || ThemeEngine.getDefaultGlobalTheme();
   const groupTheme = group?.themeId ? themesList.find((t: any) => t.id === group.themeId)?.styles : undefined;

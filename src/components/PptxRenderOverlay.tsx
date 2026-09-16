@@ -19,6 +19,8 @@ interface PptxRenderOverlayProps {
   activeSlideIndex: number;
   currentSlide?: Slide | null;
   themeStyles?: ThemeStyles;
+  targetWidth?: number;
+  targetHeight?: number;
 }
 
 interface ErrorBoundaryProps {
@@ -55,15 +57,72 @@ interface PptxViewerInnerProps {
   onActiveSlideChange?: (index: number) => void;
   currentSlide?: Slide | null;
   themeStyles?: ThemeStyles;
+  targetWidth?: number;
+  targetHeight?: number;
 }
 
-const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange, currentSlide, themeStyles }) => {
+const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ 
+  bytes, 
+  activeSlideIndex, 
+  contentId,
+  isThumbnail, 
+  isProjectorMode, 
+  pptxAction, 
+  pptxActionTimestamp, 
+  onActiveSlideChange, 
+  currentSlide, 
+  themeStyles,
+  targetWidth,
+  targetHeight,
+}) => {
   const handleRef = useRef<PowerPointViewerHandle>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const roRef = useRef<ResizeObserver | null>(null);
   const lastReportedSlideRef = useRef<number>(-1);
-  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 1920, height: 1080 });
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(() => ({
+    width: targetWidth || (isThumbnail ? 280 : 1920),
+    height: targetHeight || (isThumbnail ? 158 : 1080),
+  }));
   const [slideCount, setSlideCount] = useState<number>(1);
   const [allSlidesState, setAllSlidesState] = useState<any[]>([]);
+
+  const containerCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    if (roRef.current) {
+      roRef.current.disconnect();
+      roRef.current = null;
+    }
+    containerRef.current = el;
+    if (!el) return;
+
+    // Immediately measure synchronous client rect to prevent zero-scale rendering
+    const rect = el.getBoundingClientRect();
+    const w = el.clientWidth || Math.round(rect.width);
+    const h = el.clientHeight || Math.round(rect.height);
+    if (w > 0 && h > 0) {
+      setContainerSize(prev => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+    }
+
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        setContainerSize(prev => (prev.width === Math.round(width) && prev.height === Math.round(height) ? prev : { width: Math.round(width), height: Math.round(height) }));
+      }
+    });
+
+    ro.observe(el);
+    roRef.current = ro;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (roRef.current) {
+        roRef.current.disconnect();
+        roRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSlideChange = useCallback((index: number) => {
     lastReportedSlideRef.current = index;
@@ -112,11 +171,33 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
         if (Array.isArray(hSlides) && hSlides.length > 0) return hSlides;
       } catch (e) {}
     }
-    const canvasAllSlides = (blocks.canvasProps as any)?.allSlides;
+    const canvasAllSlides = (blocks.canvasProps as any)?.allSlides || (blocks.canvasProps as any)?.slides;
     if (Array.isArray(canvasAllSlides) && canvasAllSlides.length > 0) return canvasAllSlides;
     if (blocks.canvasProps?.activeSlide) return [blocks.canvasProps.activeSlide];
     return [];
   }, [allSlidesState, blocks.canvasProps, blocks.loading]);
+
+  // Cache parsed deck data for instant reuse by all thumbnails
+  useEffect(() => {
+    if (slides.length > 0 && blocks.canvasProps && !blocks.loading && !blocks.error) {
+      const cWidth = blocks.canvasProps?.canvasSize?.width || 960;
+      const cHeight = blocks.canvasProps?.canvasSize?.height || 540;
+      const cachedDeckData: CachedPptxDeck = {
+        slides,
+        canvasProps: blocks.canvasProps,
+        canvasWidth: cWidth,
+        canvasHeight: cHeight,
+        timestamp: Date.now()
+      };
+      if (contentId) {
+        pptxDeckSharedCache.set(contentId, cachedDeckData);
+        window.dispatchEvent(new CustomEvent('simpleworship:pptx-deck-cached', { detail: { contentId } }));
+      }
+      if (bytes && typeof bytes === 'object') {
+        pptxRawDeckCache.set(bytes, cachedDeckData);
+      }
+    }
+  }, [contentId, bytes, slides, blocks.canvasProps, blocks.loading, blocks.error]);
 
   const {
     presentationElementStates,
@@ -147,116 +228,97 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     let isCancelled = false;
     let rAF1: number;
     let rAF2: number;
+    let retryCount = 0;
+    const maxRetries = 20; // Bound the retry loop to ~333ms
+    let mutationObserver: MutationObserver | null = null;
+    let hasSuccessfullySeeded = false;
 
-    try {
-      clearPresentationTimers();
-      seedSlideAnimations(activeSlideIndex);
+    const finalizeAnimations = () => {
+      if (isCancelled || hasSuccessfullySeeded) return;
+      hasSuccessfullySeeded = true;
+      if (mutationObserver) {
+        mutationObserver.disconnect();
+        mutationObserver = null;
+      }
       
       // Allow browser to paint the seeded (hidden) state before triggering entrance animations
       rAF1 = requestAnimationFrame(() => {
         if (isCancelled) return;
         rAF2 = requestAnimationFrame(() => {
           if (isCancelled) return;
-          runPresentationEntranceAnimations(activeSlideIndex);
+          try {
+            runPresentationEntranceAnimations(activeSlideIndex);
+          } catch (e) {
+            console.warn('[PptxRenderOverlay] runPresentationEntranceAnimations error:', e);
+          }
         });
       });
-    } catch (e) {
-      console.warn('[PptxRenderOverlay] seedSlideAnimations error:', e);
+    };
+
+    const attemptSeed = () => {
+      if (isCancelled || hasSuccessfullySeeded) return;
+      
+      try {
+        clearPresentationTimers();
+        seedSlideAnimations(activeSlideIndex);
+      } catch (e) {
+        console.warn('[PptxRenderOverlay] seedSlideAnimations error:', e);
+      }
+      
+      const container = containerRef.current;
+      // Check if slide DOM is populated
+      const hasContent = container && (
+        container.querySelector('[data-element-id]') !== null ||
+        container.querySelector('[data-shape-id]') !== null ||
+        container.querySelector('.slide-layer') !== null
+      );
+      
+      if (hasContent) {
+        finalizeAnimations();
+        return;
+      }
+      
+      retryCount++;
+      if (retryCount >= maxRetries) {
+        // Fallback: conclude no targets exist (e.g. blank slide or static image slide)
+        finalizeAnimations();
+      }
+    };
+    
+    // Initial attempt
+    attemptSeed();
+    
+    // If not successful immediately, set up observers
+    if (!hasSuccessfullySeeded && containerRef.current) {
+      mutationObserver = new MutationObserver(() => {
+        attemptSeed();
+      });
+      mutationObserver.observe(containerRef.current, { childList: true, subtree: true });
+      
+      // Also setup a bounded RAF loop as fallback
+      const loop = () => {
+        if (isCancelled || hasSuccessfullySeeded) return;
+        attemptSeed();
+        if (!hasSuccessfullySeeded) {
+          rAF1 = requestAnimationFrame(loop);
+        }
+      };
+      rAF1 = requestAnimationFrame(loop);
     }
     
     return () => {
       isCancelled = true;
       if (rAF1) cancelAnimationFrame(rAF1);
       if (rAF2) cancelAnimationFrame(rAF2);
+      if (mutationObserver) {
+        mutationObserver.disconnect();
+      }
       clearPresentationTimers();
     };
   }, [actualRenderedIndex, activeSlideIndex, isThumbnail, slides, seedSlideAnimations, runPresentationEntranceAnimations, clearPresentationTimers]);
 
   // Mouse wheel listener with discrete debounced stepping
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || isThumbnail || isProjectorMode) return;
-
-    let lastWheelTime = 0;
-    const handleWheel = (e: WheelEvent) => {
-      // Prevent browser default scroll and handle presentation step
-      e.preventDefault();
-      e.stopPropagation();
-
-      const now = Date.now();
-      if (now - lastWheelTime < 250) return; // 250ms debounce threshold
-
-      if (Math.abs(e.deltaY) < 10) return; // Filter micro jitters
-
-      lastWheelTime = now;
-      if (e.deltaY > 0) {
-        useStore.getState().goLiveNext();
-      } else {
-        useStore.getState().goLivePrev();
-      }
-    };
-
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', handleWheel);
-    };
-  }, [isThumbnail, isProjectorMode]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let animationFrameId: number | null = null;
-
-    const getUnscaledDimensions = () => {
-      const rect = el.getBoundingClientRect();
-      let width = rect.width;
-      let height = rect.height;
-      if (!width || !height) {
-        let parent = el.parentElement;
-        while (parent && (!width || !height)) {
-          const prect = parent.getBoundingClientRect();
-          width = prect.width;
-          height = prect.height;
-          parent = parent.parentElement;
-        }
-      }
-      return { width: width > 0 ? width : 1920, height: height > 0 ? height : 1080 };
-    };
-
-    const updateSize = (entries?: ResizeObserverEntry[]) => {
-      if (animationFrameId !== null) return;
-      animationFrameId = requestAnimationFrame(() => {
-        animationFrameId = null;
-        if (!el) return;
-        
-        let dims = { width: 0, height: 0 };
-        if (entries && entries.length > 0 && entries[0].contentRect.width > 0) {
-          dims = { 
-            width: entries[0].contentRect.width, 
-            height: entries[0].contentRect.height 
-          };
-        } else {
-          dims = getUnscaledDimensions();
-        }
-
-        if (dims.width > 0 && dims.height > 0) {
-          setContainerSize(prev => (Math.abs(prev.width - dims.width) < 1 && Math.abs(prev.height - dims.height) < 1 ? prev : dims));
-        }
-      });
-    };
-
-    const ro = new ResizeObserver((entries) => updateSize(entries));
-    ro.observe(el);
-    updateSize();
-
-    return () => {
-      ro.disconnect();
-      if (animationFrameId !== null) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
-  }, []);
-
+  
   const lastProcessedActionTsRef = useRef<number | null>(null);
 
   // Synchronized animation / slide action handler
@@ -336,21 +398,18 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
   const canvasWidth = blocks.canvasProps?.canvasSize?.width || 960;
   const canvasHeight = blocks.canvasProps?.canvasSize?.height || 540;
 
-  const targetScale = useMemo(() => {
-    const targetW = containerSize.width;
-    const targetH = containerSize.height;
-    if (!targetW || !targetH || !canvasWidth || !canvasHeight) return 1;
-    const scale = Math.min(targetW / canvasWidth, targetH / canvasHeight);
-    return Number.isFinite(scale) && scale > 0 ? scale : 1;
-  }, [containerSize.width, containerSize.height, canvasWidth, canvasHeight]);
+  const effectiveContainerW = targetWidth || (containerSize.width > 0 ? containerSize.width : (isThumbnail ? 280 : 1920));
+  const effectiveContainerH = targetHeight || (containerSize.height > 0 ? containerSize.height : (isThumbnail ? 158 : 1080));
 
   const customZoom = useMemo(() => {
-    if (!blocks.canvasProps?.zoom) return undefined;
-    if (isThumbnail) {
-      return blocks.canvasProps.zoom;
+    let scale = 1;
+    if (effectiveContainerW > 0 && effectiveContainerH > 0 && canvasWidth > 0 && canvasHeight > 0) {
+      scale = Math.min(effectiveContainerW / canvasWidth, effectiveContainerH / canvasHeight);
     }
-    return { ...blocks.canvasProps.zoom, editorScale: targetScale };
-  }, [blocks.canvasProps?.zoom, targetScale, isThumbnail]);
+    
+    if (!blocks.canvasProps?.zoom) return { editorScale: scale } as any;
+    return { ...blocks.canvasProps.zoom, editorScale: scale };
+  }, [blocks.canvasProps?.zoom, effectiveContainerW, effectiveContainerH, canvasWidth, canvasHeight]);
 
   const effectiveActiveSlide = useMemo(() => {
     if (slides && slides[activeSlideIndex]) {
@@ -359,30 +418,10 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     return blocks.canvasProps?.activeSlide;
   }, [slides, activeSlideIndex, blocks.canvasProps?.activeSlide]);
 
-  if (blocks.loading || blocks.error || !blocks.canvasProps) {
-    if (currentSlide) {
-      return (
-        <PresentationSlideView 
-          slide={currentSlide} 
-          slideIndex={activeSlideIndex} 
-          themeStyles={themeStyles} 
-        />
-      );
-    }
-    return (
-      <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs select-none">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-          <span>Rendering Presentation Slide...</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div 
-      ref={containerRef} 
-      className="w-full h-full bg-black overflow-hidden relative flex items-center justify-center select-none pptx-strict-typography cursor-pointer"
+      ref={containerCallbackRef} 
+      className="w-full h-full bg-black overflow-hidden relative flex flex-col items-center justify-center select-none pptx-strict-typography cursor-pointer"
       style={{
         contain: 'strict',
         transform: 'translateZ(0)',
@@ -397,17 +436,34 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
         }
       }}
     >
-      <SlideCanvas 
-        {...blocks.canvasProps} 
-        activeSlide={effectiveActiveSlide}
-        presentationElementStates={!isThumbnail ? presentationElementStates : undefined}
-        presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
-        zoom={customZoom} 
-        mode="present"
-        showRulers={false} 
-        showGrid={false} 
-        canEdit={false} 
-      />
+      {blocks.loading || blocks.error || !blocks.canvasProps ? (
+        currentSlide ? (
+          <PresentationSlideView 
+            slide={currentSlide} 
+            slideIndex={activeSlideIndex} 
+            themeStyles={themeStyles} 
+          />
+        ) : (
+          <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs select-none">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              <span>Rendering Presentation Slide...</span>
+            </div>
+          </div>
+        )
+      ) : (
+        <SlideCanvas 
+          {...blocks.canvasProps} 
+          activeSlide={effectiveActiveSlide}
+          presentationElementStates={!isThumbnail ? presentationElementStates : undefined}
+          presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
+          zoom={customZoom} 
+          mode="present"
+          showRulers={false} 
+          showGrid={false} 
+          canEdit={false} 
+        />
+      )}
     </div>
   );
 }, (prevProps, nextProps) => {
@@ -416,6 +472,8 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({ bytes, act
     prevProps.bytes === nextProps.bytes &&
     prevProps.isThumbnail === nextProps.isThumbnail &&
     prevProps.isProjectorMode === nextProps.isProjectorMode &&
+    prevProps.targetWidth === nextProps.targetWidth &&
+    prevProps.targetHeight === nextProps.targetHeight &&
     prevProps.pptxAction === nextProps.pptxAction &&
     prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp
   );
@@ -458,7 +516,144 @@ class LRUCache<K, V> {
 const pptxBytesCache = new LRUCache<string, Uint8Array>(5);
 const rawBytesCache = new WeakMap<object, Uint8Array>();
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange, currentSlide, themeStyles }) => {
+export interface CachedPptxDeck {
+  slides: any[];
+  canvasProps: any;
+  canvasWidth: number;
+  canvasHeight: number;
+  timestamp: number;
+}
+
+export const pptxDeckSharedCache = new Map<string, CachedPptxDeck>();
+export const pptxRawDeckCache = new WeakMap<object, CachedPptxDeck>();
+
+const PptxDirectThumbnail: React.FC<{
+  cachedDeck: CachedPptxDeck;
+  slideIndex: number;
+  targetWidth?: number;
+  targetHeight?: number;
+  currentSlide?: Slide | null;
+  themeStyles?: ThemeStyles;
+}> = React.memo(({ cachedDeck, slideIndex, targetWidth, targetHeight, currentSlide, themeStyles }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(() => ({
+    width: targetWidth || 280,
+    height: targetHeight || 158,
+  }));
+
+  const containerCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const w = el.clientWidth || Math.round(rect.width);
+    const h = el.clientHeight || Math.round(rect.height);
+    if (w > 0 && h > 0) {
+      setContainerSize(prev => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const w = Math.round(entry.contentRect.width);
+      const h = Math.round(entry.contentRect.height);
+      if (w > 0 && h > 0) {
+        setContainerSize(prev => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const targetSlide = (cachedDeck.slides && cachedDeck.slides[slideIndex]) || cachedDeck.slides?.[0] || cachedDeck.canvasProps?.activeSlide;
+  const cWidth = cachedDeck.canvasWidth || 960;
+  const cHeight = cachedDeck.canvasHeight || 540;
+
+  const effectiveContainerW = targetWidth || (containerSize.width > 0 ? containerSize.width : 280);
+  const effectiveContainerH = targetHeight || (containerSize.height > 0 ? containerSize.height : 158);
+
+  const customZoom = useMemo(() => {
+    let scale = 0.3;
+    if (effectiveContainerW > 0 && effectiveContainerH > 0 && cWidth > 0 && cHeight > 0) {
+      scale = Math.min(effectiveContainerW / cWidth, effectiveContainerH / cHeight);
+    }
+    if (!cachedDeck.canvasProps?.zoom) return { editorScale: scale } as any;
+    return { ...cachedDeck.canvasProps.zoom, editorScale: scale };
+  }, [cachedDeck.canvasProps?.zoom, effectiveContainerW, effectiveContainerH, cWidth, cHeight]);
+
+  if (!targetSlide) {
+    if (currentSlide) {
+      return (
+        <PresentationSlideView
+          slide={currentSlide}
+          slideIndex={slideIndex}
+          themeStyles={themeStyles}
+        />
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div
+      ref={containerCallbackRef}
+      className="w-full h-full bg-black overflow-hidden relative flex flex-col items-center justify-center select-none pointer-events-none pptx-strict-typography"
+      style={{
+        contain: 'strict',
+        transform: 'translateZ(0)',
+      }}
+    >
+      <SlideCanvas
+        {...cachedDeck.canvasProps}
+        activeSlide={targetSlide}
+        zoom={customZoom}
+        mode="present"
+        showRulers={false}
+        showGrid={false}
+        canEdit={false}
+      />
+    </div>
+  );
+});
+
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, onActiveSlideChange, currentSlide, themeStyles, targetWidth, targetHeight }) => {
+  const [cachedDeck, setCachedDeck] = useState<CachedPptxDeck | null>(() => {
+    if (contentId && pptxDeckSharedCache.has(contentId)) {
+      return pptxDeckSharedCache.get(contentId)!;
+    }
+    if (fileBytes && typeof fileBytes === 'object' && pptxRawDeckCache.has(fileBytes)) {
+      return pptxRawDeckCache.get(fileBytes)!;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (contentId && pptxDeckSharedCache.has(contentId)) {
+      setCachedDeck(pptxDeckSharedCache.get(contentId)!);
+      return;
+    }
+    if (fileBytes && typeof fileBytes === 'object' && pptxRawDeckCache.has(fileBytes)) {
+      setCachedDeck(pptxRawDeckCache.get(fileBytes)!);
+      return;
+    }
+
+    const handleDeckCached = (e: Event) => {
+      const customEvent = e as CustomEvent<{ contentId: string }>;
+      if (contentId && customEvent.detail?.contentId === contentId) {
+        if (pptxDeckSharedCache.has(contentId)) {
+          setCachedDeck(pptxDeckSharedCache.get(contentId)!);
+        }
+      }
+    };
+    window.addEventListener('simpleworship:pptx-deck-cached', handleDeckCached);
+    return () => {
+      window.removeEventListener('simpleworship:pptx-deck-cached', handleDeckCached);
+    };
+  }, [contentId, fileBytes]);
+
   const [localBytes, setLocalBytes] = useState<Uint8Array | null>(() => {
     if (contentId && pptxBytesCache.has(contentId)) {
       return pptxBytesCache.get(contentId)!;
@@ -508,6 +703,20 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     return () => { isMounted = false; };
   }, [fileBytes, contentId]);
 
+  // If this is a thumbnail and we have the shared deck cached, render PptxDirectThumbnail
+  if (isThumbnail && cachedDeck) {
+    return (
+      <PptxDirectThumbnail
+        cachedDeck={cachedDeck}
+        slideIndex={activeSlideIndex}
+        targetWidth={targetWidth}
+        targetHeight={targetHeight}
+        currentSlide={currentSlide}
+        themeStyles={themeStyles}
+      />
+    );
+  }
+
   if (!localBytes) {
     if (currentSlide) {
       return (
@@ -542,6 +751,8 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
         onActiveSlideChange={onActiveSlideChange}
         currentSlide={currentSlide}
         themeStyles={themeStyles}
+        targetWidth={targetWidth}
+        targetHeight={targetHeight}
       />
     </PptxErrorBoundary>
   );
@@ -552,6 +763,8 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     prevProps.fileBytes === nextProps.fileBytes &&
     prevProps.isThumbnail === nextProps.isThumbnail &&
     prevProps.isProjectorMode === nextProps.isProjectorMode &&
+    prevProps.targetWidth === nextProps.targetWidth &&
+    prevProps.targetHeight === nextProps.targetHeight &&
     prevProps.pptxAction === nextProps.pptxAction &&
     prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp &&
     prevProps.currentSlide === nextProps.currentSlide

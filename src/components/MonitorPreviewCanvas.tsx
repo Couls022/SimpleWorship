@@ -131,13 +131,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   }, [activeItem, songsList, systemOptions]);
   const currentSlide = slides[presentationState.activeSlideIndex ?? 0] || slides[0] || null;
 
-  // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
-  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays());
-
-  // Target output monitor frame is authoritative (Live Display Canvas scales the authoritative target frame proportionally)
-  const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
-  const aspectRatio = groupAspectRatio;
-  const aspectLabel = (isPptx && currentSlide?.aspectRatioLabel) ? currentSlide.aspectRatioLabel : groupAspectLabel;
+  
 
   // Track parent container dimensions via ResizeObserver with rAF throttling & size equality check
   useEffect(() => {
@@ -168,6 +162,18 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   // Compute fitted box dimensions with letterbox/pillarbox
   const effectiveContainerW = containerSize.width > 0 ? containerSize.width : (isProjectorMode && typeof window !== 'undefined' ? window.innerWidth : 0);
   const effectiveContainerH = containerSize.height > 0 ? containerSize.height : (isProjectorMode && typeof window !== 'undefined' ? window.innerHeight : 0);
+
+  const overrideRes = React.useMemo(() => (isProjectorMode && effectiveContainerW > 0 && effectiveContainerH > 0 
+    ? { width: effectiveContainerW, height: effectiveContainerH } 
+    : undefined), [isProjectorMode, effectiveContainerW, effectiveContainerH]);
+
+  // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
+  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = React.useMemo(() => resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays(), overrideRes), [group, systemOptions, overrideRes]);
+
+  // Target output monitor frame is authoritative (Live Display Canvas scales the authoritative target frame proportionally)
+  const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
+  const aspectRatio = groupAspectRatio;
+  const aspectLabel = (isPptx && currentSlide?.aspectRatioLabel) ? currentSlide.aspectRatioLabel : groupAspectLabel;
 
   let fittedWidth = effectiveContainerW || 320;
   let fittedHeight = effectiveContainerH || 180;
@@ -973,10 +979,10 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             {!presentationState.isClear && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && !activeItem?.data?.isNativeRasterized && (
               <motion.div 
                 key={`preview-pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}`}
-                initial={motionConfig.initial}
-                animate={motionConfig.animate}
-                exit={motionConfig.exit}
-                transition={motionConfig.transition}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
                 className="absolute inset-0 z-10 w-full h-full overflow-hidden"
               >
                   <PptxRenderOverlay
@@ -989,6 +995,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     pptxActionTimestamp={presentationState.pptxActionTimestamp}
                     onActiveSlideChange={handlePptxSlideChange}
                     isProjectorMode={isProjectorMode}
+                    targetWidth={targetWidth}
+                    targetHeight={targetHeight}
                   />
               </motion.div>
             )}
@@ -996,7 +1004,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
           {/* Slide Content Layer with Margins for Songs, Scriptures, Announcements */}
           {(() => {
-            const computedRenderFrame = presentationState.renderFrame || buildRenderFrame(
+            const computedRenderFrame = (isProjectorMode ? undefined : presentationState.renderFrame) || buildRenderFrame(
               groupId,
               presentationState,
               activeSchedule,
@@ -1004,7 +1012,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
               systemOptions,
               songsList,
               themesList,
-              DisplayManager.getCachedDisplays()
+              DisplayManager.getCachedDisplays(),
+              overrideRes
             );
             if (computedRenderFrame) {
               lastValidFrameRef.current = computedRenderFrame;

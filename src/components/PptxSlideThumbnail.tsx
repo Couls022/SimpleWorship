@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { Slide, PresentationItem, ThemeStyles } from '../types';
+import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
 import { getCachedPptxSlides, getOrParsePptxSlides } from '../utils/pptxParser';
 import { getDB } from '../db';
@@ -23,8 +24,7 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
   const [hasIntersected, setHasIntersected] = useState(false);
   const [asyncSlide, setAsyncSlide] = useState<Slide | null>(null);
 
-  const contentId = liveItem?.contentId || (slide as any).presentationId || (slide as any).deckId;
-  const fileBytes = liveItem?.data?.fileBytes;
+  const contentId = liveItem?.contentId || (slide as any).presentationId || (slide as any).deckId || liveItem?.id;
 
   // 1. Check if full parsed slide is already in memory cache or in slide prop
   const currentSlide = useMemo(() => {
@@ -58,6 +58,7 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
         observer.disconnect();
       }
     }, { rootMargin: "300px" });
+
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -108,9 +109,9 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
       }}
     >
       {hasIntersected ? (
-        <div className="w-full h-full relative overflow-hidden flex items-center justify-center shrink-0">
+        <div className="w-full h-full relative overflow-hidden flex items-center justify-center shrink-0 pointer-events-none">
           <PptxRenderOverlay
-            fileBytes={fileBytes}
+            fileBytes={liveItem?.data?.fileBytes}
             contentId={contentId}
             activeSlideIndex={slideIndex}
             isThumbnail={true}
