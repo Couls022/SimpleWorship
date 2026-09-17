@@ -131,11 +131,21 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
   }, []);
 
   const initialSyncComplete = useRef(false);
-  const lastGoToTs = useRef(0);
+  const targetSlideLock = useRef<{ index: number, ts: number } | null>(null);
 
   const handleSlideChange = useCallback((index: number) => {
     if (!initialSyncComplete.current) return;
-    if (Date.now() - lastGoToTs.current < 800) return; // Ignore stale worker messages right after a goTo
+
+    if (targetSlideLock.current) {
+      const isStale = Date.now() - targetSlideLock.current.ts > 1000;
+      if (index === targetSlideLock.current.index || isStale) {
+        // Lock resolved deterministically or timed out
+        targetSlideLock.current = null;
+      } else {
+        // Ignore spurious events from the worker while it is seeking to our target
+        return;
+      }
+    }
 
     if (lastReportedSlideRef.current === index) return;
     lastReportedSlideRef.current = index;
@@ -394,7 +404,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
           if (handleRef.current.getMode && handleRef.current.getMode() !== 'present') {
             handleRef.current.setMode('present');
           }
-          lastGoToTs.current = Date.now();
+          targetSlideLock.current = { index: activeSlideIndex, ts: Date.now() };
           handleRef.current.goTo(activeSlideIndex);
           initialSyncComplete.current = true;
           return;
@@ -411,7 +421,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
         }
 
         if (lastReportedSlideRef.current !== activeSlideIndex || !initialSyncComplete.current) {
-          lastGoToTs.current = Date.now();
+          targetSlideLock.current = { index: activeSlideIndex, ts: Date.now() };
           handleRef.current.goTo(activeSlideIndex);
           lastReportedSlideRef.current = activeSlideIndex;
         }

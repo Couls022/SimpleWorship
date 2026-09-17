@@ -379,7 +379,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
   const isOverlayGroup = isOverlayLayer !== undefined
     ? Boolean(isProjectorMode && isOverlayLayer)
-    : Boolean(isProjectorMode && group?.id !== 'group-congregation' && group?.role !== 'primary');
+    : false; // Never implicitly assume overlay unless explicitly declared
 
   // If this group acts as an overlay on the projector (e.g. R2, R3, R4...), suppress default background images/colors
   // unless the item or slide explicitly specifies a custom background!
@@ -719,8 +719,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
             background: isGradient 
               ? gradientVal 
-              : isProjectorMode
-                ? (resolvedStyles.backgroundColor && resolvedStyles.backgroundColor !== '#000000' ? resolvedStyles.backgroundColor : 'transparent')
+              : isOverlayGroup
+                ? 'transparent'
                 : (resolvedStyles.backgroundColor || '#000000'),
           }}
         >
@@ -802,9 +802,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     style={{ 
                       backgroundColor: isOverlayGroup
                         ? 'transparent'
-                        : isProjectorMode
-                          ? (resolvedStyles.backgroundColor && resolvedStyles.backgroundColor !== '#000000' ? resolvedStyles.backgroundColor : 'transparent')
-                          : (resolvedStyles.backgroundColor || '#000000') 
+                        : (resolvedStyles.backgroundColor || '#000000') 
                     }} 
                   />
                 )}
