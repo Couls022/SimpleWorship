@@ -130,17 +130,19 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
     };
   }, []);
 
+  const initialSyncComplete = useRef(false);
+  const lastGoToTs = useRef(0);
+
   const handleSlideChange = useCallback((index: number) => {
+    if (!initialSyncComplete.current) return;
+    if (Date.now() - lastGoToTs.current < 800) return; // Ignore stale worker messages right after a goTo
+
+    if (lastReportedSlideRef.current === index) return;
     lastReportedSlideRef.current = index;
-    if (handleRef.current && typeof handleRef.current.goTo === 'function') {
-      try {
-        handleRef.current.goTo(index);
-      } catch (e) {
-        console.warn('[PptxViewerInner] goTo error:', e);
-      }
-    }
+
+    if (isProjectorMode) return; // Prevent projector from emitting state back to moderator
     onActiveSlideChange?.(index);
-  }, [onActiveSlideChange]);
+  }, [onActiveSlideChange, isProjectorMode]);
 
   const handleSlideCountChange = useCallback((count: number) => {
     if (count > 0) {
@@ -392,7 +394,14 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
           if (handleRef.current.getMode && handleRef.current.getMode() !== 'present') {
             handleRef.current.setMode('present');
           }
+          lastGoToTs.current = Date.now();
           handleRef.current.goTo(activeSlideIndex);
+          initialSyncComplete.current = true;
+          return;
+        }
+
+        // Wait until fully loaded before setting initialSyncComplete or syncing
+        if (blocks.loading || !slides || slides.length === 0 || actualRenderedIndex === -1) {
           return;
         }
 
@@ -401,15 +410,17 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
           handleRef.current.setMode('present');
         }
 
-        if (lastReportedSlideRef.current !== activeSlideIndex) {
+        if (lastReportedSlideRef.current !== activeSlideIndex || !initialSyncComplete.current) {
+          lastGoToTs.current = Date.now();
           handleRef.current.goTo(activeSlideIndex);
           lastReportedSlideRef.current = activeSlideIndex;
         }
+        initialSyncComplete.current = true;
       } catch (e) {
         console.warn('[PptxViewerInner] goTo slide index error:', e);
       }
     }
-  }, [activeSlideIndex, blocks.loading, isThumbnail]);
+  }, [activeSlideIndex, blocks.loading, isThumbnail, slides, actualRenderedIndex]);
 
   const canvasWidth = blocks.canvasProps?.canvasSize?.width || 960;
   const canvasHeight = blocks.canvasProps?.canvasSize?.height || 540;
