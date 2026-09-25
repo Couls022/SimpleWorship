@@ -33,6 +33,7 @@ import NewScheduleModal from './NewScheduleModal';
 import OpenScheduleModal from './OpenScheduleModal';
 import WebBrowserModal from './WebBrowserModal';
 import RemoteControlModal from './RemoteControlModal';
+import { FontScannerModal } from './modals/FontScannerModal';
 import { Song, PresentationItem, Asset } from '../types';
 import { PresentationEditorModal } from './PresentationEditorModal';
 import { matchesShortcut, DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
@@ -49,8 +50,10 @@ export default function ModeratorView() {
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isTimersOpen, setIsTimersOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState<'Main Output' | 'Alternate Output' | 'Foldback' | 'Service Intervals' | 'Slide Labels' | 'Appearance' | 'Font Cache' | 'Advanced'>('Main Output');
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [diagnosticsInitialTab, setDiagnosticsInitialTab] = useState<'hardware' | 'gpu-diag' | 'fonts' | 'server' | 'storage' | 'broadcaster' | 'remote'>('hardware');
   const [isSongEditorOpen, setIsSongEditorOpen] = useState(false);
   const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
   const [isNewScheduleOpen, setIsNewScheduleOpen] = useState(false);
@@ -58,6 +61,12 @@ export default function ModeratorView() {
   const [isWebBrowserOpen, setIsWebBrowserOpen] = useState(false);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [isRemoteControlOpen, setIsRemoteControlOpen] = useState(false);
+  const [isFontScannerOpen, setIsFontScannerOpen] = useState(false);
+  const [fontScannerProps, setFontScannerProps] = useState<{
+    presentationName?: string;
+    scanResult?: any;
+    autoTriggered?: boolean;
+  }>({});
   const [editingSong, setEditingSong] = useState<Song | null>(null);
   const [editingScheduleItem, setEditingScheduleItem] = useState<PresentationItem | null>(null);
   const [isPresentationEditorOpen, setIsPresentationEditorOpen] = useState(false);
@@ -65,7 +74,7 @@ export default function ModeratorView() {
   const [editingSchedulePresentationItem, setEditingSchedulePresentationItem] = useState<PresentationItem | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
-  // Global listener for opening presentation editor
+  // Global listener for opening presentation editor and settings
   useEffect(() => {
     const handleOpenPresentationEditor = (e: CustomEvent) => {
       if (e.detail?.presentation) {
@@ -77,9 +86,29 @@ export default function ModeratorView() {
       setIsPresentationEditorOpen(true);
     };
 
+    const handleOpenDiagnostics = (e: CustomEvent) => {
+      if (e.detail?.tab) {
+        setDiagnosticsInitialTab(e.detail.tab);
+      }
+      setIsDiagnosticsOpen(true);
+    };
+
+    const handleOpenSettings = (e: CustomEvent) => {
+      if (e.detail?.category) {
+        setSettingsCategory(e.detail.category);
+      } else {
+        setSettingsCategory('Main Output');
+      }
+      setIsSettingsOpen(true);
+    };
+
     window.addEventListener('simpleworship:open-presentation-editor' as any, handleOpenPresentationEditor);
+    window.addEventListener('simpleworship:open-diagnostics' as any, handleOpenDiagnostics);
+    window.addEventListener('simpleworship:open-settings' as any, handleOpenSettings);
     return () => {
       window.removeEventListener('simpleworship:open-presentation-editor' as any, handleOpenPresentationEditor);
+      window.removeEventListener('simpleworship:open-diagnostics' as any, handleOpenDiagnostics);
+      window.removeEventListener('simpleworship:open-settings' as any, handleOpenSettings);
     };
   }, []);
 
@@ -158,6 +187,14 @@ export default function ModeratorView() {
     };
 
     const handleOpenDiagnostics = () => setIsDiagnosticsOpen(true);
+    const handleOpenFontInstaller = (e: any) => {
+      setFontScannerProps({
+        presentationName: e.detail?.presentationName || 'Presentation',
+        scanResult: e.detail?.scanResult || null,
+        autoTriggered: Boolean(e.detail?.autoTriggered),
+      });
+      setIsFontScannerOpen(true);
+    };
     const handlePptxClick = () => {
       useStore.getState().goLiveNext(); // Steps through slide animations first, then advances when exhausted
     };
@@ -165,11 +202,13 @@ export default function ModeratorView() {
     window.addEventListener('simpleworship:notify', handleNotification);
     window.addEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
     window.addEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
+    window.addEventListener('simpleworship:open-font-installer', handleOpenFontInstaller as EventListener);
     window.addEventListener('simpleworship:pptx-click', handlePptxClick as EventListener);
     return () => {
       window.removeEventListener('simpleworship:notify', handleNotification);
       window.removeEventListener('simpleworship:identify-displays', handleIdentifyDisplays);
       window.removeEventListener('simpleworship:open-diagnostics', handleOpenDiagnostics);
+      window.removeEventListener('simpleworship:open-font-installer', handleOpenFontInstaller as EventListener);
       window.removeEventListener('simpleworship:pptx-click', handlePptxClick as EventListener);
     };
   }, [resetLayout]);
@@ -605,7 +644,13 @@ export default function ModeratorView() {
       )}
 
       {isSettingsOpen && (
-        <OptionsDialog onClose={() => setIsSettingsOpen(false)} />
+        <OptionsDialog
+          initialCategory={settingsCategory}
+          onClose={() => {
+            setIsSettingsOpen(false);
+            setSettingsCategory('Main Output');
+          }}
+        />
       )}
 
       {isSongEditorOpen && (
@@ -654,7 +699,21 @@ export default function ModeratorView() {
 
       {/* 5. System Architecture Diagnostics Modal */}
       {isDiagnosticsOpen && (
-        <SystemDiagnosticsModal onClose={() => setIsDiagnosticsOpen(false)} />
+        <SystemDiagnosticsModal 
+          initialTab={diagnosticsInitialTab}
+          onClose={() => setIsDiagnosticsOpen(false)} 
+        />
+      )}
+
+      {/* 6. Active Font Scanner & 1-Click Installer Modal */}
+      {isFontScannerOpen && (
+        <FontScannerModal
+          isOpen={isFontScannerOpen}
+          onClose={() => setIsFontScannerOpen(false)}
+          presentationName={fontScannerProps.presentationName}
+          initialScanResult={fontScannerProps.scanResult}
+          autoTriggered={fontScannerProps.autoTriggered}
+        />
       )}
 
       {/* 7. Toast Notification */}

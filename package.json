@@ -52,38 +52,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.7.2",
-    "vite": "^6.4.3"
-  },
-  "build": {
-    "appId": "com.simpleworship.app",
-    "productName": "SimpleWorship",
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "package.json"
-    ],
-    "fileAssociations": [
-      {
-        "ext": "sws",
-        "name": "SimpleWorship Schedule",
-        "description": "SimpleWorship Presentation Schedule File",
-        "role": "Editor"
-      }
-    ],
-    "win": {
-      "target": "nsis",
-      "icon": "public/branding/logo/SimpleWorship.ico",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "SimpleWorship"
-    }
+    "vite": "^6.4.3",
+    "vitest": "^5.0.1"
   }
 }

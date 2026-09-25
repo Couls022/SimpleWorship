@@ -14,6 +14,7 @@ import { readSwsFile } from './services/swsService';
 import { useStore } from './store/useStore';
 import { applyAppearanceSettings, initSystemThemeListener } from './utils/themeManager';
 import { hardwareProfile } from './core/HardwareProfile';
+import { initAndLoadStoredFonts } from './utils/fontStorage';
 
 export default function App() {
   const [isReady, setIsReady] = useState(true);
@@ -66,8 +67,9 @@ export default function App() {
   const groupId = rawGroupId;
 
   useEffect(() => {
-    // 1. Init IndexedDB in background
+    // 1. Init IndexedDB in background & hydrate saved custom fonts
     getDB().catch((e) => console.warn('[App] DB init warning:', e));
+    initAndLoadStoredFonts().catch((e) => console.warn('[App] Font hydration warning:', e));
     
     // 2. Init Broadcast Channel
     initSync(isProjector);

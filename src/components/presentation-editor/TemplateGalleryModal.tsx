@@ -1,5 +1,5 @@
 import { withPortal } from '../common/withPortal';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   X,
   Type,
@@ -18,10 +18,15 @@ import {
   Sparkles,
   Award,
   Layers,
-  MessageSquare
+  MessageSquare,
+  FileUp,
+  FileText,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import { Slide, SlideObject } from '../../types';
 import { PresentationSlideView } from '../PresentationSlideView';
+import { parsePptxOffline } from '../../utils/pptxParser';
 
 interface TemplateGalleryModalProps {
   onClose: () => void;
@@ -753,11 +758,83 @@ function TemplateGalleryModalBase({
   onClose,
   onSelectTemplate,
 }: TemplateGalleryModalProps) {
-  const [activeCategory, setActiveCategory] = useState<'all' | 'general' | 'church' | 'media'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'general' | 'church' | 'media' | 'pptx'>('all');
+  const [pptxTemplates, setPptxTemplates] = useState<TemplateDefinition[]>([]);
+  const [isImportingPptx, setIsImportingPptx] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = TEMPLATE_DEFINITIONS.filter(
-    (t) => activeCategory === 'all' || t.category === activeCategory
-  );
+  const handlePptxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await processPptxFileForTemplates(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const processPptxFileForTemplates = async (file: File) => {
+    setIsImportingPptx(true);
+    setImportStatus(`Auto-detecting & parsing PPTX: ${file.name}...`);
+    try {
+      // Proactive Typography scan
+      try {
+        const { scanPptxFontsDetailed } = await import('../../utils/pptxFontManager');
+        const fontScan = await scanPptxFontsDetailed(file);
+        if (fontScan.missingFonts.length > 0) {
+          window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
+            detail: {
+              presentationName: file.name.replace(/\.pptx?$/i, ''),
+              scanResult: fontScan,
+              autoTriggered: true,
+            }
+          }));
+          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+            detail: `⚠️ May ${fontScan.missingFonts.length} font na wala sa iyong device. Bukas ang 1-Click Download & Install.`
+          }));
+        } else if (fontScan.allFonts.length > 0) {
+          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+            detail: `✓ Lahat ng ${fontScan.allFonts.length} fonts sa "${file.name}" ay nade-detect sa iyong device!`
+          }));
+        }
+      } catch {}
+
+      const parsedSlides = await parsePptxOffline(file);
+      if (!parsedSlides || parsedSlides.length === 0) {
+        setImportStatus('No slides found in the PPTX file.');
+        setIsImportingPptx(false);
+        return;
+      }
+
+      const newTemplates: TemplateDefinition[] = parsedSlides.map((slide, idx) => ({
+        id: `pptx-tmpl-${Date.now()}-${idx}`,
+        category: 'general' as const, // For internal type alignment
+        title: slide.title?.trim() || `Slide ${idx + 1} (${file.name.replace(/\.pptx?$/i, '')})`,
+        description: `Imported from ${file.name} • ${slide.objects?.length || 0} objects with auto-detected layout & typography`,
+        icon: <FileText size={16} className="text-amber-400" />,
+        slide: {
+          ...slide,
+          id: `slide-pptx-tmpl-${Date.now()}-${idx}`,
+        },
+      }));
+
+      setPptxTemplates(newTemplates);
+      setActiveCategory('pptx');
+      setImportStatus(`Successfully adopted ${newTemplates.length} slide(s) from ${file.name}!`);
+      setTimeout(() => setImportStatus(null), 4000);
+    } catch (err: any) {
+      console.error('Failed to import PPTX template:', err);
+      setImportStatus(`Failed to parse PPTX: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsImportingPptx(false);
+    }
+  };
+
+  const allTemplates = [...pptxTemplates, ...TEMPLATE_DEFINITIONS];
+
+  const filtered = activeCategory === 'pptx'
+    ? pptxTemplates
+    : activeCategory === 'all'
+    ? allTemplates
+    : TEMPLATE_DEFINITIONS.filter((t) => t.category === activeCategory);
 
   return (
     <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 select-none">
@@ -769,39 +846,87 @@ function TemplateGalleryModalBase({
               <Sparkles size={20} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-100">Choose Slide Layout & Template</h2>
-              <p className="text-xs text-slate-400">Select a pre-designed layout gallery template to add to your deck</p>
+              <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                <span>Choose Slide Layout & Template</span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">
+                  Full PPTX Adoption
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400">Select pre-designed templates or auto-detect and adopt slides from any PPTX presentation file</p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pptx,.ppt,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+              className="hidden"
+              onChange={handlePptxFileChange}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImportingPptx}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40"
+              title="Upload and auto-detect any PPTX file to use its slides as templates"
+            >
+              {isImportingPptx ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Parsing PPTX...</span>
+                </>
+              ) : (
+                <>
+                  <FileUp size={14} />
+                  <span>Auto-Detect PPTX Template</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
+        {/* Status notification banner if importing or imported */}
+        {importStatus && (
+          <div className="px-6 py-2 bg-amber-950/40 border-b border-amber-800/40 text-xs text-amber-200 flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-amber-400 shrink-0" />
+            <span>{importStatus}</span>
+          </div>
+        )}
+
         {/* Category Filters */}
-        <div className="px-6 py-3 border-b border-slate-800/80 bg-slate-950/30 flex items-center gap-2 text-xs shrink-0">
-          {[
-            { id: 'all', label: 'All Templates' },
-            { id: 'general', label: 'General & Business' },
-            { id: 'church', label: 'Church & Worship' },
-            { id: 'media', label: 'Media & Camera' },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id as any)}
-              className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
-                activeCategory === cat.id
-                  ? 'bg-sky-600 text-white shadow-md'
-                  : 'bg-slate-800/60 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+        <div className="px-6 py-3 border-b border-slate-800/80 bg-slate-950/30 flex items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-2">
+            {[
+              { id: 'all', label: 'All Templates' },
+              ...(pptxTemplates.length > 0 ? [{ id: 'pptx', label: `Imported PPTX (${pptxTemplates.length})` }] : []),
+              { id: 'general', label: 'General & Business' },
+              { id: 'church', label: 'Church & Worship' },
+              { id: 'media', label: 'Media & Camera' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id as any)}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-colors ${
+                  activeCategory === cat.id
+                    ? 'bg-sky-600 text-white shadow-md'
+                    : 'bg-slate-800/60 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-[11px] text-slate-400">
+            {filtered.length} layout{filtered.length === 1 ? '' : 's'} available
+          </span>
         </div>
 
         {/* Template Cards Grid */}

@@ -4,6 +4,7 @@ import { dbApi } from '../db';
 import { parsePptxOffline } from './pptxParser';
 import { savePresentation } from '../db/presentations';
 import { readSwsFile } from '../services/swsService';
+import { scanPptxFontsDetailed, ensurePptxFontsLoaded } from './pptxFontManager';
 
 export interface ProcessedDropResult {
   items: PresentationItem[];
@@ -78,6 +79,29 @@ export async function processSingleDroppedFile(file: File): Promise<Presentation
       // Parse presentation offline directly into hardware-accelerated slides & vector overlay
       if (isPptx) {
         try {
+          // Typography and font scan
+          const fontScan = await scanPptxFontsDetailed(file);
+          if (fontScan.allFonts.length > 0) {
+            ensurePptxFontsLoaded(fontScan.allFonts.map(f => f.fontName)).catch(() => {});
+          }
+
+          if (fontScan.missingFonts.length > 0) {
+            window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
+              detail: {
+                presentationName: file.name.replace(/\.pptx?$/i, ''),
+                scanResult: fontScan,
+                autoTriggered: true,
+              }
+            }));
+            window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+              detail: `⚠️ May ${fontScan.missingFonts.length} font na wala sa iyong device. Bukas ang 1-Click Download & Install.`
+            }));
+          } else if (fontScan.allFonts.length > 0) {
+            window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+              detail: `✓ Lahat ng ${fontScan.allFonts.length} fonts sa "${file.name}" ay nade-detect sa iyong device at gagamitin agad!`
+            }));
+          }
+
           parsedMetadata = await parsePptxOffline(file);
           if (parsedMetadata && parsedMetadata.length > 0) {
             slides = parsedMetadata;

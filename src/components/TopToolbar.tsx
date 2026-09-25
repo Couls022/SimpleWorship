@@ -37,7 +37,9 @@ import {
   Trash2,
   Plus,
   Timer,
-  MonitorPlay
+  MonitorPlay,
+  Type,
+  Sparkles
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -259,10 +261,29 @@ export default function TopToolbar({
       await dbApi.addSchedule(activeSchedule);
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();
-      const usedSongIds = new Set(
-        activeSchedule.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
-      );
-      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
+      const songItems = (activeSchedule.items || []).filter(it => it.type === 'song');
+      const usedSongIds = new Set(songItems.map(it => it.contentId || it.id));
+      const usedSongTitles = new Set(songItems.map(it => (it.name || it.data?.title || '').toLowerCase().trim()));
+      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id) || usedSongTitles.has(s.title.toLowerCase().trim()));
+      
+      for (const it of songItems) {
+        const title = (it.name || it.data?.title || '').trim();
+        if (title && !bundledSongs.some(s => s.title.toLowerCase().trim() === title.toLowerCase())) {
+          if (it.data && (it.data.sections || it.data.lyrics)) {
+            bundledSongs.push({
+              id: it.contentId || it.id || `song-${Date.now()}`,
+              title,
+              author: it.data.author || '',
+              category: it.data.category || 'Hymns',
+              lyrics: it.data.lyrics || '',
+              sections: it.data.sections || [],
+              key: it.data.key || 'G',
+              ccli: it.data.ccli,
+              ccliNumber: it.data.ccliNumber
+            });
+          }
+        }
+      }
       await downloadSwsFile(activeSchedule, undefined, bundledSongs, allThemes, systemOptions, outputGroups);
       handleNotify(`Enterprise schedule "${activeSchedule.name}.sws" saved with embedded SimpleWorship icon & assets!`);
     } catch (err) {
@@ -287,10 +308,29 @@ export default function TopToolbar({
       useStore.getState().setActiveSchedule(updated);
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();
-      const usedSongIds = new Set(
-        updated.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
-      );
-      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
+      const songItems = (updated.items || []).filter(it => it.type === 'song');
+      const usedSongIds = new Set(songItems.map(it => it.contentId || it.id));
+      const usedSongTitles = new Set(songItems.map(it => (it.name || it.data?.title || '').toLowerCase().trim()));
+      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id) || usedSongTitles.has(s.title.toLowerCase().trim()));
+      
+      for (const it of songItems) {
+        const title = (it.name || it.data?.title || '').trim();
+        if (title && !bundledSongs.some(s => s.title.toLowerCase().trim() === title.toLowerCase())) {
+          if (it.data && (it.data.sections || it.data.lyrics)) {
+            bundledSongs.push({
+              id: it.contentId || it.id || `song-${Date.now()}`,
+              title,
+              author: it.data.author || '',
+              category: it.data.category || 'Hymns',
+              lyrics: it.data.lyrics || '',
+              sections: it.data.sections || [],
+              key: it.data.key || 'G',
+              ccli: it.data.ccli,
+              ccliNumber: it.data.ccliNumber
+            });
+          }
+        }
+      }
       await downloadSwsFile(updated, newName, bundledSongs, allThemes, systemOptions, outputGroups);
       handleNotify(`Schedule saved as "${newName}.sws" with SimpleWorship branding!`);
     } catch (err) {
@@ -305,10 +345,10 @@ export default function TopToolbar({
       const allThemes = await dbApi.getAllThemes();
 
       // Collect only songs and themes used in schedule
-      const usedSongIds = new Set(
-        activeSchedule.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
-      );
-      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
+      const songItems = (activeSchedule.items || []).filter(it => it.type === 'song');
+      const usedSongIds = new Set(songItems.map(it => it.contentId || it.id));
+      const usedSongTitles = new Set(songItems.map(it => (it.name || it.data?.title || '').toLowerCase().trim()));
+      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id) || usedSongTitles.has(s.title.toLowerCase().trim()));
       
       const safeName = activeSchedule.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       await downloadSwsFile(activeSchedule, `${safeName}_standalone`, bundledSongs, allThemes, systemOptions, outputGroups);
@@ -329,12 +369,12 @@ export default function TopToolbar({
 
       if (bundledSongs && bundledSongs.length > 0) {
         for (const s of bundledSongs) {
-          await dbApi.addSong(s).catch(() => {});
+          await useStore.getState().addSong(s).catch(() => {});
         }
       }
       if (bundledThemes && bundledThemes.length > 0) {
         for (const t of bundledThemes) {
-          await dbApi.addTheme(t).catch(() => {});
+          await useStore.getState().saveTheme(t).catch(() => {});
         }
       }
       
@@ -1256,6 +1296,37 @@ export default function TopToolbar({
                   </span>
                   <span className="text-[10px] text-cyan-400 font-mono">Hub</span>
                 </button>
+                <button 
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
+                      detail: {
+                        presentationName: 'All Presentations & System Library',
+                        autoTriggered: false
+                      }
+                    }));
+                    setActiveMenu(null);
+                  }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-amber-300"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Type size={12} className="text-amber-400" />
+                    <span>Font Scanner & Downloader...</span>
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-mono">Scan</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent('simpleworship:open-diagnostics', { detail: { tab: 'fonts' } }));
+                    setActiveMenu(null);
+                  }} 
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-gray-300"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-gray-400" />
+                    <span>Font Auto-Adapt & Dev Simulator...</span>
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-mono">Dev</span>
+                </button>
 
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
@@ -1465,15 +1536,15 @@ export default function TopToolbar({
           </button>
 
 
-          {/* MASTER LIVE SWITCH (MAIN SOURCE OF TRUTH) */}
+          {/* MASTER LIVE SWITCH (MAIN SOURCE OF TRUTH FOR PROJECTOR VIEW) */}
           <button
             onClick={() => toggleMasterLive(activeControlGroupId || outputGroups[0]?.id || "")}
             className={`flex items-center gap-2 justify-center px-2.5 py-1.5 rounded-md border transition-all cursor-pointer ${
               activeControlState?.isLiveEnabled
-                ? 'bg-gradient-to-r from-emerald-900/60 to-emerald-700/60 text-emerald-200 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.35)]'
+                ? 'bg-gradient-to-r from-emerald-900/70 to-emerald-700/70 text-emerald-200 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.35)] ring-1 ring-emerald-400/50'
                 : 'bg-[#20232a] text-gray-400 border-[#373a43] hover:text-gray-200 hover:bg-[#282c35]'
             }`}
-            title="Master Live Switch: The main source of truth for projector display. Turn ON to actively mirror Live Display Canvas to target projector. Turn OFF for Standby/Black."
+            title="Master Live Switch: The authoritative source of truth. Turn ON to send Live Display Canvas directly to target monitor projectors. Turn OFF for Standby/Black."
           >
             {/* TV Test Pattern Color Bars Graphic */}
             <div className="w-5 h-5 rounded overflow-hidden flex border border-white/40 shadow-xs shrink-0">
@@ -1485,9 +1556,9 @@ export default function TopToolbar({
               <div className="h-full w-[2.8px] bg-rose-600"></div>
               <div className="h-full w-[2.8px] bg-blue-700"></div>
             </div>
-            <span className={`text-[10px] font-extrabold tracking-wide uppercase select-none pr-0.5 hidden min-[1150px]:inline flex items-center gap-1.5 ${activeControlState?.isLiveEnabled ? 'text-emerald-300' : 'text-gray-400'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${activeControlState?.isLiveEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500'}`} />
-              {activeControlState?.isLiveEnabled ? 'Live On' : 'Live Off'}
+            <span className={`text-[10px] font-extrabold tracking-wide uppercase select-none pr-0.5 flex items-center gap-1.5 ${activeControlState?.isLiveEnabled ? 'text-emerald-300' : 'text-gray-400'}`}>
+              <span className={`w-2 h-2 rounded-full ${activeControlState?.isLiveEnabled ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.9)]' : 'bg-gray-500'}`} />
+              <span className="hidden min-[480px]:inline">{activeControlState?.isLiveEnabled ? 'Live On' : 'Live Off'}</span>
             </span>
           </button>
         </div>

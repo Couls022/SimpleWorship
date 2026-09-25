@@ -227,8 +227,82 @@ function simpleWorshipApiPlugin(): Plugin {
           return;
         }
 
+        if (pathname === '/api/fonts/search' && req.method === 'GET') {
+          const family = url.searchParams.get('family')?.trim() || '';
+          if (!family) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ success: false, error: 'Font family parameter required' }));
+            return;
+          }
+          (async () => {
+            try {
+              const { searchFontOnline } = await import('./src/server/fontDownloader');
+              const result = await searchFontOnline(family);
+              res.end(JSON.stringify(result));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          })();
+          return;
+        }
+
+        if (pathname === '/api/fonts/download' && req.method === 'GET') {
+          const family = url.searchParams.get('family')?.trim() || '';
+          if (!family) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ success: false, error: 'Font family parameter required' }));
+            return;
+          }
+          (async () => {
+            try {
+              const { downloadFontBinary } = await import('./src/server/fontDownloader');
+              const result = await downloadFontBinary(family);
+              if (!result.success || !result.buffer) {
+                res.statusCode = 404;
+                res.end(JSON.stringify({ success: false, error: result.error || 'Font not found' }));
+                return;
+              }
+
+              const isAttachment = url.searchParams.get('download') === '1' || url.searchParams.get('attachment') === '1';
+              if (isAttachment) {
+                res.setHeader('Content-Type', `font/${result.format || 'woff2'}`);
+                res.setHeader('Content-Disposition', `attachment; filename="${family.replace(/\s+/g, '')}.${result.format || 'woff2'}"`);
+                res.setHeader('Content-Length', result.buffer.length);
+                res.end(result.buffer);
+                return;
+              }
+
+              res.end(JSON.stringify({
+                success: true,
+                family: result.family,
+                format: result.format,
+                byteSize: result.byteSize,
+                provider: result.provider,
+                bufferBase64: result.buffer.toString('base64'),
+              }));
+            } catch (err: any) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+          })();
+          return;
+        }
+
         next();
       });
+    }
+  };
+}
+
+function removeCrossOriginPlugin(): Plugin {
+  return {
+    name: 'remove-crossorigin',
+    enforce: 'post',
+    transformIndexHtml(html) {
+      return html
+        .replace(/ crossorigin="?[a-zA-Z0-9-]*"?/g, '')
+        .replace(/ crossorigin/g, '');
     }
   };
 }
@@ -236,7 +310,7 @@ function simpleWorshipApiPlugin(): Plugin {
 export default defineConfig(() => {
   return {
     base: './',
-    plugins: [react(), tailwindcss(), simpleWorshipApiPlugin()],
+    plugins: [react(), tailwindcss(), simpleWorshipApiPlugin(), removeCrossOriginPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -259,7 +333,7 @@ export default defineConfig(() => {
       minify: 'esbuild' as const,
       cssMinify: true,
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 5000,
+      chunkSizeWarningLimit: 10000,
       rollupOptions: {
         treeshake: true,
       },

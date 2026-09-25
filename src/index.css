@@ -577,16 +577,13 @@ html.light.high-contrast .text-gray-400 {
 /* PROJECTOR & SYSTEM-WIDE HARDWARE ACCELERATION (RAM, CPU, GPU TUNING) */
 .projector-canvas {
   will-change: transform, opacity;
-  transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
   contain: layout paint;
 }
 
-html.gpu-accelerated .projector-canvas,
 html.gpu-accelerated [data-presentation-canvas],
 html.gpu-accelerated video,
 html.gpu-accelerated canvas {
-  transform: translate3d(0, 0, 0);
   backface-visibility: hidden;
   will-change: transform;
 }
@@ -607,14 +604,85 @@ html.hw-tier-eco .motion-reduce {
 }
 
 
-.pptx-strict-typography,
-.pptx-strict-typography * {
-  line-height: normal !important;
-  letter-spacing: normal !important;
-  font-feature-settings: normal !important;
-  font-variant: normal !important;
-  text-transform: none;
-  -webkit-font-smoothing: auto;
+/* ==========================================================================
+   CANVA & PPTX ZERO-CUTOFF / UNCLIPPED HIGH-FIDELITY TYPOGRAPHY ENGINE
+   Prevents "putol-putol" sliced text and horizontal clipping on Canva exports.
+   In PowerPoint and Canva, text boxes NEVER truncate or slice text.
+   ========================================================================== */
+.pptx-strict-typography {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+.pptx-strict-typography [data-text-container] {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* 1. Ensure element containers allow text to overflow without clipping */
+.pptx-strict-typography [data-element-id],
+.pptx-presenter-override [data-element-id],
+[data-pptx-viewer] [data-element-id],
+[data-pptx-viewport] [data-element-id],
+[data-pptx-fullscreen-stage] [data-element-id] {
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+/* 2. Neutralize the Tailwind 'overflow-hidden' class on text element wrappers */
+.pptx-strict-typography [data-element-id].overflow-hidden,
+.pptx-presenter-override [data-element-id].overflow-hidden,
+[data-pptx-viewer] [data-element-id].overflow-hidden,
+[data-pptx-viewport] [data-element-id].overflow-hidden,
+[data-pptx-fullscreen-stage] [data-element-id].overflow-hidden {
+  overflow: visible !important;
+}
+
+/* 3. Ensure inner text body containers and paragraphs overflow visibly */
+.pptx-strict-typography [data-element-id] > div,
+.pptx-presenter-override [data-element-id] > div,
+[data-pptx-viewer] [data-element-id] > div,
+[data-pptx-viewport] [data-element-id] > div {
+  overflow: visible !important;
+}
+
+/* 4. Safe vertical centering prevents top-clipping of oversized Canva titles like "MEANING:" */
+.pptx-strict-typography [data-element-id] > div,
+.pptx-presenter-override [data-element-id] > div,
+[data-pptx-viewer] [data-element-id] > div,
+[data-pptx-viewport] [data-element-id] > div {
+  justify-content: safe center;
+}
+
+/* 5. Only media, image containers and canvas masks should have hidden overflow */
+.pptx-strict-typography [data-element-id]:has(img),
+.pptx-strict-typography [data-element-id]:has(video),
+.pptx-strict-typography [data-element-id]:has(canvas),
+.pptx-presenter-override [data-element-id]:has(img),
+.pptx-presenter-override [data-element-id]:has(video),
+[data-pptx-viewer] [data-element-id]:has(img),
+[data-pptx-viewer] [data-element-id]:has(video) {
+  overflow: hidden !important;
+}
+
+/* 6. Clean paragraph margins without breaking Canva's internal line-height or clipping descenders */
+.pptx-strict-typography p,
+.pptx-presenter-override p,
+[data-pptx-viewer] p,
+[data-pptx-viewport] p,
+[data-pptx-fullscreen-stage] p {
+  margin: 0 !important;
+  overflow: visible !important;
+  -webkit-margin-before: 0 !important;
+  -webkit-margin-after: 0 !important;
+}
+
+[data-pptx-viewer] [data-element-id] span,
+[data-pptx-viewport] [data-element-id] span,
+.pptx-presenter-override [data-element-id] span,
+.pptx-strict-typography [data-element-id] span {
+  overflow: visible !important;
 }
 
 /* ==========================================================================

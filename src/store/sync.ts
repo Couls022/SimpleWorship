@@ -508,7 +508,27 @@ export function initSync(isProjector: boolean = false) {
         }
       } else if (payload.type === 'ANNOTATION_UPDATE') {
         if (data.annotationState) {
-          useStore.setState({ annotationState: data.annotationState });
+          const targetGroup = data.groupId;
+          useStore.setState((prev) => ({
+            annotationState: data.annotationState,
+            groupAnnotations: data.groupAnnotations ? data.groupAnnotations : (targetGroup ? {
+              ...prev.groupAnnotations,
+              [targetGroup]: data.annotationState
+            } : prev.groupAnnotations)
+          }));
+        }
+      } else if (payload.type === 'LASER_UPDATE') {
+        const targetGroup = data.groupId || 'group-congregation';
+        const currentAnn = useStore.getState().groupAnnotations?.[targetGroup] || useStore.getState().annotationState;
+        if (currentAnn) {
+          const updated = { ...currentAnn, laserPointer: data.laserPointer || undefined };
+          useStore.setState((prev) => ({
+            annotationState: targetGroup === prev.activeControlGroupId ? updated : prev.annotationState,
+            groupAnnotations: {
+              ...prev.groupAnnotations,
+              [targetGroup]: updated
+            }
+          }));
         }
       }
 

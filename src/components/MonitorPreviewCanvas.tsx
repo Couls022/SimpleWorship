@@ -110,6 +110,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   
   const isLiveActive = Boolean(presentationState.isLiveEnabled);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
   const activeItem = React.useMemo(() => {
     return PresentationCore.getActiveContent(activeSchedule, presentationState, presentationState.directLiveItem);
   }, [activeSchedule, presentationState]);
@@ -174,12 +177,13 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const effectiveContainerW = containerSize.width > 0 ? containerSize.width : (isProjectorMode && typeof window !== 'undefined' ? window.innerWidth : 0);
   const effectiveContainerH = containerSize.height > 0 ? containerSize.height : (isProjectorMode && typeof window !== 'undefined' ? window.innerHeight : 0);
 
-  const overrideRes = React.useMemo(() => (isProjectorMode && effectiveContainerW > 0 && effectiveContainerH > 0 
-    ? { width: effectiveContainerW, height: effectiveContainerH } 
-    : undefined), [isProjectorMode, effectiveContainerW, effectiveContainerH]);
-
-  // Determine native target resolution & aspect ratio based on Selected Output Monitor & General settings
-  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = React.useMemo(() => resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays(), overrideRes), [group, systemOptions, overrideRes]);
+  // Determine native canonical target resolution & aspect ratio based on Selected Output Monitor & General settings
+  // The virtual presentation canvas resolution remains canonical (e.g. 1920x1080 or custom group resolution)
+  // while CSS transform scales it proportionally to fit any physical projector display without layout shifts or text warping.
+  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = React.useMemo(
+    () => resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays()),
+    [group, systemOptions]
+  );
 
   // Target output monitor frame is authoritative (Live Display Canvas scales the authoritative target frame proportionally)
   const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
@@ -509,9 +513,6 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     };
   }, [backgroundUrl, audioSrc, activeItem?.contentId, syncBg]);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-
   const isExplicitVideoItem = (
     contentType === 'video' ||
     activeItem?.type === 'video' ||
@@ -750,7 +751,11 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 >
                 {isVideo && videoSrc ? (
                   <video
-                    ref={videoRef}
+                    ref={(el) => {
+                      if (el) {
+                        videoRef.current = el;
+                      }
+                    }}
                     src={getValidMediaSrc(resolveAssetUrl(videoSrc)) || getValidMediaSrc(videoSrc) || ''}
                     autoPlay
                     loop={presentationState.isVideoLooping ?? true}
@@ -759,6 +764,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     preload={isThumbnail ? "none" : "auto"}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
+                    onError={(e) => {
+                      console.warn('[MonitorPreviewCanvas] Video media error:', e);
+                    }}
                     onCanPlay={(e) => {
                       const v = e.currentTarget;
                       if (presentationState.isVideoPlaying !== false && v.paused) {
@@ -878,6 +886,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 src={effectiveBackgroundUrl || localBackgroundUrl || activeItem?.customBackgroundUrl || activeItem?.data?.url} 
                 alt={activeItem?.name || 'Image'}
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
               />
             </div>
           )}
@@ -1015,7 +1026,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
           {/* Slide Content Layer with Margins for Songs, Scriptures, Announcements */}
           {(() => {
-            const computedRenderFrame = (isProjectorMode ? undefined : presentationState.renderFrame) || buildRenderFrame(
+            const computedRenderFrame = presentationState.renderFrame || buildRenderFrame(
               groupId,
               presentationState,
               activeSchedule,
@@ -1023,8 +1034,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
               systemOptions,
               songsList,
               themesList,
-              DisplayManager.getCachedDisplays(),
-              overrideRes
+              DisplayManager.getCachedDisplays()
             );
             if (computedRenderFrame) {
               lastValidFrameRef.current = computedRenderFrame;
@@ -1154,7 +1164,14 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 }`}
                 style={{ opacity: resolvedStyles.logoOpacity ?? 0.85 }}
               >
-                <img src={resolvedStyles.logoUrl} alt="Logo" className="h-7 w-auto object-contain" />
+                <img 
+                  src={resolvedStyles.logoUrl} 
+                  alt="Logo" 
+                  className="h-7 w-auto object-contain" 
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
+                />
               </div>
             ) : null
           )}
@@ -1163,7 +1180,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
           {true && (
             <SlideAnnotationLayer 
               groupId={groupId}
-              interactive={true} 
+              interactive={!isProjectorMode} 
               stageWidth={targetWidth}
               stageHeight={targetHeight}
               className="z-35"
@@ -1240,9 +1257,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
           {/* Service Interval Countdown Timer for Main Displays */}
           <MainDisplayCountdownOverlay isBlack={presentationState.isBlack} />
 
-          {/* Master Blackout Overlay (z-50) */}
+          {/* Master Blackout & Standby Overlay (z-50) */}
           <AnimatePresence>
-            {presentationState.isBlack && (
+            {(presentationState.isBlack || (isProjectorMode && !presentationState.isLiveEnabled)) && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

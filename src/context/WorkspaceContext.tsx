@@ -28,7 +28,8 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
       multiGroup: { visible: false, isCollapsed: false, isDocked: true },
       resources: { visible: false, isCollapsed: false, isDocked: false },
       stageMonitor: { visible: false, isCollapsed: false, isDocked: false },
-      quickNotes: { visible: false, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
+      quickNotes: { visible: false, isCollapsed: false, isDocked: false },
+      mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
     },
     panelGroupSizes: {
       verticalSplit: [100, 0],
@@ -51,7 +52,8 @@ export const BUILTIN_PRESETS: WorkspacePreset[] = [
       multiGroup: { visible: false, isCollapsed: false, isDocked: true },
       resources: { visible: false, isCollapsed: false, isDocked: false },
       stageMonitor: { visible: true, isCollapsed: false, isDocked: false },
-      quickNotes: { visible: false, isCollapsed: false, isDocked: false }, mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
+      quickNotes: { visible: false, isCollapsed: false, isDocked: false },
+      mediaLibrary: { visible: false, isCollapsed: false, isDocked: false }
     },
     panelGroupSizes: {
       verticalSplit: [100, 0],

@@ -985,7 +985,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                     borderWidth: style.borderWidth ? `${style.borderWidth}px` : 0,
                     borderStyle: style.borderColor ? 'solid' : 'none',
                     borderRadius: style.borderRadius ? `${style.borderRadius}px` : undefined,
-                    padding: style.padding ? `${style.padding}px` : '4px',
+                    padding: style.padding ? `${style.padding}px` : (obj.type === 'text' ? '0px' : '4px'),
+                    overflow: obj.type === 'text' ? 'visible' : 'hidden',
                   }}
                   onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
                   onDoubleClick={(e) => handleTextDoubleClick(e, obj)}
@@ -1015,7 +1016,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                       />
                     ) : (
                       <div
-                        className="w-full h-full leading-relaxed break-words whitespace-pre-wrap flex flex-col pointer-events-none"
+                        className="w-full h-full leading-relaxed break-words whitespace-pre-wrap flex flex-col pointer-events-none overflow-visible"
                         style={{
                           fontFamily,
                           fontSize: `${fontSz}px`,
@@ -1027,8 +1028,10 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                           letterSpacing: style.letterSpacing ? `${style.letterSpacing}px` : undefined,
                           lineHeight: style.lineSpacing ? `${style.lineSpacing}` : 1.35,
                           textTransform: (style as any).textTransform || undefined,
-                          justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'center' : 'flex-start',
+                          justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'safe center' : 'flex-start',
                           textShadow: style.shadowEnabled ? `${style.shadowOffsetX || 0}px ${style.shadowOffsetY || 4}px ${style.shadowBlur || 8}px ${style.shadowColor || 'rgba(0,0,0,0.85)'}` : undefined,
+                          wordBreak: 'normal',
+                          overflowWrap: 'break-word',
                         }}
                       >
                         {obj.text || 'Click to edit text'}

@@ -27,6 +27,7 @@ import { HYMNS_OF_PRAISES } from "../../data/hymnsOfPraises";
 import { SPECIAL_NUMBERS } from "../../data/specialNumbers";
 import { OfflineSearchEngine } from "../../core/OfflineSearchEngine";
 import { PortalDropdown } from "../common/PortalDropdown";
+import JSZip from "jszip";
 
 interface SongsTabProps {
   onOpenNewSong: () => void;
@@ -175,43 +176,105 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
     }
   };
 
-  const handleImportSongs = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportSongs = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
+    try {
+      let content = "";
+      let importedSongs: Song[] = [];
+
+      // 1. Check if the file is a zip archive (.sws schedule bundle)
       try {
-        const content = event.target?.result as string;
-        let importedSongs: Song[] = [];
-        const parsed = JSON.parse(content);
+        const arrayBuffer = await file.arrayBuffer();
+        const zip = new JSZip();
+        const loadedZip = await zip.loadAsync(arrayBuffer);
 
-        if (Array.isArray(parsed)) {
-          importedSongs = parsed;
-        } else if (parsed && Array.isArray(parsed.songs)) {
-          importedSongs = parsed.songs;
-        } else {
-          throw new Error("Invalid format: expected an array of songs.");
+        let scheduleJson = loadedZip.file("schedule.json");
+        if (!scheduleJson) {
+          const jsonFiles = loadedZip.file(/\.json$/i);
+          if (jsonFiles.length > 0) scheduleJson = jsonFiles[0];
         }
 
-        const validSongs = importedSongs.filter((s) => s && s.title);
-
-        if (validSongs.length === 0) {
-          throw new Error("No valid songs found in the file.");
+        if (scheduleJson) {
+          content = await scheduleJson.async("text");
         }
+      } catch {
+        // Not a zip file, will read as plain text below
+      }
 
-        for (const song of validSongs) {
-          const formattedSong: Song = {
-            id:
-              song.id ||
-              `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-            title: song.title,
-            author: song.author || "",
-            category: song.category || "Hymns",
-            lyrics: song.lyrics || "",
-            sections:
-              Array.isArray(song.sections) && song.sections.length > 0
-                ? song.sections
+      // 2. If not zip or no json extracted, read as plain text
+      if (!content) {
+        content = await file.text();
+      }
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(content);
+      } catch (jsonErr: any) {
+        throw new Error("Invalid file: Could not parse as JSON or .sws bundle.");
+      }
+
+      // 3. Detect and extract songs from various SimpleWorship package formats
+      if (Array.isArray(parsed)) {
+        importedSongs = parsed;
+      } else if (parsed && Array.isArray(parsed.songs)) {
+        importedSongs = parsed.songs;
+      } else if (parsed && parsed.data && Array.isArray(parsed.data.songs)) {
+        // From Full Database Backup or .swprofile Portable Profile
+        importedSongs = parsed.data.songs;
+      } else if (parsed && Array.isArray(parsed.bundledSongs)) {
+        // From .sws Schedule package
+        importedSongs = parsed.bundledSongs;
+      } else if (parsed && parsed.schedule && Array.isArray(parsed.schedule.items)) {
+        // Extract songs directly from schedule items if available
+        const songItems = parsed.schedule.items.filter((it: any) => it.type === "song");
+        importedSongs = songItems
+          .map((it: any) => {
+            if (it.data && (it.data.sections || it.data.lyrics)) {
+              return {
+                id: it.contentId || it.id || `song-${Date.now()}`,
+                title: it.name || it.data.title || "Untitled Song",
+                ...it.data,
+              };
+            }
+            return null;
+          })
+          .filter(Boolean);
+      } else if (parsed && parsed.title && (parsed.lyrics || parsed.sections)) {
+        // Single exported song object
+        importedSongs = [parsed];
+      } else {
+        throw new Error("Invalid format: No songs found in the selected file.");
+      }
+
+      const validSongs = importedSongs.filter((s) => s && s.title);
+
+      if (validSongs.length === 0) {
+        throw new Error("No valid songs found in the file.");
+      }
+
+      for (const song of validSongs) {
+        const existing = songsList.find(
+          (s) =>
+            s.id === song.id ||
+            s.title.toLowerCase().trim() === song.title.toLowerCase().trim(),
+        );
+
+        const formattedSong: Song = {
+          id:
+            existing?.id ||
+            song.id ||
+            `song-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          title: song.title.trim(),
+          author: song.author || existing?.author || "",
+          category: song.category || existing?.category || "Hymns",
+          lyrics: song.lyrics || existing?.lyrics || "",
+          sections:
+            Array.isArray(song.sections) && song.sections.length > 0
+              ? song.sections
+              : existing?.sections && existing.sections.length > 0
+                ? existing.sections
                 : [
                     {
                       id: `sec-${Date.now()}`,
@@ -219,33 +282,33 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                       text: song.lyrics || song.title,
                     },
                   ],
-            ccli: song.ccli,
-            ccliNumber: song.ccliNumber,
-            key: song.key || "G",
-            tempo: song.tempo || "Moderate",
-          };
-          await addSong(formattedSong);
-        }
-
-        window.dispatchEvent(
-          new CustomEvent("simpleworship:notify", {
-            detail: `Imported ${validSongs.length} songs successfully.`,
-          }),
-        );
-      } catch (err) {
-        console.error("Failed to import songs:", err);
-        window.dispatchEvent(
-          new CustomEvent("simpleworship:notify", {
-            detail: `Failed to import songs. Please ensure it is a valid .sws or JSON file.`,
-          }),
-        );
+          ccli: song.ccli || existing?.ccli,
+          ccliNumber: song.ccliNumber || existing?.ccliNumber,
+          key: song.key || existing?.key || "G",
+          tempo: song.tempo || existing?.tempo || "Moderate",
+          defaultBackgroundUrl: song.defaultBackgroundUrl || existing?.defaultBackgroundUrl,
+          themeOverride: song.themeOverride || existing?.themeOverride,
+        };
+        await addSong(formattedSong);
       }
 
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    };
-    reader.readAsText(file);
+      window.dispatchEvent(
+        new CustomEvent("simpleworship:notify", {
+          detail: `Imported ${validSongs.length} songs successfully!`,
+        }),
+      );
+    } catch (err: any) {
+      console.error("Failed to import songs:", err);
+      window.dispatchEvent(
+        new CustomEvent("simpleworship:notify", {
+          detail: `Failed to import: ${err.message || "Invalid file format."}`,
+        }),
+      );
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const handleRestoreDefaultHymnal = async () => {
@@ -721,7 +784,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
 
             <input
               type="file"
-              accept=".sws,.json"
+              accept=".sws,.json,.swprofile"
               ref={fileInputRef}
               onChange={handleImportSongs}
               className="hidden"
@@ -922,6 +985,19 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
           </button>
 
           <div className="border-t border-[#2a2e3d] my-1"></div>
+
+          <button
+            onClick={() => {
+              const safeName = contextMenu.song.title.toLowerCase().replace(/[^a-z0-9]/gi, '_');
+              handleExportSongs([contextMenu.song], `song_${safeName}`);
+              setContextMenu(null);
+            }}
+            className="w-full px-3 py-1.5 text-left hover:bg-[#2e3447] flex items-center gap-2 text-cyan-300"
+            title="Export this song as a portable .sws file"
+          >
+            <Download size={12} className="text-cyan-400" />
+            <span>Export Song (.sws)</span>
+          </button>
 
           <button
             onClick={() => {

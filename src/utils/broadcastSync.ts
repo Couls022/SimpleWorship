@@ -189,8 +189,8 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
     msgId: payload.msgId || `${payload.type}_${now}_${Math.random().toString(36).slice(2, 7)}`
   };
 
-  // DEBUG PAYLOAD VALIDATION (Phase 10-B)
-  if (process.env.NODE_ENV === 'development' && payload.type !== 'HEARTBEAT' && payload.type !== 'HEARTBEAT_ACK') {
+  // DEBUG PAYLOAD VALIDATION (Phase 10-B) - skip high-frequency streaming events to protect 60fps frame budgets
+  if (process.env.NODE_ENV === 'development' && payload.type !== 'HEARTBEAT' && payload.type !== 'HEARTBEAT_ACK' && payload.type !== 'LASER_UPDATE') {
     try {
       const serialized = JSON.stringify(fullPayload);
       const sizeKB = (serialized.length / 1024).toFixed(2);
@@ -232,8 +232,8 @@ export const broadcastStateChange = (payload: BroadcastPayload) => {
 
   // 2. Non-blocking fallback to localStorage for older browsers or cross-origin fallback
   // Executed asynchronously to never block frame rendering or UI interactions
-  // Heartbeats are purely in-memory IPC and do not need disk storage writes
-  if (typeof window !== 'undefined' && window.localStorage && payload.type !== 'HEARTBEAT' && payload.type !== 'HEARTBEAT_ACK') {
+  // Heartbeats and high-frequency laser pointer tracking are purely in-memory IPC and do not need disk storage writes
+  if (typeof window !== 'undefined' && window.localStorage && payload.type !== 'HEARTBEAT' && payload.type !== 'HEARTBEAT_ACK' && payload.type !== 'LASER_UPDATE') {
     setTimeout(() => {
       try {
         const lightweightPayload = sanitizeForSync(fullPayload);

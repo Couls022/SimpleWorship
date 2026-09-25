@@ -28,7 +28,70 @@ export interface ScriptureParsedReference {
   cleanedQuery: string;
 }
 
+export interface SongIndexEntry {
+  songNumber: number | null;
+  titleNorm: string;
+  titleTokens: string[];
+  titleCleanedNorm: string;
+  titleCleanedTokens: string[];
+  lyricsNorm: string;
+  lyricsTokens: string[];
+  authorNorm: string;
+  ccliStr: string;
+  tagsStr: string;
+}
+
 export class OfflineSearchEngine {
+  private static songIndexCache = new WeakMap<Song, SongIndexEntry>();
+  private static bibleNormalizedCache = new Map<string, { normalized: string; tokens: string[] }>();
+
+  /**
+   * Fast indexed retrieval of pre-normalized song metadata with zero memory leaks (WeakMap).
+   */
+  static getSongIndex(song: Song): SongIndexEntry {
+    let entry = this.songIndexCache.get(song);
+    if (!entry) {
+      const songNumber = this.extractSongNumber(song);
+      const { normalized: titleNorm, tokens: titleTokens } = this.normalizeText(song.title);
+      const titleCleaned = (song.title || '').replace(/^#?\d+[\.\s\-_:]+/, '').trim();
+      const { normalized: titleCleanedNorm, tokens: titleCleanedTokens } = this.normalizeText(titleCleaned);
+      const combinedLyrics = (song.lyrics || '') + ' ' + (song.sections ? song.sections.map(s => `${s.name || ''} ${s.text || ''}`).join(' ') : '');
+      const { normalized: lyricsNorm, tokens: lyricsTokens } = this.normalizeText(combinedLyrics);
+      const { normalized: authorNorm } = this.normalizeText(song.author || '');
+      const ccliStr = (song.ccli || (song as any).ccliNumber || '').toString().toLowerCase().trim();
+      const tagsStr = (song.tags || []).join(' ').toLowerCase();
+
+      entry = {
+        songNumber,
+        titleNorm,
+        titleTokens,
+        titleCleanedNorm,
+        titleCleanedTokens,
+        lyricsNorm,
+        lyricsTokens,
+        authorNorm,
+        ccliStr,
+        tagsStr
+      };
+      this.songIndexCache.set(song, entry);
+    }
+    return entry;
+  }
+
+  /**
+   * Fast LRU-style cached normalization for Bible verses to prevent 60k regex passes per keystroke.
+   */
+  static getCachedVerseNorm(rawText: string): { normalized: string; tokens: string[] } {
+    let hit = this.bibleNormalizedCache.get(rawText);
+    if (!hit) {
+      hit = this.normalizeText(rawText);
+      if (this.bibleNormalizedCache.size > 25000) {
+        this.bibleNormalizedCache.clear();
+      }
+      this.bibleNormalizedCache.set(rawText, hit);
+    }
+    return hit;
+  }
   /**
    * Punctuation-tolerant text normalization for search matching.
    * Strips extraneous punctuation, lowercases, and collapses whitespaces.
@@ -139,17 +202,17 @@ export class OfflineSearchEngine {
       let score = 0;
       const matchReasons: string[] = [];
 
-      const songNumber = this.extractSongNumber(song);
-      const { normalized: titleNorm, tokens: titleTokens } = this.normalizeText(song.title);
-      
-      const titleCleaned = song.title.replace(/^#?\d+[\.\s\-_:]+/, '').trim();
-      const { normalized: titleCleanedNorm, tokens: titleCleanedTokens } = this.normalizeText(titleCleaned);
-
-      const combinedLyrics = (song.lyrics || '') + ' ' + (song.sections ? song.sections.map(s => `${s.name} ${s.text}`).join(' ') : '');
-      const { normalized: lyricsNorm, tokens: lyricsTokens } = this.normalizeText(combinedLyrics);
-      const { normalized: authorNorm, tokens: authorTokens } = this.normalizeText(song.author || '');
-      const ccliStr = (song.ccli || song.ccliNumber || '').toString().toLowerCase().trim();
-      const tagsStr = (song.tags || []).join(' ').toLowerCase();
+      const idx = this.getSongIndex(song);
+      const songNumber = idx.songNumber;
+      const titleNorm = idx.titleNorm;
+      const titleTokens = idx.titleTokens;
+      const titleCleanedNorm = idx.titleCleanedNorm;
+      const titleCleanedTokens = idx.titleCleanedTokens;
+      const lyricsNorm = idx.lyricsNorm;
+      const lyricsTokens = idx.lyricsTokens;
+      const authorNorm = idx.authorNorm;
+      const ccliStr = idx.ccliStr;
+      const tagsStr = idx.tagsStr;
 
       // 1. Song Number Match (Tier 1: 1000 - 1500)
       if (queryNum !== null && songNumber !== null) {
@@ -656,9 +719,26 @@ export class OfflineSearchEngine {
 
     // Helper to search a dictionary
     const searchDict = (dict: Record<string, string>, transLabel: 'KJV' | 'Tagalog') => {
+      const qTokenCount = qTokens.length;
       for (const [key, rawText] of Object.entries(dict)) {
         if (!rawText) continue;
-        const { normalized: textNorm, tokens: textTokens } = this.normalizeText(rawText);
+
+        // Fast native pre-check to bypass 99.5% of verses before regex/token allocations
+        const rawLower = rawText.toLowerCase();
+        if (qTokenCount === 1) {
+          if (!rawLower.includes(qTokens[0])) continue;
+        } else {
+          let hasAny = false;
+          for (let i = 0; i < qTokenCount; i++) {
+            if (rawLower.includes(qTokens[i])) {
+              hasAny = true;
+              break;
+            }
+          }
+          if (!hasAny) continue;
+        }
+
+        const { normalized: textNorm, tokens: textTokens } = this.getCachedVerseNorm(rawText);
 
         let score = 0;
 

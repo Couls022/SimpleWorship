@@ -57,34 +57,74 @@ export async function savePresentation(
 }
 
 export async function getAllPresentations(): Promise<Asset[]> {
-  const db = await getDB();
-  const allAssets: Asset[] = [];
-  const tx = db.transaction('assets', 'readonly');
-  const index = tx.store.index('by-type');
-  let cursor = await index.openCursor('document');
+  try {
+    const db = await getDB();
+    const allAssets: Asset[] = [];
+    const seenIds = new Set<string>();
 
-  while (cursor) {
-    const asset = cursor.value;
-    let returnData = asset.data;
+    const processAsset = (asset: Asset) => {
+      if (!asset || !asset.id || seenIds.has(asset.id)) return;
+      seenIds.add(asset.id);
+
+      let returnData = asset.data;
+      if (asset.data && asset.data.fileBytes) {
+        const { fileBytes, ...restData } = asset.data;
+        returnData = restData;
+      }
+          
+      // Resolve slide background URLs
+      if (returnData && returnData.slides && Array.isArray(returnData.slides)) {
+        returnData.slides = returnData.slides.map((slide: any) => ({
+          ...slide,
+          backgroundUrl: resolveAssetUrl(slide.backgroundUrl) || slide.backgroundUrl
+        }));
+      }
+
+      allAssets.push({ ...asset, data: returnData });
+    };
+
+    const tx = db.transaction('assets', 'readonly');
+    const index = tx.store.index('by-type');
+
+    // 1. Check 'document' type
+    try {
+      let cursor = await index.openCursor('document');
+      while (cursor) {
+        processAsset(cursor.value);
+        cursor = await cursor.continue();
+      }
+    } catch (e) {
+      console.warn('[presentations] Error querying document index:', e);
+    }
+
+    // 2. Check 'presentation' type
+    try {
+      let cursor2 = await index.openCursor('presentation');
+      while (cursor2) {
+        processAsset(cursor2.value);
+        cursor2 = await cursor2.continue();
+      }
+    } catch (e) {
+      // index might only have document
+    }
+
+    // 3. Fallback: if empty, scan all assets to find any containing slide decks
+    if (allAssets.length === 0) {
+      try {
+        const all = await tx.store.getAll();
+        for (const item of all) {
+          if (item?.data?.slides && Array.isArray(item.data.slides)) {
+            processAsset(item);
+          }
+        }
+      } catch (e) {}
+    }
     
-    if (asset.data && asset.data.fileBytes) {
-      const { fileBytes, ...restData } = asset.data;
-      returnData = restData;
-    }
-        
-    // Resolve slide background URLs
-    if (returnData && returnData.slides) {
-      returnData.slides = returnData.slides.map((slide: any) => ({
-        ...slide,
-        backgroundUrl: resolveAssetUrl(slide.backgroundUrl) || slide.backgroundUrl
-      }));
-    }
-
-    allAssets.push({ ...asset, data: returnData });
-    cursor = await cursor.continue();
+    return allAssets;
+  } catch (err) {
+    console.error('[presentations] getAllPresentations error:', err);
+    return [];
   }
-  
-  return allAssets;
 }
 
 export async function deletePresentation(id: string): Promise<void> {

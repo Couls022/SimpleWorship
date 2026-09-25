@@ -1,13 +1,22 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Slide, SlideObject, ThemeStyles } from '../types';
 import { resolveAssetUrl } from '../db';
+import { 
+  getCompatibleFontStack, 
+  ensurePptxFontsLoaded, 
+  calculateAutoFitTextScale 
+} from '../utils/pptxFontManager';
+import { deconflictAndDeduplicateSlideObjects } from '../utils/pptxParser';
 
 interface PresentationSlideViewProps {
   slide: Slide;
   slideIndex: number;
   totalSlides?: number;
-  mode?: 'thumbnail' | 'full';
+  mode?: 'thumbnail' | 'full' | 'live' | 'preview';
   themeStyles?: ThemeStyles;
+  targetWidth?: number;
+  targetHeight?: number;
+  isProjectorMode?: boolean;
 }
 
 export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React.memo(({
@@ -16,7 +25,41 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
   totalSlides,
   mode = 'full',
   themeStyles,
+  targetWidth,
+  targetHeight,
+  isProjectorMode,
 }) => {
+  const [containerSize, setContainerSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const roRef = React.useRef<ResizeObserver | null>(null);
+
+  const containerCallbackRef = React.useCallback((el: HTMLDivElement | null) => {
+    if (roRef.current) {
+      roRef.current.disconnect();
+      roRef.current = null;
+    }
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const w = el.clientWidth || Math.round(rect.width);
+    const h = el.clientHeight || Math.round(rect.height);
+    if (w > 0 && h > 0) {
+      setContainerSize(prev => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+    }
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const width = Math.round(entry.contentRect.width);
+        const height = Math.round(entry.contentRect.height);
+        if (width > 0 && height > 0) {
+          setContainerSize(prev => (prev.width === width && prev.height === height ? prev : { width, height }));
+        }
+      });
+      ro.observe(el);
+      roRef.current = ro;
+    }
+  }, []);
   // Clean paragraphs and bullets
   const paragraphs = useMemo(() => {
     if (Array.isArray(slide.bullets) && slide.bullets.length > 0) {
@@ -110,31 +153,136 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
   return color;
 }
 
-  const titleFont = slide.titleFontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
-  const bodyFont = slide.fontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif';
+  const [, setFontTick] = React.useState(0);
+  useEffect(() => {
+    const handleFontUpdated = () => {
+      setFontTick(t => t + 1);
+    };
+    window.addEventListener('simpleworship:fonts-updated', handleFontUpdated);
+    return () => window.removeEventListener('simpleworship:fonts-updated', handleFontUpdated);
+  }, []);
+
+  // Proactive font background loading for custom Canva/Google fonts
+  useEffect(() => {
+    const fonts = new Set<string>();
+    if (slide.fontFamily) fonts.add(slide.fontFamily);
+    if (slide.titleFontFamily) fonts.add(slide.titleFontFamily);
+    if (slide.themeOverride?.fontFamily) fonts.add(slide.themeOverride.fontFamily);
+    if (Array.isArray(slide.objects)) {
+      for (const o of slide.objects) {
+        if (o.style?.fontFamily) fonts.add(o.style.fontFamily);
+        if ((o as any).fontFamily) fonts.add((o as any).fontFamily);
+      }
+    }
+    if (Array.isArray(slide.elements)) {
+      for (const el of slide.elements) {
+        if (el?.fontFamily) fonts.add(el.fontFamily);
+      }
+    }
+    if (themeStyles?.fontFamily) fonts.add(themeStyles.fontFamily);
+    if (fonts.size > 0) {
+      ensurePptxFontsLoaded(Array.from(fonts)).catch(() => {});
+    }
+  }, [slide, themeStyles]);
+
+  const titleFont = getCompatibleFontStack(slide.titleFontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif');
+  const bodyFont = getCompatibleFontStack(slide.fontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif');
   const titleColor = ensureContrast(slide.titleColor || themeStyles?.fontColor, isDarkBg);
   const bodyColor = ensureContrast(slide.fontColor || themeStyles?.fontColor, isDarkBg);
   const accentColor = slide.accentColor || slide.headerBarColor || (themeStyles as any)?.accentColor || '#38BDF8';
   const textAlign = slide.textAlign || (themeStyles?.textAlign as any) || (isTitleSlide ? 'center' : 'left');
 
   const getBaseDimensions = () => {
-    const ratio = slide.aspectRatio || (slide.widthEmu && slide.heightEmu && slide.heightEmu > 0 ? slide.widthEmu / slide.heightEmu : 16 / 9);
+    let ratio = 16 / 9;
+    if (slide.aspectRatioLabel?.includes('4:3') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 4 / 3) < 0.05)) {
+      return { baseWidth: 1440, baseHeight: 1080, ratio: 4 / 3 };
+    }
+    if (slide.aspectRatioLabel?.includes('16:10') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 16 / 10) < 0.05)) {
+      return { baseWidth: 1920, baseHeight: 1200, ratio: 16 / 10 };
+    }
+    if (slide.aspectRatioLabel?.includes('21:9') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 21 / 9) < 0.05)) {
+      return { baseWidth: 2560, baseHeight: 1080, ratio: 21 / 9 };
+    }
+    if (slide.aspectRatioLabel?.includes('1:1') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 1) < 0.05)) {
+      return { baseWidth: 1080, baseHeight: 1080, ratio: 1 };
+    }
+    if (slide.aspectRatioLabel?.includes('9:16') || (slide.aspectRatio && Math.abs(slide.aspectRatio - 9 / 16) < 0.05)) {
+      return { baseWidth: 1080, baseHeight: 1920, ratio: 9 / 16 };
+    }
+    if (slide.aspectRatio) {
+      ratio = slide.aspectRatio;
+    } else if (slide.widthEmu && slide.heightEmu && slide.heightEmu > 0) {
+      ratio = slide.widthEmu / slide.heightEmu;
+    }
     const baseHeight = 1080;
     const baseWidth = Math.round(baseHeight * ratio);
-    return { baseWidth, baseHeight };
+    return { baseWidth, baseHeight, ratio };
   };
 
   const { baseWidth, baseHeight } = getBaseDimensions();
 
-  const hasObjects = Array.isArray(slide.objects) && slide.objects.length > 0;
+  // Authoritative container sizing: priority given to explicit target display bounds, followed by measured element size
+  const effectiveContainerW = targetWidth || (containerSize.width > 0 ? containerSize.width : (mode === 'thumbnail' ? 280 : 1920));
+  const effectiveContainerH = targetHeight || (containerSize.height > 0 ? containerSize.height : (mode === 'thumbnail' ? 158 : 1080));
+
+  // Compute uniform fit scale and fitted dimensions (pillarbox / letterbox auto-fit)
+  const fitScale = useMemo(() => {
+    if (effectiveContainerW <= 0 || effectiveContainerH <= 0 || baseWidth <= 0 || baseHeight <= 0) return 1;
+    return Math.min(effectiveContainerW / baseWidth, effectiveContainerH / baseHeight);
+  }, [effectiveContainerW, effectiveContainerH, baseWidth, baseHeight]);
+
+  const fittedWidth = Math.round(baseWidth * fitScale);
+  const fittedHeight = Math.round(baseHeight * fitScale);
+
+  const sanitizedObjects = useMemo(() => {
+    if (!Array.isArray(slide.objects) || slide.objects.length === 0) return [];
+    return deconflictAndDeduplicateSlideObjects(slide.objects);
+  }, [slide.objects]);
+
+  const hasObjects = sanitizedObjects.length > 0;
+
+  // Auto-fit calculation for traditional slide layouts to prevent text overflow & distortion
+  const titleFitFactor = useMemo(() => {
+    if (!slide.title) return 1;
+    return calculateAutoFitTextScale({
+      text: slide.title,
+      boxWidth: isTitleSlide ? 1600 : 1700,
+      boxHeight: isTitleSlide ? 320 : 140,
+      fontSize: isTitleSlide ? 60 : 38,
+      fontFamily: titleFont,
+      fontWeight: 'bold',
+      lineHeightRatio: 1.15,
+      padding: 16,
+    });
+  }, [slide.title, isTitleSlide, titleFont]);
+
+  const bodyFitFactor = useMemo(() => {
+    const fullText = paragraphs.join('\n');
+    if (!fullText) return 1;
+    return calculateAutoFitTextScale({
+      text: fullText,
+      boxWidth: 1600,
+      boxHeight: isTitleSlide ? 250 : 650,
+      fontSize: isTitleSlide ? 30 : 24,
+      fontFamily: bodyFont,
+      fontWeight: 'normal',
+      lineHeightRatio: 1.3,
+      padding: 16,
+    });
+  }, [paragraphs, isTitleSlide, bodyFont]);
 
   return (
-    <div className="w-full h-full relative flex items-center justify-center overflow-hidden select-none bg-black">
+    <div 
+      ref={containerCallbackRef}
+      className="w-full h-full relative flex items-center justify-center overflow-hidden select-none bg-black"
+    >
+      {/* Aspect-Preserved Auto-Fitted Slide Stage */}
       <div 
-        className="relative flex flex-col justify-between overflow-hidden shrink-0 w-full h-full"
+        className="relative flex flex-col justify-between overflow-hidden shrink-0 shadow-2xl"
         style={{
+          width: `${fittedWidth}px`,
+          height: `${fittedHeight}px`,
           ...bgStyle,
-          containerType: 'size'
         }}
       >
       {/* Background Overlay for native song/verse slides */}
@@ -152,7 +300,7 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
         <div 
           className="absolute top-0 left-0 right-0 z-20"
           style={{ 
-            height: '8px', 
+            height: `${Math.max(2, Math.round(8 * fitScale))}px`, 
             backgroundColor: slide.headerBarColor 
           }} 
         />
@@ -161,18 +309,35 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
       {/* Render Object Canvas if objects exist */}
       {hasObjects ? (
         <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-          {slide.objects!.filter(obj => obj.visible !== false).map((obj) => {
-            const leftPct = (obj.x / baseWidth) * 100;
-            const topPct = (obj.y / baseHeight) * 100;
-            const widthPct = (obj.width / baseWidth) * 100;
-            const heightPct = (obj.height / baseHeight) * 100;
+          {sanitizedObjects.filter(obj => obj.visible !== false).map((obj) => {
+            const leftPx = Math.round(obj.x * fitScale);
+            const topPx = Math.round(obj.y * fitScale);
+            const widthPx = Math.round(obj.width * fitScale);
+            const heightPx = Math.round(obj.height * fitScale);
 
             const style = obj.style || {};
-            // fontSz in cqh (container height percentage)
-            const fontSz = style.fontSize ? (style.fontSize / baseHeight) * 100 : 3.5;
+            const objFont = getCompatibleFontStack(style.fontFamily || (obj.type === 'shape' ? bodyFont : titleFont));
+
+            // Auto-adjust scale calculation to prevent overflow, line jumps and collision
+            const autoFitFactor = (obj.type === 'text' || obj.type === 'shape') && obj.text && obj.width > 0 && obj.height > 0
+              ? calculateAutoFitTextScale({
+                  text: obj.text,
+                  boxWidth: obj.width,
+                  boxHeight: obj.height,
+                  fontSize: style.fontSize || 36,
+                  fontFamily: objFont,
+                  fontWeight: style.fontWeight || (obj.type === 'text' ? 'bold' : 'normal'),
+                  lineHeightRatio: 1.2,
+                  padding: style.padding || 8,
+                })
+              : 1;
+
+            const baseFontSz = style.fontSize || 36;
+            const fontPx = Math.max(6, Math.round(baseFontSz * fitScale * autoFitFactor));
+            const paddingPx = Math.max(0, Math.round((style.padding || 8) * fitScale));
 
             const shadowCss = style.shadowEnabled
-              ? `${style.shadowOffsetX || 0}px ${style.shadowOffsetY || 4}px ${style.shadowBlur || 8}px ${style.shadowColor || 'rgba(0,0,0,0.3)'}`
+              ? `${Math.round((style.shadowOffsetX || 0) * fitScale)}px ${Math.round((style.shadowOffsetY || 4) * fitScale)}px ${Math.round((style.shadowBlur || 8) * fitScale)}px ${style.shadowColor || 'rgba(0,0,0,0.3)'}`
               : 'none';
 
             const objColor = ensureContrast(style.fontColor, isDarkBg);
@@ -180,37 +345,41 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
             return (
               <div
                 key={obj.id}
-                className="absolute flex flex-col box-border overflow-hidden"
+                className={`absolute flex flex-col box-border ${obj.type === 'text' ? 'overflow-visible' : 'overflow-hidden'}`}
                 style={{
-                  left: `${leftPct}%`,
-                  top: `${topPct}%`,
-                  width: `${widthPct}%`,
-                  height: `${heightPct}%`,
+                  left: `${leftPx}px`,
+                  top: `${topPx}px`,
+                  width: `${widthPx}px`,
+                  height: obj.type === 'text' ? 'auto' : `${heightPx}px`,
+                  minHeight: `${heightPx}px`,
                   transform: `rotate(${obj.rotation || 0}deg)`,
-                  zIndex: obj.zIndex ?? 1,
+                  zIndex: obj.zIndex ?? (obj.type === 'text' ? 2 : 1),
                   opacity: (obj.opacity ?? 1) * (style.opacity ?? 1),
                   backgroundColor: style.backgroundColor || 'transparent',
                   borderColor: style.borderColor || 'transparent',
-                  borderWidth: style.borderWidth ? `${style.borderWidth}px` : 0,
+                  borderWidth: style.borderWidth ? `${Math.max(1, Math.round(style.borderWidth * fitScale))}px` : 0,
                   borderStyle: style.borderColor ? 'solid' : 'none',
-                  borderRadius: style.borderRadius ? `${style.borderRadius}px` : undefined,
+                  borderRadius: style.borderRadius ? `${Math.round(style.borderRadius * fitScale)}px` : undefined,
                   boxShadow: shadowCss,
-                  padding: style.padding ? `${(style.padding / 1080) * 100}%` : '0.5%',
+                  padding: `${paddingPx}px`,
                 }}
               >
                 {obj.type === 'text' && (
                   <div
-                    className="w-full h-full leading-relaxed break-words whitespace-pre-wrap flex flex-col antialiased"
+                    className="w-full leading-normal break-words whitespace-pre-wrap flex flex-col antialiased overflow-visible"
                     style={{
-                      fontFamily: style.fontFamily || titleFont,
-                      fontSize: `${fontSz}cqh`,
+                      fontFamily: objFont,
+                      fontSize: `${fontPx}px`,
                       color: objColor,
                       fontWeight: style.fontWeight || 'bold',
                       fontStyle: style.fontStyle || 'normal',
                       textDecoration: style.textDecoration || 'none',
+                      letterSpacing: style.letterSpacing ? `${style.letterSpacing * fitScale}px` : undefined,
                       textAlign: style.textAlign || 'left',
-                      justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'center' : 'flex-start',
+                      justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'safe center' : 'flex-start',
                       textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none',
+                      wordBreak: 'normal',
+                      overflowWrap: 'break-word',
                     }}
                   >
                     {obj.text}
@@ -222,19 +391,19 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                     src={obj.imageUrl}
                     alt=""
                     className="w-full h-full object-contain pointer-events-none"
-                    style={{ borderRadius: style.borderRadius ? `${style.borderRadius}px` : undefined }}
+                    style={{ borderRadius: style.borderRadius ? `${Math.round(style.borderRadius * fitScale)}px` : undefined }}
                   />
                 )}
 
                 {obj.type === 'shape' && (
                   <div
-                    className="w-full h-full flex items-center justify-center font-semibold text-center leading-normal antialiased"
+                    className="w-full h-full flex items-center justify-center font-semibold text-center leading-[1.2] antialiased overflow-hidden"
                     style={{
-                      borderRadius: obj.shapeType === 'ellipse' || obj.shapeType === 'circle' ? '50%' : obj.shapeType === 'rounded-rectangle' ? '12px' : undefined,
+                      borderRadius: obj.shapeType === 'ellipse' || obj.shapeType === 'circle' ? '50%' : obj.shapeType === 'rounded-rectangle' ? `${Math.round(12 * fitScale)}px` : undefined,
                       backgroundColor: style.backgroundColor || accentColor,
                       color: style.fontColor || '#FFFFFF',
-                      fontSize: `${fontSz}cqh`,
-                      fontFamily: style.fontFamily || bodyFont,
+                      fontSize: `${fontPx}px`,
+                      fontFamily: objFont,
                       textShadow: '0 1px 2px rgba(0,0,0,0.6)',
                     }}
                   >
@@ -244,7 +413,7 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
 
                 {obj.type === 'line' && (
                   <div className="w-full h-full flex items-center">
-                    <div className="w-full" style={{ height: `${style.borderWidth || 2}px`, backgroundColor: style.borderColor || accentColor }} />
+                    <div className="w-full" style={{ height: `${Math.max(1, Math.round((style.borderWidth || 2) * fitScale))}px`, backgroundColor: style.borderColor || accentColor }} />
                   </div>
                 )}
 
@@ -266,17 +435,24 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
         </div>
       ) : (
         /* Main Slide Content Area */
-        <div className={`relative z-10 w-full h-full flex flex-col p-8 md:p-12 lg:p-16 ${isTitleSlide ? 'justify-center' : 'justify-start'}`}>
+        <div 
+          className={`relative z-10 w-full h-full flex flex-col ${isTitleSlide ? 'justify-center' : 'justify-start'}`}
+          style={{
+            padding: `${Math.round((isTitleSlide ? 48 : 36) * fitScale)}px`,
+          }}
+        >
 
           {isTitleSlide ? (
             /* Title Slide Layout */
             <div className="flex flex-col justify-center h-full w-full">
               <h1 
-                className="font-bold tracking-tight leading-tight text-3xl md:text-5xl lg:text-6xl mb-4 antialiased"
+                className="font-bold tracking-tight leading-tight antialiased"
                 style={{
                   fontFamily: titleFont,
+                  fontSize: `${Math.max(10, Math.round(58 * fitScale * titleFitFactor))}px`,
                   color: titleColor,
                   textAlign: textAlign,
+                  marginBottom: `${Math.round(16 * fitScale)}px`,
                   textShadow: isDarkBg ? '0 2px 4px rgba(0,0,0,0.7)' : 'none',
                 }}
               >
@@ -285,11 +461,13 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
 
               {paragraphs.length > 0 && (
                 <div 
-                  className="font-normal leading-relaxed text-base md:text-2xl mt-2 antialiased"
+                  className="font-normal leading-relaxed antialiased"
                   style={{
                     fontFamily: bodyFont,
+                    fontSize: `${Math.max(8, Math.round(28 * fitScale * bodyFitFactor))}px`,
                     color: bodyColor,
                     textAlign: textAlign,
+                    marginTop: `${Math.round(8 * fitScale)}px`,
                     textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
                   }}
                 >
@@ -299,17 +477,19 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
 
               {/* Template Buttons / Badges / Shapes */}
               {slide.elements && slide.elements.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 mt-6">
+                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: `${Math.round(20 * fitScale)}px` }}>
                   {slide.elements.map((elem, eIdx) => {
                     if (elem.type === 'badge') {
                       return (
                         <span
                           key={eIdx}
-                          className="inline-flex items-center justify-center font-semibold rounded px-4 py-2 text-sm shadow-md"
+                          className="inline-flex items-center justify-center font-semibold shadow-md"
                           style={{
                             backgroundColor: elem.backgroundColor || accentColor,
                             color: elem.fontColor || '#FFFFFF',
-                            borderRadius: elem.borderRadius ?? 6,
+                            borderRadius: elem.borderRadius ? `${Math.round(elem.borderRadius * fitScale)}px` : `${Math.round(6 * fitScale)}px`,
+                            padding: `${Math.round(6 * fitScale)}px ${Math.round(14 * fitScale)}px`,
+                            fontSize: `${Math.max(8, Math.round(14 * fitScale))}px`,
                           }}
                         >
                           {elem.text}
@@ -322,7 +502,8 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                           key={eIdx}
                           src={elem.imageUrl}
                           alt=""
-                          className="object-contain max-h-16"
+                          className="object-contain"
+                          style={{ maxHeight: `${Math.round(64 * fitScale)}px` }}
                         />
                       );
                     }
@@ -336,11 +517,18 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
             <div className="flex flex-col h-full w-full">
               {/* Slide Header */}
               {slide.title && (
-                <div className={`border-b ${isDarkBg ? 'border-white/20' : 'border-gray-200'} pb-2 mb-4 flex items-center justify-between`}>
+                <div 
+                  className={`border-b ${isDarkBg ? 'border-white/20' : 'border-gray-200'} flex items-center justify-between`}
+                  style={{
+                    paddingBottom: `${Math.round(8 * fitScale)}px`,
+                    marginBottom: `${Math.round(16 * fitScale)}px`,
+                  }}
+                >
                   <h2 
-                    className="font-bold tracking-tight text-2xl md:text-3xl lg:text-4xl antialiased"
+                    className="font-bold tracking-tight antialiased"
                     style={{
                       fontFamily: titleFont,
+                      fontSize: `${Math.max(10, Math.round(40 * fitScale * titleFitFactor))}px`,
                       color: titleColor,
                       textAlign: textAlign,
                       textShadow: isDarkBg ? '0 2px 4px rgba(0,0,0,0.7)' : 'none',
@@ -353,24 +541,34 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
 
               {/* Slide Body / Bullets */}
               <div 
-                className="flex-1 flex flex-col space-y-3 overflow-hidden justify-center"
-                style={{ textAlign }}
+                className="flex-1 flex flex-col overflow-hidden justify-center"
+                style={{ 
+                  textAlign,
+                  gap: `${Math.round(12 * fitScale)}px`,
+                }}
               >
                 {paragraphs.map((para, pIdx) => (
                   <div 
                     key={pIdx} 
-                    className={`flex items-start gap-2 ${textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex items-start ${textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : 'justify-start'}`}
+                    style={{ gap: `${Math.round(8 * fitScale)}px` }}
                   >
                     {slide.bullets && slide.bullets.length > 0 && (
                       <span 
-                        className="rounded-full shrink-0 w-2 h-2 mt-2.5"
-                        style={{ backgroundColor: accentColor }}
+                        className="rounded-full shrink-0"
+                        style={{ 
+                          backgroundColor: accentColor,
+                          width: `${Math.max(3, Math.round(7 * fitScale))}px`,
+                          height: `${Math.max(3, Math.round(7 * fitScale))}px`,
+                          marginTop: `${Math.round(6 * fitScale)}px`,
+                        }}
                       />
                     )}
                     <p 
-                      className="font-normal leading-relaxed text-base md:text-xl lg:text-2xl antialiased"
+                      className="font-normal leading-relaxed antialiased"
                       style={{
                         fontFamily: bodyFont,
+                        fontSize: `${Math.max(8, Math.round(24 * fitScale * bodyFitFactor))}px`,
                         color: bodyColor,
                         textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
                       }}
@@ -383,17 +581,19 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
 
               {/* Badges / Shapes on Content Slides */}
               {slide.elements && slide.elements.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 mt-4">
+                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: `${Math.round(16 * fitScale)}px` }}>
                   {slide.elements.map((elem, eIdx) => {
                     if (elem.type === 'badge') {
                       return (
                         <span
                           key={eIdx}
-                          className="inline-flex items-center justify-center font-semibold rounded px-3 py-1.5 text-xs shadow-md"
+                          className="inline-flex items-center justify-center font-semibold shadow-md"
                           style={{
                             backgroundColor: elem.backgroundColor || accentColor,
                             color: elem.fontColor || '#FFFFFF',
-                            borderRadius: elem.borderRadius ?? 4,
+                            borderRadius: elem.borderRadius ? `${Math.round(elem.borderRadius * fitScale)}px` : `${Math.round(4 * fitScale)}px`,
+                            padding: `${Math.round(4 * fitScale)}px ${Math.round(10 * fitScale)}px`,
+                            fontSize: `${Math.max(7, Math.round(12 * fitScale))}px`,
                           }}
                         >
                           {elem.text}

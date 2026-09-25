@@ -2375,9 +2375,20 @@ export const useStore = create<AppState>((set, get) => ({
       enabled: nextEnabled,
       laserPointer: nextEnabled ? current.laserPointer : undefined
     };
+    const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+    
+    broadcastStateChange({
+      type: 'ANNOTATION_UPDATE',
+      data: {
+        groupId: targetGroup,
+        annotationState: updated,
+        groupAnnotations: nextGroupAnnotations
+      }
+    });
+
     return {
       annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+      groupAnnotations: nextGroupAnnotations
     };
   }),
 
@@ -2390,9 +2401,20 @@ export const useStore = create<AppState>((set, get) => ({
       strokes: newStrokes,
       redoStack: []
     };
+    const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+
+    broadcastStateChange({
+      type: 'ANNOTATION_UPDATE',
+      data: {
+        groupId: targetGroup,
+        annotationState: updated,
+        groupAnnotations: nextGroupAnnotations
+      }
+    });
+
     return {
       annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+      groupAnnotations: nextGroupAnnotations
     };
   }),
 
@@ -2405,9 +2427,20 @@ export const useStore = create<AppState>((set, get) => ({
       redoStack: [],
       laserPointer: undefined
     };
+    const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+
+    broadcastStateChange({
+      type: 'ANNOTATION_UPDATE',
+      data: {
+        groupId: targetGroup,
+        annotationState: updated,
+        groupAnnotations: nextGroupAnnotations
+      }
+    });
+
     return {
       annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+      groupAnnotations: nextGroupAnnotations
     };
   }),
 
@@ -2423,9 +2456,20 @@ export const useStore = create<AppState>((set, get) => ({
       strokes,
       redoStack: [...current.redoStack, popped]
     };
+    const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+
+    broadcastStateChange({
+      type: 'ANNOTATION_UPDATE',
+      data: {
+        groupId: targetGroup,
+        annotationState: updated,
+        groupAnnotations: nextGroupAnnotations
+      }
+    });
+
     return {
       annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+      groupAnnotations: nextGroupAnnotations
     };
   }),
 
@@ -2441,9 +2485,20 @@ export const useStore = create<AppState>((set, get) => ({
       strokes: [...current.strokes, restored],
       redoStack
     };
+    const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+
+    broadcastStateChange({
+      type: 'ANNOTATION_UPDATE',
+      data: {
+        groupId: targetGroup,
+        annotationState: updated,
+        groupAnnotations: nextGroupAnnotations
+      }
+    });
+
     return {
       annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+      groupAnnotations: nextGroupAnnotations
     };
   }),
 
@@ -2453,9 +2508,17 @@ export const useStore = create<AppState>((set, get) => ({
 
     if (!laserUpdate) {
       const updated = { ...currentAnn, laserPointer: undefined };
+      const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+      broadcastStateChange({
+        type: 'LASER_UPDATE',
+        data: {
+          groupId: targetGroup,
+          laserPointer: null
+        }
+      });
       return {
         annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-        groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+        groupAnnotations: nextGroupAnnotations
       };
     }
     const currentLaser = currentAnn.laserPointer || {
@@ -2472,9 +2535,19 @@ export const useStore = create<AppState>((set, get) => ({
       lastUpdated: Date.now()
     };
     const updated = { ...currentAnn, laserPointer: updatedLaser };
+    const nextGroupAnnotations = { ...state.groupAnnotations, [targetGroup]: updated };
+
+    broadcastStateChange({
+      type: 'LASER_UPDATE',
+      data: {
+        groupId: targetGroup,
+        laserPointer: updatedLaser
+      }
+    });
+
     return {
       annotationState: targetGroup === state.activeControlGroupId ? updated : state.annotationState,
-      groupAnnotations: { ...state.groupAnnotations, [targetGroup]: updated }
+      groupAnnotations: nextGroupAnnotations
     };
   }),
 
@@ -2619,6 +2692,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({ themesList: mergedThemes.length > 0 ? mergedThemes : defaultThemes });
 
+    let hydratedAssets = assets;
     if (assets.length > 0) {
       // Cross-check default themes / systemOptions to populate isDefaultScope if not already set
       const logoUrl = storedOptions?.general?.defaultLogoUrl || storedOptions?.mainOutput?.general?.defaultLogoUrl || mergedThemes.find(t => t.type === 'logo' || t.id === 'theme-logo')?.styles?.logoUrl;
@@ -2628,7 +2702,7 @@ export const useStore = create<AppState>((set, get) => ({
       const annBgUrl = mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundVideoUrl;
       const timerBgUrl = storedOptions?.serviceIntervals?.backgroundAssetId || (storedOptions?.serviceIntervals as any)?.backgroundAssetUrl || mergedThemes.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundVideoUrl;
 
-      const hydratedAssets = assets.map(a => {
+      hydratedAssets = assets.map(a => {
         const scopes = { ...(a.isDefaultScope || {}) };
         if (logoUrl && (a.url === logoUrl || a.id === logoUrl)) scopes.logo = true;
         if (songBgUrl && (a.url === songBgUrl || a.id === songBgUrl)) scopes.songs = true;
@@ -2819,6 +2893,33 @@ export const useStore = create<AppState>((set, get) => ({
         routeActivationStack: cleanRouteStack
       }
     });
+
+    // 5. Silent Background Font Pre-Warming on Startup
+    setTimeout(() => {
+      try {
+        import('../utils/pptxFontManager').then(({ getFontCachePreferences, scanLibraryAllFonts, prewarmFontBatch, getCuratedWorshipFontGroups }) => {
+          const prefs = getFontCachePreferences();
+          if (prefs.autoPrewarmOnStartup) {
+            import('../db/presentations').then(({ getAllPresentations }) => {
+              getAllPresentations().then((presentations) => {
+                const scan = scanLibraryAllFonts(presentations, mergedThemes, mergedSongs, {
+                  schedules: schedules,
+                  systemOptions: storedOptions || undefined,
+                  assets: hydratedAssets || assets,
+                });
+                if (scan.allUniqueFonts.length > 0) {
+                  prewarmFontBatch(scan.allUniqueFonts).catch(() => {});
+                }
+              }).catch(() => {});
+            });
+          }
+          if (prefs.prewarmCuratedSuiteOnStartup) {
+            const curated = getCuratedWorshipFontGroups().flatMap(g => g.fonts);
+            prewarmFontBatch(curated).catch(() => {});
+          }
+        });
+      } catch (e) {}
+    }, 1500);
     // Note: When the system starts/boots, schedule panel remains blank (0 items) by default
     // so operators start fresh for the service session.
   },

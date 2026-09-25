@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
 import { resolveDisplayAssignments, routeTargetsDisplay } from '../core/DisplayRouter';
 import { DisplayManager } from '../core/DisplayManager';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
+import { ProjectorErrorBoundary } from './ProjectorErrorBoundary';
 import { useScreens } from '../hooks/useScreens';
 import { initSync } from '../store/sync';
 import { broadcastStateChange } from '../utils/broadcastSync';
@@ -23,8 +24,60 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   // Read displayId and routedGroupId from URL search params if not provided in props
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const displayId = propDisplayId || searchParams.get('displayId') || searchParams.get('targetDisplayId') || searchParams.get('display') || '';
-  const routedGroupId = searchParams.get('groupId') || searchParams.get('group') || initialGroupId || '';
+  const routedGroupId = initialGroupId || searchParams.get('groupId') || searchParams.get('group') || '';
   const [currentRouteGroupId, setCurrentRouteGroupId] = useState<string>(routedGroupId);
+
+  // Synchronize when initialGroupId prop updates
+  useEffect(() => {
+    if (initialGroupId && initialGroupId !== currentRouteGroupId) {
+      setCurrentRouteGroupId(initialGroupId);
+    }
+  }, [initialGroupId]);
+
+  // Cursor auto-hide logic for clean presentation projection
+  const [cursorVisible, setCursorVisible] = useState(true);
+  const cursorTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleMouseMove = () => {
+      setCursorVisible(true);
+      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+      cursorTimerRef.current = setTimeout(() => {
+        setCursorVisible(false);
+      }, 2500);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    cursorTimerRef.current = setTimeout(() => setCursorVisible(false), 2500);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      if (cursorTimerRef.current) clearTimeout(cursorTimerRef.current);
+    };
+  }, []);
+
+  // Fullscreen toggle helpers (Double-click or F11 / F key)
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F11' || e.key === 'f' || e.key === 'F') {
+        // Prevent default browser F11 and toggle native fullscreen
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === 'Escape' && document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleFullscreen]);
 
   // Initialize broadcast synchronization and aggressive state retrieval
   useEffect(() => {
@@ -33,14 +86,36 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     // Projector must load its own assets and songs from DB so local background URLs resolve correctly
     useStore.getState().loadAllData().catch(e => console.warn('Projector failed to load DB data:', e));
 
-    // Immediately request state from master window
-    broadcastStateChange({ type: 'REQUEST_STATE', data: null });
-    const timer1 = setTimeout(() => {
-      broadcastStateChange({ type: 'REQUEST_STATE', data: null });
-    }, 250);
-    const timer2 = setTimeout(() => {
-      broadcastStateChange({ type: 'REQUEST_STATE', data: null });
+    // Resilient state retrieval: immediate on mount, with a single deferred fallback if still disconnected
+    const requestSync = () => {
+      broadcastStateChange({ type: 'REQUEST_STATE', data: { origin: 'projector', timestamp: Date.now() } });
+    };
+    requestSync();
+    
+    // Single fallback at 800ms only if state is still unpopulated
+    const fallbackTimer = setTimeout(() => {
+      const currentStates = useStore.getState().groupStates;
+      if (!currentStates || Object.keys(currentStates).length === 0) {
+        requestSync();
+      }
     }, 800);
+
+    // Watchdog ping only triggers if state is empty or connection was marked interrupted
+    const watchdogInterval = setInterval(() => {
+      const currentStates = useStore.getState().groupStates;
+      if (!currentStates || Object.keys(currentStates).length === 0) {
+        requestSync();
+      }
+    }, 15000);
+
+    // Refresh state when window gains focus or visibility
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        requestSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
 
     // Hydrate from localStorage if groupStates is empty
     try {
@@ -87,8 +162,10 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     window.addEventListener('simpleworship:projector-route-changed', handleRouteChanged);
 
     return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
+      clearTimeout(fallbackTimer);
+      clearInterval(watchdogInterval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('simpleworship:projector-route-changed', handleRouteChanged);
     };
@@ -177,12 +254,29 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
           candidateSet.add(g.id);
         }
       });
-    } else if (currentRouteGroupId || routedGroupId) {
+    }
+
+    // Fallback 1: If displayId didn't match any configured displays yet, but an explicit route was requested
+    if (candidateSet.size === 0 && (currentRouteGroupId || routedGroupId)) {
       const targetGid = currentRouteGroupId || routedGroupId;
       if (outputGroups.some(g => g.id === targetGid)) {
         candidateSet.add(targetGid);
       }
-    } else {
+    }
+
+    // Fallback 2: Check displayId heuristics (e.g. Monitor 2 / Secondary / Projector)
+    if (candidateSet.size === 0 && displayId) {
+      const dLower = displayId.toLowerCase();
+      if (dLower.includes('2') || dLower.includes('secondary') || dLower.includes('projector') || dLower.includes('alternate')) {
+        const broadcastGroup = outputGroups.find(g => g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2');
+        if (broadcastGroup) {
+          candidateSet.add(broadcastGroup.id);
+        }
+      }
+    }
+
+    // Fallback 3: Default first broadcast group
+    if (candidateSet.size === 0) {
       const defaultGroup = outputGroups.find(g => g.role !== 'confidence' && g.id !== 'group-stage') || outputGroups[0];
       if (defaultGroup) {
         candidateSet.add(defaultGroup.id);
@@ -193,7 +287,6 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   }, [isStageWindow, displayId, currentRouteGroupId, routedGroupId, outputGroups, screens]);
 
   // Granular winning route selector: subscribes ONLY to candidate groups' live flags and routeActivationStack
-  // Returns a primitive string or null. Does NOT re-render when unrelated routes (e.g. R2 on G1 projector) change.
   const winningGroupId = useStore(React.useCallback((state) => {
     if (candidateGroupIds.length === 0) return null;
     
@@ -206,7 +299,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     if (liveIds.length === 0) return null;
     if (liveIds.length === 1) return liveIds[0];
 
-    // Arbitration: sort by routeActivationStack MRU
+    // Arbitration: sort by routeActivationStack MRU (Most Recently Used)
     const stackRankMap = new Map<string, number>();
     (state.routeActivationStack || []).forEach((id, idx) => stackRankMap.set(id, idx));
 
@@ -219,21 +312,74 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     return sorted[0] || null;
   }, [candidateGroupIds, isStageWindow]));
 
-  // Granular winning state selector: subscribes ONLY to the winning route's state
-  // If winningGroupId is R1, changes to R2 or Stage state produce ZERO re-renders on R1's projector.
-  const winningState = useStore(React.useCallback((state) => {
-    if (!winningGroupId) return undefined;
-    return state.groupStates[winningGroupId] || state.stagedGroupStates[winningGroupId];
-  }, [winningGroupId]));
+  // Persistent Route Management:
+  // We keep the canvas permanently mounted on the designated primary route so WebGL, video decoders,
+  // PPTX parse pipelines, and font auto-fit engines NEVER get torn down on live/standby toggles.
+  const designatedGroupId = candidateGroupIds[0] || currentRouteGroupId || routedGroupId || outputGroups[0]?.id || 'group-congregation';
+  const lastActiveGroupIdRef = useRef<string>(designatedGroupId);
+  if (winningGroupId) {
+    lastActiveGroupIdRef.current = winningGroupId;
+  }
+  const activeGroupId = winningGroupId || lastActiveGroupIdRef.current || designatedGroupId;
 
-  const winningGroup = useMemo(() => {
-    if (!winningGroupId) return undefined;
-    return outputGroups.find(g => g.id === winningGroupId) || outputGroups[0];
-  }, [winningGroupId, outputGroups]);
+  const activeGroup = useMemo(() => {
+    return outputGroups.find(g => g.id === activeGroupId) || outputGroups[0];
+  }, [activeGroupId, outputGroups]);
+
+  // Granular active state selector: subscribes to the active route's state
+  const rawActiveState = useStore(React.useCallback((state) => {
+    return state.groupStates[activeGroupId] || state.stagedGroupStates[activeGroupId];
+  }, [activeGroupId]));
+
+  const lastValidStateRef = useRef<any>(rawActiveState);
+  if (rawActiveState) {
+    lastValidStateRef.current = rawActiveState;
+  }
+  const activeState = rawActiveState || lastValidStateRef.current;
+
+  // Multi-route overlay detection: Check if any secondary candidate route is also live on this display
+  const secondaryOverlayGroupId = useStore(React.useCallback((state) => {
+    if (isStageWindow || candidateGroupIds.length <= 1) return null;
+    const liveIds = candidateGroupIds.filter(gid => Boolean(state.groupStates[gid]?.isLiveEnabled));
+    if (liveIds.length <= 1) return null;
+    // Return secondary live group (different from the base activeGroupId)
+    const secondary = liveIds.find(id => id !== activeGroupId);
+    return secondary || null;
+  }, [candidateGroupIds, isStageWindow, activeGroupId]));
+
+  const secondaryOverlayGroup = useMemo(() => {
+    if (!secondaryOverlayGroupId) return undefined;
+    return outputGroups.find(g => g.id === secondaryOverlayGroupId);
+  }, [secondaryOverlayGroupId, outputGroups]);
+
+  const secondaryOverlayState = useStore(React.useCallback((state) => {
+    if (!secondaryOverlayGroupId) return undefined;
+    return state.groupStates[secondaryOverlayGroupId] || state.stagedGroupStates[secondaryOverlayGroupId];
+  }, [secondaryOverlayGroupId]));
+
+  const isLive = Boolean(winningGroupId);
+
+  const effectiveActiveState = useMemo(() => {
+    if (!activeState) return undefined;
+    return {
+      ...activeState,
+      isLiveEnabled: isLive
+    };
+  }, [activeState, isLive]);
+
+  const effectiveSecondaryState = useMemo(() => {
+    if (!secondaryOverlayState) return undefined;
+    return {
+      ...secondaryOverlayState,
+      isLiveEnabled: isLive
+    };
+  }, [secondaryOverlayState, isLive]);
 
   return (
     <div 
       data-canvas-preview="true"
+      onDoubleClick={toggleFullscreen}
+      onContextMenu={e => e.preventDefault()}
       className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center m-0 p-0"
       style={{
         width: '100vw',
@@ -242,27 +388,63 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         maxHeight: '100vh',
         margin: 0,
         padding: 0,
-        overflow: 'hidden'
+        overflow: 'hidden',
+        cursor: cursorVisible ? 'default' : 'none'
       }}
     >
-      {/* Physical Monitor Arbitration: Render ONLY the single winning active route's canvas for this physical display */}
-      {winningGroupId ? (
-        <div 
-          className="absolute inset-0 pointer-events-auto z-10 w-full h-full m-0 p-0 overflow-hidden" 
-          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
-        >
+      {/* Base Primary Presentation Layer: Stays permanently mounted to prevent video/canvas/font flicker */}
+      <div 
+        className="absolute inset-0 pointer-events-auto z-10 w-full h-full m-0 p-0 overflow-hidden" 
+        style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+      >
+        <ProjectorErrorBoundary fallbackGroupId={activeGroupId}>
           <MonitorPreviewCanvas
-            groupId={winningGroupId}
-            customGroup={winningGroup}
-            customState={winningState}
+            groupId={activeGroupId}
+            customGroup={activeGroup}
+            customState={effectiveActiveState}
             isProjectorMode={true}
             isOverlayLayer={false}
             className="w-full h-full"
           />
+        </ProjectorErrorBoundary>
+      </div>
+
+      {/* Secondary Multi-Route Overlay Layer (e.g. Lower-Third / Scripture overlay on top of congregation slide) */}
+      {secondaryOverlayGroupId && secondaryOverlayGroup && secondaryOverlayState && (
+        <div 
+          className="absolute inset-0 pointer-events-none z-20 w-full h-full m-0 p-0 overflow-hidden" 
+          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+        >
+          <ProjectorErrorBoundary fallbackGroupId={secondaryOverlayGroupId}>
+            <MonitorPreviewCanvas
+              groupId={secondaryOverlayGroupId}
+              customGroup={secondaryOverlayGroup}
+              customState={effectiveSecondaryState}
+              isProjectorMode={true}
+              isOverlayLayer={true}
+              className="w-full h-full"
+            />
+          </ProjectorErrorBoundary>
         </div>
-      ) : (
-        /* Standby black backdrop when no routes are live */
-        <div className="absolute inset-0 z-10 bg-black pointer-events-none w-full h-full m-0 p-0" />
+      )}
+
+      {/* Seamless Standby Veil: When no routes are live, fade smoothly to solid black without unmounting canvas */}
+      <div 
+        className={`absolute inset-0 z-40 bg-black pointer-events-none transition-opacity duration-300 ease-in-out ${
+          isLive ? 'opacity-0' : 'opacity-100'
+        }`} 
+      />
+
+      {/* Standby Diagnostics Pill: Visible only when in standby mode or moving mouse, giving instant feedback */}
+      {!isLive && cursorVisible && (
+        <div className="absolute bottom-4 left-4 z-50 pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 border border-white/10 text-white/60 text-xs font-mono backdrop-blur-sm transition-opacity duration-300">
+          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+          <span>{displayId ? `Target: ${displayId}` : `Display ${displayIndex}`}</span>
+          <span className="text-white/30">•</span>
+          <span>Standby Ready</span>
+          <span className="text-white/30">•</span>
+          <span className="text-white/40">Double-click for Fullscreen</span>
+        </div>
       )}
 
       {/* Visual Identification Overlay for connected monitors */}
@@ -286,3 +468,4 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     </div>
   );
 }
+

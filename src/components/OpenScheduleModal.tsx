@@ -89,14 +89,14 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
       // Save imported bundled songs if any
       if (bundledSongs && bundledSongs.length > 0) {
         for (const song of bundledSongs) {
-          await dbApi.addSong(song).catch(() => {});
+          await useStore.getState().addSong(song).catch(() => {});
         }
       }
 
       // Save imported bundled themes if any
       if (bundledThemes && bundledThemes.length > 0) {
         for (const thm of bundledThemes) {
-          await dbApi.addTheme(thm).catch(() => {});
+          await useStore.getState().saveTheme(thm).catch(() => {});
         }
       }
       

@@ -119,7 +119,7 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
               const showNums = scriptureOpts?.showVerseNumbers ?? true;
 
               return (
-                <span key={v.verse} className="inline">
+                <span key={`${v.verse}-${idx}`} className="inline">
                   {showNums && (
                     <span 
                       className={`inline-block select-none transition-colors ${isSuper ? 'mr-1.5 align-super' : 'mr-2.5'}`}

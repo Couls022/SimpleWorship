@@ -1,5 +1,12 @@
 import JSZip from 'jszip';
 import { Slide, SlideElement, SlideObject, ShapeType, SlideTransition } from '../types';
+import { 
+  getCompatibleFontStack, 
+  extractFontsFromPptx, 
+  ensurePptxFontsLoaded, 
+  calculateAutoFitTextScale,
+  cleanPptxFontName 
+} from './pptxFontManager';
 
 export interface ParsedSlide extends Slide {
   notes?: string;
@@ -82,6 +89,13 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
   }
   const parser = new DOMParser();
 
+  // Trigger proactive background font loading from Google Fonts for Canva & external PPTX files
+  extractFontsFromPptx(zipData).then((fonts) => {
+    if (fonts.length > 0) {
+      ensurePptxFontsLoaded(fonts).catch(() => {});
+    }
+  }).catch(() => {});
+
   // 1. Extract Slide Dimensions & Aspect Ratio from presentation.xml
   let sldWidthEmu = 12192000;  // Standard 16:9 1920x1080 in EMUs (13.333 inches)
   let sldHeightEmu = 6858000;  // Standard 16:9 in EMUs (7.5 inches)
@@ -108,13 +122,14 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
   const mediaMap = new Map<string, string>();
   const mediaFiles = Object.keys(loadedZip.files).filter(name => name.startsWith('ppt/media/'));
 
-  for (const mediaPath of mediaFiles) {
+  await Promise.all(mediaFiles.map(async (mediaPath) => {
     try {
       const fileObj = loadedZip.files[mediaPath];
       const blob = await fileObj.async('blob');
-      const dataUrl = await new Promise<string>((resolve) => {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
       const relativePath = mediaPath.replace('ppt/', '');
@@ -127,7 +142,7 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
     } catch (e) {
       console.warn('[pptxParser] Media extraction warning for:', mediaPath, e);
     }
-  }
+  }));
 
   // 3. Extract Theme Colors & Typography from ppt/theme/theme1.xml
   const themeColors: Record<string, string> = {
@@ -170,10 +185,10 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
       const majorLatin = themeDoc.querySelector('a\\:majorFont a\\:latin, majorFont latin');
       const minorLatin = themeDoc.querySelector('a\\:minorFont a\\:latin, minorFont latin');
       if (majorLatin?.getAttribute('typeface')) {
-        themeMajorFont = `${majorLatin.getAttribute('typeface')}, sans-serif`;
+        themeMajorFont = cleanPptxFontName(majorLatin.getAttribute('typeface') || '');
       }
       if (minorLatin?.getAttribute('typeface')) {
-        themeMinorFont = `${minorLatin.getAttribute('typeface')}, sans-serif`;
+        themeMinorFont = cleanPptxFontName(minorLatin.getAttribute('typeface') || '');
       }
     } catch (e) {
       console.warn('[pptxParser] Theme parsing warning:', e);
@@ -642,7 +657,14 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
     }
 
     // Helper to process a shape element into SlideObject and extracted text
-    const processShapeElement = (shape: Element, shapeIdx: number, groupOffsetX = 0, groupOffsetY = 0) => {
+    const processShapeElement = (
+      shape: Element,
+      shapeIdx: number,
+      groupOffsetX = 0,
+      groupOffsetY = 0,
+      groupScaleX = 1,
+      groupScaleY = 1
+    ) => {
       const phElem = shape.getElementsByTagName('p:ph')[0] || shape.getElementsByTagName('ph')[0];
       const phType = phElem ? (phElem.getAttribute('type') || '').toLowerCase() : '';
       const phIdx = phElem ? phElem.getAttribute('idx') : null;
@@ -680,10 +702,15 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
       let rotDeg = 0;
 
       if (xfrm) {
-        offX = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('x') || '0', 10) + groupOffsetX;
-        offY = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('y') || '0', 10) + groupOffsetY;
-        extCx = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cx') || '0', 10);
-        extCy = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cy') || '0', 10);
+        const rawX = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('x') || '0', 10);
+        const rawY = parseInt(xfrm.getElementsByTagName('a:off')[0]?.getAttribute('y') || '0', 10);
+        const rawW = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cx') || '0', 10);
+        const rawH = parseInt(xfrm.getElementsByTagName('a:ext')[0]?.getAttribute('cy') || '0', 10);
+
+        offX = Math.round(groupOffsetX + rawX * groupScaleX);
+        offY = Math.round(groupOffsetY + rawY * groupScaleY);
+        extCx = Math.round(rawW * groupScaleX);
+        extCy = Math.round(rawH * groupScaleY);
         const rotAttr = xfrm.getAttribute('rot');
         if (rotAttr) rotDeg = Math.round(parseInt(rotAttr, 10) / 60000);
       }
@@ -720,10 +747,32 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
         if (wAttr) borderWidth = Math.max(1, Math.round(parseInt(wAttr, 10) / 12700));
       }
 
-      // Vertical text alignment
+      // Vertical text alignment, inner padding, and auto-fit scaling
       const bodyPr = shape.getElementsByTagName('a:bodyPr')[0];
       const anchorAttr = bodyPr?.getAttribute('anchor') || 't';
       const alignVertical = anchorAttr === 'ctr' || anchorAttr === 'mid' ? 'middle' : anchorAttr === 'b' ? 'bottom' : 'top';
+
+      let normAutofitScale = 1;
+      const normAutofit = bodyPr?.getElementsByTagName('a:normAutofit')[0];
+      if (normAutofit) {
+        const fontScaleStr = normAutofit.getAttribute('fontScale');
+        if (fontScaleStr) {
+          const sVal = parseInt(fontScaleStr, 10);
+          if (!isNaN(sVal) && sVal > 0) normAutofitScale = sVal / 100000;
+        }
+      }
+
+      // Exact OpenXML Inset Margins (1 px = 9525 EMUs at 96 DPI)
+      let shapePadding = 8;
+      if (bodyPr) {
+        const lIns = bodyPr.getAttribute('lIns');
+        const tIns = bodyPr.getAttribute('tIns');
+        if (lIns || tIns) {
+          const lVal = lIns ? Math.round(parseInt(lIns, 10) / 9525) : 8;
+          const tVal = tIns ? Math.round(parseInt(tIns, 10) / 9525) : 4;
+          shapePadding = Math.max(2, Math.max(lVal, tVal));
+        }
+      }
 
       // Extract paragraphs & runs
       const paragraphs = Array.from(shape.getElementsByTagName('a:p'));
@@ -732,6 +781,7 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
       let shapeFontFamily: string | undefined;
       let shapeFontSize: number | undefined;
       let shapeFontWeight: 'normal' | 'bold' | '500' | '600' | '700' | '800' = 'normal';
+      let shapeLetterSpacing: number | undefined;
       let shapeTextAlign: 'left' | 'center' | 'right' | 'justify' = 'left';
 
       for (const p of paragraphs) {
@@ -739,6 +789,27 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
         const algn = pPr?.getAttribute('algn');
         const currentAlign = algn === 'ctr' ? 'center' : algn === 'r' ? 'right' : algn === 'just' ? 'justify' : 'left';
         shapeTextAlign = currentAlign;
+
+        // Check defRPr and endParaRPr for Canva paragraph defaults
+        const defRPr = pPr?.getElementsByTagName('a:defRPr')[0] || p?.getElementsByTagName('a:endParaRPr')[0];
+        if (defRPr) {
+          const color = resolveColor(defRPr, activeClrMap);
+          const sz = defRPr.getAttribute('sz');
+          const typeface = defRPr.getElementsByTagName('a:latin')[0]?.getAttribute('typeface');
+          const isB = defRPr.getAttribute('b') === '1' || defRPr.getAttribute('b') === 'true';
+          const spcAttr = defRPr.getAttribute('spc');
+
+          if (isB && shapeFontWeight === 'normal') shapeFontWeight = 'bold';
+          if (color && !shapeFontColor) shapeFontColor = color;
+          if (typeface && !shapeFontFamily) shapeFontFamily = cleanPptxFontName(typeface, themeMajorFont, themeMinorFont) || typeface.trim();
+          if (sz && !shapeFontSize) shapeFontSize = Math.round(parseInt(sz, 10) / 100);
+          if (spcAttr && shapeLetterSpacing === undefined) {
+            const spcVal = parseInt(spcAttr, 10);
+            if (!isNaN(spcVal) && spcVal !== 0) {
+              shapeLetterSpacing = Math.round((spcVal / 100) * 1.333 * 10) / 10;
+            }
+          }
+        }
 
         const runs = Array.from(p.getElementsByTagName('a:r'));
         let paragraphText = '';
@@ -755,19 +826,26 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
             const sz = rPr.getAttribute('sz');
             const typeface = rPr.getElementsByTagName('a:latin')[0]?.getAttribute('typeface');
             const isB = rPr.getAttribute('b') === '1' || rPr.getAttribute('b') === 'true';
+            const spcAttr = rPr.getAttribute('spc');
 
             if (isB) shapeFontWeight = 'bold';
             if (color && !shapeFontColor) shapeFontColor = color;
-            if (typeface && !shapeFontFamily) shapeFontFamily = `${typeface}, sans-serif`;
+            if (typeface && !shapeFontFamily) shapeFontFamily = cleanPptxFontName(typeface, themeMajorFont, themeMinorFont) || typeface.trim();
             if (sz && !shapeFontSize) shapeFontSize = Math.round(parseInt(sz, 10) / 100);
+            if (spcAttr && shapeLetterSpacing === undefined) {
+              const spcVal = parseInt(spcAttr, 10);
+              if (!isNaN(spcVal) && spcVal !== 0) {
+                shapeLetterSpacing = Math.round((spcVal / 100) * 1.333 * 10) / 10;
+              }
+            }
 
             if (phType === 'title' || phType === 'ctrtitle') {
               if (color) titleColor = color;
-              if (typeface) titleFontFamily = `${typeface}, sans-serif`;
+              if (typeface) titleFontFamily = cleanPptxFontName(typeface, themeMajorFont, themeMinorFont) || typeface.trim();
               if (sz) titleFontSize = Math.round(parseInt(sz, 10) / 100);
             } else {
               if (color && !bodyFontColor) bodyFontColor = color;
-              if (typeface) bodyFontFamily = `${typeface}, sans-serif`;
+              if (typeface) bodyFontFamily = cleanPptxFontName(typeface, themeMajorFont, themeMinorFont) || typeface.trim();
               if (sz) bodyFontSize = Math.round(parseInt(sz, 10) / 100);
             }
           }
@@ -842,7 +920,7 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
         const objX = Math.round((offX / sldWidthEmu) * baseW);
         const objY = Math.round((offY / sldHeightEmu) * baseH);
         const objW = Math.round((extCx / sldWidthEmu) * baseW);
-        const objH = Math.round((extCy / sldHeightEmu) * baseH);
+        let objH = Math.round((extCy / sldHeightEmu) * baseH);
 
         if (shapeFillColor || fullText.length > 0 || borderColor) {
           const isShapeWithFill = Boolean(shapeFillColor);
@@ -853,6 +931,36 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
             shapeFillColor ? Boolean(getLuminance(shapeFillColor) < 0.5) : isDarkBg,
             shapeFillColor || slideBackgroundColor
           );
+
+          const targetFontFamily = shapeFontFamily || (phType === 'title' || phType === 'ctrtitle' ? themeMajorFont : themeMinorFont);
+          const rawBaseFontSize = shapeFontSize ? Math.round(shapeFontSize * 1.33 * normAutofitScale) : undefined;
+          let calculatedFontSize = rawBaseFontSize;
+
+          if (rawBaseFontSize && fullText && objW > 0 && objH > 0) {
+            const fitFactor = calculateAutoFitTextScale({
+              text: fullText,
+              boxWidth: objW,
+              boxHeight: objH,
+              fontSize: rawBaseFontSize,
+              fontFamily: targetFontFamily,
+              fontWeight: shapeFontWeight,
+              lineHeightRatio: 1.2,
+              padding: shapePadding,
+            });
+            if (fitFactor < 1) {
+              calculatedFontSize = Math.max(14, Math.round(rawBaseFontSize * fitFactor));
+            }
+          }
+
+          // Ensure objH is at least tall enough to comfortably contain the text lines
+          // Canva often exports shallow bounding boxes for headers and paragraphs
+          if (!isShapeWithFill && fullText && calculatedFontSize) {
+            const numLines = Math.max(1, fullText.split('\n').length);
+            const minReqH = Math.round(numLines * calculatedFontSize * 1.3) + shapePadding * 2;
+            if (objH < minReqH) {
+              objH = minReqH;
+            }
+          }
 
           slideObjects.push({
             id: `sp-${sIdx}-${shapeIdx}`,
@@ -871,12 +979,13 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
               borderWidth: borderWidth || (borderColor ? 1 : 0),
               borderRadius: borderRadius,
               fontColor: effectiveFontColor,
-              fontFamily: shapeFontFamily || (phType === 'title' || phType === 'ctrtitle' ? themeMajorFont : themeMinorFont),
-              fontSize: shapeFontSize ? Math.round(shapeFontSize * 1.33) : undefined,
+              fontFamily: targetFontFamily,
+              fontSize: calculatedFontSize,
               fontWeight: shapeFontWeight,
+              letterSpacing: shapeLetterSpacing,
               textAlign: shapeTextAlign,
               alignVertical: alignVertical,
-              padding: shapeFillColor ? 12 : 4,
+              padding: shapePadding,
             }
           });
         }
@@ -909,28 +1018,70 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
       }
     };
 
-    // Parse standard shapes <p:sp>
-    const shapes = Array.from(xmlDoc.getElementsByTagName('p:sp'));
-    for (let shapeIdx = 0; shapeIdx < shapes.length; shapeIdx++) {
-      processShapeElement(shapes[shapeIdx], shapeIdx);
+    // Parse top-level standard shapes <p:sp> (excluding shapes inside groups to prevent duplicate rendering)
+    const allShapes = Array.from(xmlDoc.getElementsByTagName('p:sp'));
+    const topLevelShapes = allShapes.filter(sp => {
+      let parent = sp.parentElement;
+      while (parent && parent !== xmlDoc.documentElement) {
+        if (parent.nodeName === 'p:grpSp' || parent.nodeName === 'grpSp' || parent.localName === 'grpSp') {
+          return false;
+        }
+        parent = parent.parentElement;
+      }
+      return true;
+    });
+
+    for (let shapeIdx = 0; shapeIdx < topLevelShapes.length; shapeIdx++) {
+      processShapeElement(topLevelShapes[shapeIdx], shapeIdx);
     }
 
     // Parse group shapes <p:grpSp>
-    const groupShapes = Array.from(xmlDoc.getElementsByTagName('p:grpSp'));
-    for (let gIdx = 0; gIdx < groupShapes.length; gIdx++) {
-      const grp = groupShapes[gIdx];
+    const allGroupShapes = Array.from(xmlDoc.getElementsByTagName('p:grpSp'));
+    const topLevelGroupShapes = allGroupShapes.filter(grp => {
+      let parent = grp.parentElement;
+      while (parent && parent !== xmlDoc.documentElement) {
+        if (parent.nodeName === 'p:grpSp' || parent.nodeName === 'grpSp' || parent.localName === 'grpSp') {
+          return false;
+        }
+        parent = parent.parentElement;
+      }
+      return true;
+    });
+
+    for (let gIdx = 0; gIdx < topLevelGroupShapes.length; gIdx++) {
+      const grp = topLevelGroupShapes[gIdx];
       const grpXfrm = grp.getElementsByTagName('p:grpSpPr')[0]?.getElementsByTagName('a:xfrm')[0];
       let gOffX = 0;
       let gOffY = 0;
+      let gScaleX = 1;
+      let gScaleY = 1;
       if (grpXfrm) {
-        gOffX = parseInt(grpXfrm.getElementsByTagName('a:off')[0]?.getAttribute('x') || '0', 10);
-        gOffY = parseInt(grpXfrm.getElementsByTagName('a:off')[0]?.getAttribute('y') || '0', 10);
+        const off = grpXfrm.getElementsByTagName('a:off')[0];
+        const ext = grpXfrm.getElementsByTagName('a:ext')[0];
+        const chOff = grpXfrm.getElementsByTagName('a:chOff')[0];
+        const chExt = grpXfrm.getElementsByTagName('a:chExt')[0];
+
+        const gx = parseInt(off?.getAttribute('x') || '0', 10);
+        const gy = parseInt(off?.getAttribute('y') || '0', 10);
+        const gw = parseInt(ext?.getAttribute('cx') || '0', 10);
+        const gh = parseInt(ext?.getAttribute('cy') || '0', 10);
+        const chx = parseInt(chOff?.getAttribute('x') || '0', 10);
+        const chy = parseInt(chOff?.getAttribute('y') || '0', 10);
+        const chw = parseInt(chExt?.getAttribute('cx') || '0', 10) || gw;
+        const chh = parseInt(chExt?.getAttribute('cy') || '0', 10) || gh;
+
+        gScaleX = chw > 0 ? (gw / chw) : 1;
+        gScaleY = chh > 0 ? (gh / chh) : 1;
+        gOffX = gx - (chx * gScaleX);
+        gOffY = gy - (chy * gScaleY);
       }
       const childShapes = Array.from(grp.getElementsByTagName('p:sp'));
       for (let cIdx = 0; cIdx < childShapes.length; cIdx++) {
-        processShapeElement(childShapes[cIdx], 1000 + gIdx * 100 + cIdx, gOffX, gOffY);
+        processShapeElement(childShapes[cIdx], 1000 + gIdx * 100 + cIdx, gOffX, gOffY, gScaleX, gScaleY);
       }
     }
+
+    const processedObjects = deconflictAndDeduplicateSlideObjects(slideObjects);
 
     const fullBodyText = bodyParagraphs.join('\n\n');
 
@@ -967,7 +1118,7 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
       accentColor: themeColors.accent1 || '#0078D4',
       headerBarColor: headerBarColor || themeColors.accent1 || '#0078D4',
       elements: slideElements.length > 0 ? slideElements : undefined,
-      objects: slideObjects.length > 0 ? slideObjects : undefined,
+      objects: processedObjects.length > 0 ? processedObjects : undefined,
       transition: slideTransition,
       aspectRatio: deckAspectRatio,
       aspectRatioLabel: deckAspectLabel,
@@ -978,6 +1129,140 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
   }
 
   return slides;
+}
+
+/**
+ * Advanced Deconfliction and Anti-Overlap Engine for PPTX Slides.
+ * 
+ * Prevents text stacking ("patong-patong"), ghost duplicate shapes from Canva/PowerPoint,
+ * bounding-box vertical collisions, and shadow layer duplications.
+ */
+export function deconflictAndDeduplicateSlideObjects(objects: SlideObject[]): SlideObject[] {
+  if (!objects || objects.length <= 1) return objects || [];
+
+  const cleaned: SlideObject[] = [];
+  const removedIds = new Set<string>();
+
+  // Pass 1: Deduplicate identical/shadow text shapes (Canva & PPT drop-shadow / outline duplicates)
+  for (let i = 0; i < objects.length; i++) {
+    const a = objects[i];
+    if (removedIds.has(a.id)) continue;
+
+    const aText = (a.text || '').trim();
+    if (!aText) {
+      // Keep shape if it has a fill or border
+      if (a.type === 'shape' || a.type === 'image' || a.type === 'line' || (a.style?.backgroundColor && a.style.backgroundColor !== 'transparent') || a.style?.borderColor) {
+        cleaned.push(a);
+      }
+      continue;
+    }
+
+    let isDuplicateOfOther = false;
+
+    for (let j = 0; j < objects.length; j++) {
+      if (i === j) continue;
+      const b = objects[j];
+      if (removedIds.has(b.id)) continue;
+
+      const bText = (b.text || '').trim();
+      if (!bText) continue;
+
+      // Check if text is identical
+      if (aText === bText) {
+        const dx = Math.abs(a.x - b.x);
+        const dy = Math.abs(a.y - b.y);
+        const dw = Math.abs(a.width - b.width);
+        const dh = Math.abs(a.height - b.height);
+
+        // Case A: Near-exact position duplicate (dx <= 6, dy <= 6)
+        if (dx <= 8 && dy <= 8) {
+          removedIds.add(b.id);
+          continue;
+        }
+
+        // Case B: Canva Drop Shadow / Glow duplicate layer (dx <= 22, dy <= 22)
+        if (dx <= 24 && dy <= 24 && dw <= 50 && dh <= 50) {
+          const bIsShadow = (b.zIndex ?? 1) <= (a.zIndex ?? 1);
+          if (bIsShadow) {
+            removedIds.add(b.id);
+            if (a.style) {
+              a.style.shadowEnabled = true;
+              a.style.shadowOffsetX = b.x - a.x;
+              a.style.shadowOffsetY = b.y - a.y;
+              a.style.shadowBlur = 4;
+              a.style.shadowColor = b.style?.fontColor || 'rgba(0,0,0,0.6)';
+            }
+          } else {
+            removedIds.add(a.id);
+            isDuplicateOfOther = true;
+            if (b.style) {
+              b.style.shadowEnabled = true;
+              b.style.shadowOffsetX = a.x - b.x;
+              b.style.shadowOffsetY = a.y - b.y;
+              b.style.shadowBlur = 4;
+              b.style.shadowColor = a.style?.fontColor || 'rgba(0,0,0,0.6)';
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    if (!isDuplicateOfOther && !removedIds.has(a.id)) {
+      cleaned.push(a);
+    }
+  }
+
+  // Pass 2: Vertical Text Bounding-Box Deconfliction (Preventing "patong-patong" vertical overlap)
+  const textObjs = cleaned.filter(o => (o.type === 'text' || o.type === 'shape') && Boolean(o.text?.trim()));
+  textObjs.sort((a, b) => a.y - b.y);
+
+  for (let i = 0; i < textObjs.length - 1; i++) {
+    const topObj = textObjs[i];
+    const bottomObj = textObjs[i + 1];
+
+    // Check horizontal overlap
+    const horizontalOverlap = Math.min(topObj.x + topObj.width, bottomObj.x + bottomObj.width) - Math.max(topObj.x, bottomObj.x);
+    const minWidth = Math.min(topObj.width, bottomObj.width);
+    
+    // Substantial horizontal overlap (> 30% of width)
+    if (minWidth > 0 && (horizontalOverlap / minWidth) > 0.3) {
+      const topFontSize = topObj.style?.fontSize || 36;
+      const widthA = Math.max(100, topObj.width - (topObj.style?.padding || 8) * 2);
+      const charsPerLine = Math.max(8, Math.floor(widthA / (topFontSize * 0.55)));
+      const lines = (topObj.text || '').split('\n').reduce((acc, line) => {
+        return acc + Math.max(1, Math.ceil(line.length / charsPerLine));
+      }, 0);
+      const lineHeightPx = topFontSize * 1.25;
+      const estimatedTextHeight = Math.round(lines * lineHeightPx) + (topObj.style?.padding || 8) * 2;
+
+      // Tighten topObj height if PowerPoint set it artificially huge, but never clamp below required height
+      if (topObj.height > estimatedTextHeight + 20) {
+        topObj.height = estimatedTextHeight + 20;
+      } else if (topObj.height < estimatedTextHeight) {
+        topObj.height = estimatedTextHeight;
+      }
+
+      // If topObj encroaches into bottomObj's Y position
+      const topTextBottom = topObj.y + topObj.height;
+      if (topTextBottom + 10 > bottomObj.y) {
+        const safeY = topTextBottom + 16;
+        if (bottomObj.y + bottomObj.height + (safeY - bottomObj.y) <= 1060) {
+          bottomObj.y = safeY;
+        } else {
+          // Both are cramped: scale down font sizes to fit safely
+          if (topObj.style?.fontSize && topObj.style.fontSize > 20) {
+            topObj.style.fontSize = Math.round(topObj.style.fontSize * 0.88);
+          }
+          if (bottomObj.style?.fontSize && bottomObj.style.fontSize > 16) {
+            bottomObj.style.fontSize = Math.round(bottomObj.style.fontSize * 0.88);
+          }
+        }
+      }
+    }
+  }
+
+  return cleaned;
 }
 
 class LRUCache<K, V> {

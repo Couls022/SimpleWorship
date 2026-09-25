@@ -258,6 +258,84 @@ async function startServer() {
     }
   });
 
+  // 5b. Font Proxy & Download Endpoint (1-Click Font Auto-Installer & Windows Download)
+  app.get('/api/fonts/download', async (req, res) => {
+    try {
+      const rawFamily = (req.query.family as string || '').trim();
+      if (!rawFamily) {
+        return res.status(400).json({ success: false, error: 'Missing font family parameter' });
+      }
+
+      const family = rawFamily.replace(/^["']+|["']+$/g, '').split(',')[0].trim();
+      const formattedFamily = encodeURIComponent(family).replace(/%20/g, '+');
+
+      // 1. Query Google Fonts API
+      let fontBinaryUrl: string | null = null;
+      try {
+        const cssRes = await fetch(`https://fonts.googleapis.com/css2?family=${formattedFamily}:wght@400;700&display=swap`, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          }
+        });
+        if (cssRes.ok) {
+          const cssText = await cssRes.text();
+          const latinMatch = /\/\*\s*latin\s*\*\/[\s\S]*?url\((https:\/\/fonts\.gstatic\.com\/s\/[^)]+)\)/i.exec(cssText);
+          if (latinMatch && latinMatch[1]) {
+            fontBinaryUrl = latinMatch[1];
+          } else {
+            const genericMatch = /url\((https:\/\/fonts\.gstatic\.com\/s\/[^)]+)\)/i.exec(cssText);
+            if (genericMatch && genericMatch[1]) {
+              fontBinaryUrl = genericMatch[1];
+            }
+          }
+        }
+      } catch {}
+
+      // 2. Query Bunny CDN fallback
+      if (!fontBinaryUrl) {
+        try {
+          const slug = family.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          const bRes = await fetch(`https://fonts.bunny.net/css?family=${slug}:400`);
+          if (bRes.ok) {
+            const bText = await bRes.text();
+            const m = /url\((https:\/\/[^)]+)\)/i.exec(bText);
+            if (m && m[1]) {
+              fontBinaryUrl = m[1];
+            }
+          }
+        } catch {}
+      }
+
+      if (!fontBinaryUrl) {
+        return res.status(404).json({ success: false, error: `Font "${family}" not found in upstream CDNs` });
+      }
+
+      const fontRes = await fetch(fontBinaryUrl);
+      if (!fontRes.ok) {
+        return res.status(502).json({ success: false, error: 'Failed to retrieve font binary' });
+      }
+
+      const arrayBuf = await fontRes.arrayBuffer();
+      const buffer = Buffer.from(arrayBuf);
+
+      if (req.query.download === '1') {
+        res.setHeader('Content-Type', 'font/woff2');
+        res.setHeader('Content-Disposition', `attachment; filename="${family.replace(/\s+/g, '')}.woff2"`);
+        return res.send(buffer);
+      }
+
+      res.json({
+        success: true,
+        family,
+        format: 'woff2',
+        bufferBase64: buffer.toString('base64'),
+        byteSize: buffer.length
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // 6. Server-Side Backup & Restore Endpoints
   app.post('/api/backup/export', (req, res) => {
     try {
@@ -283,6 +361,55 @@ async function startServer() {
     }];
     pendingCommands = [];
     res.json({ success: true, message: 'Logs cleared' });
+  });
+
+  // 8. Online Font Discovery & Binary Download Endpoints
+  app.get('/api/fonts/search', async (req, res) => {
+    try {
+      const family = String(req.query.family || '').trim();
+      if (!family) {
+        return res.status(400).json({ success: false, error: 'Font family parameter required' });
+      }
+      const { searchFontOnline } = await import('./src/server/fontDownloader');
+      const result = await searchFontOnline(family);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get('/api/fonts/download', async (req, res) => {
+    try {
+      const family = String(req.query.family || '').trim();
+      if (!family) {
+        return res.status(400).json({ success: false, error: 'Font family parameter required' });
+      }
+      const { downloadFontBinary } = await import('./src/server/fontDownloader');
+      const result = await downloadFontBinary(family);
+
+      if (!result.success || !result.buffer) {
+        return res.status(404).json({ success: false, error: result.error || 'Font not found' });
+      }
+
+      const isAttachment = req.query.download === '1' || req.query.attachment === '1';
+      if (isAttachment) {
+        res.setHeader('Content-Type', `font/${result.format || 'woff2'}`);
+        res.setHeader('Content-Disposition', `attachment; filename="${family.replace(/\s+/g, '')}.${result.format || 'woff2'}"`);
+        res.setHeader('Content-Length', result.buffer.length);
+        return res.end(result.buffer);
+      }
+
+      res.json({
+        success: true,
+        family: result.family,
+        format: result.format,
+        byteSize: result.byteSize,
+        provider: result.provider,
+        bufferBase64: result.buffer.toString('base64'),
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // Vite Middleware Setup

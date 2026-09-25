@@ -25,7 +25,8 @@ import {
   FileCheck,
   Zap,
   Monitor,
-  Gauge
+  Gauge,
+  Type
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { getDB, dbApi } from '../db';
@@ -36,12 +37,14 @@ import { hardwareProfile, HardwareInfo } from '../core/HardwareProfile';
 import { slideRenderCache } from '../utils/SlideRenderCache';
 import { PresentationCore } from '../core/PresentationCore';
 import { verifyAndOptimizeDatabase, DbOptimizationReport } from '../db/optimize';
+import FontSimulationDevPanel from './diagnostics/FontSimulationDevPanel';
 
 interface SystemDiagnosticsModalProps {
   onClose: () => void;
+  initialTab?: 'hardware' | 'gpu-diag' | 'fonts' | 'server' | 'storage' | 'broadcaster' | 'remote';
 }
 
-function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
+function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiagnosticsModalProps) {
   const songsList = useStore(state => state.songsList);
   const scripturesList = useStore(state => state.scripturesList);
   const themesList = useStore(state => state.themesList);
@@ -49,7 +52,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
   const activeSchedule = useStore(state => state.activeSchedule);
   const outputGroups = useStore(state => state.outputGroups);
 
-  const [activeTab, setActiveTab] = useState<'server' | 'hardware' | 'gpu-diag' | 'storage' | 'broadcaster' | 'remote'>('hardware');
+  const [activeTab, setActiveTab] = useState<'server' | 'hardware' | 'gpu-diag' | 'fonts' | 'storage' | 'broadcaster' | 'remote'>(initialTab);
   
   // Hardware profile state
   const [hwInfo, setHwInfo] = useState<HardwareInfo>(hardwareProfile.getHardwareInfoSync());
@@ -286,6 +289,7 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
           {[
             { id: 'hardware', label: 'Hardware Engine', icon: <Cpu size={14} /> },
             { id: 'gpu-diag', label: 'GPU Diagnostics', icon: <Gauge size={14} /> },
+            { id: 'fonts', label: 'Font Auto-Adapt & Dev Sim', icon: <Type size={14} /> },
             { id: 'server', label: 'Backend Server & API', icon: <Server size={14} /> },
             { id: 'storage', label: 'Database & Local Storage', icon: <Database size={14} /> },
             { id: 'broadcaster', label: 'Display & Sync Broadcaster', icon: <Radio size={14} /> },
@@ -1145,6 +1149,11 @@ function SystemDiagnosticsModal({ onClose }: SystemDiagnosticsModalProps) {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB: FONT AUTO-ADAPT & DEVELOPER MISSING FONT SIMULATION */}
+          {activeTab === 'fonts' && (
+            <FontSimulationDevPanel />
           )}
 
         </div>

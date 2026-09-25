@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, GripVertical, FileText, Play, Tv, Copy, Trash2, Upload, LayoutGrid, List, Edit3, Search, Layout } from 'lucide-react';
+import { Plus, GripVertical, FileText, Play, Tv, Copy, Trash2, Upload, LayoutGrid, List, Edit3, Search, Layout, Type } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { Asset } from '../../types';
 import { savePresentation, getAllPresentations, deletePresentation } from '../../db/presentations';
 import { parsePptxOffline } from '../../utils/pptxParser';
+import { extractFontsFromPptx, ensurePptxFontsLoaded, scanPptxFontsDetailed } from '../../utils/pptxFontManager';
 import { handleRangeSelection } from '../../utils/selectionUtils';
 import { PresentationEditorModal } from '../PresentationEditorModal';
 
@@ -67,7 +68,19 @@ export default function PresentationsTab() {
     }
     
     try {
-      window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Parsing PPTX: ${file.name}...` }));
+      window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Scanning & parsing PPTX: ${file.name}...` }));
+      
+      // 1. In-depth typography scan of fonts, slides, and text
+      const scanResult = await scanPptxFontsDetailed(file);
+      if (scanResult.allFonts.length > 0) {
+        try {
+          await ensurePptxFontsLoaded(scanResult.allFonts.map(f => f.fontName));
+        } catch {
+          // Non-blocking fallback
+        }
+      }
+
+      // 2. Parse slide content
       const slides = await parsePptxOffline(file);
       if (slides.length === 0) {
         window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'No slides could be parsed from this PPTX file.' }));
@@ -75,7 +88,27 @@ export default function PresentationsTab() {
       }
       await savePresentation(file.name.replace('.pptx', ''), slides, file);
       await loadPresentations();
-      window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Imported ${slides.length} slides from PPTX!` }));
+
+      // 3. Proactive Check: If fonts exist on device, use them directly! If missing, pop up the 1-Click installer!
+      if (scanResult.missingFonts.length > 0) {
+        window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
+          detail: {
+            presentationName: file.name.replace('.pptx', ''),
+            scanResult,
+            autoTriggered: true,
+          }
+        }));
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
+          detail: `⚠️ May ${scanResult.missingFonts.length} font na wala sa device. Bukas ang 1-Click Download & Install!` 
+        }));
+      } else {
+        const fontCount = scanResult.allFonts.length;
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
+          detail: fontCount > 0 
+            ? `✓ Na-import ang "${file.name.replace('.pptx', '')}": Lahat ng ${fontCount} fonts ay nade-detect sa iyong device at gagamitin agad!`
+            : `✓ Imported ${slides.length} slides from PPTX!`
+        }));
+      }
     } catch (err) {
       console.error('PPTX Parse Error', err);
       window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: `Failed to parse PPTX. Ensure it is a valid .pptx file.` }));
@@ -247,6 +280,24 @@ export default function PresentationsTab() {
           >
             <Upload size={12} className="text-cyan-400" />
             <span className="hidden sm:inline">Import PPTX</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const selectedPres = presentations.find(p => selectedPresIds.includes(p.id)) || presentations[0];
+              window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
+                detail: {
+                  presentationName: selectedPres?.name || 'Presentation Fonts',
+                  autoTriggered: false,
+                }
+              }));
+            }}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 hover:text-amber-100 px-2.5 py-1 rounded text-xs font-bold border border-amber-500/50 shadow-sm transition-all cursor-pointer active:scale-95 shrink-0 group"
+            title="Font Scanner & Downloader (Always Active): Proactively scans presentation fonts and provides 1-click install"
+          >
+            <Type size={12} className="text-amber-400 group-hover:scale-110 transition-transform" />
+            <span className="inline font-bold">Font Scanner</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" title="Font Scanner Active" />
           </button>
         </div>
       </div>

@@ -46,10 +46,29 @@ function SaveScheduleAsModal({ onClose }: SaveScheduleAsModalProps) {
       
       const allSongs = await dbApi.getAllSongs();
       const allThemes = await dbApi.getAllThemes();
-      const usedSongIds = new Set(
-        updated.items.filter(it => it.type === 'song').map(it => it.contentId || it.id)
-      );
-      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id));
+      const songItems = (updated.items || []).filter(it => it.type === 'song');
+      const usedSongIds = new Set(songItems.map(it => it.contentId || it.id));
+      const usedSongTitles = new Set(songItems.map(it => (it.name || it.data?.title || '').toLowerCase().trim()));
+      const bundledSongs = allSongs.filter(s => usedSongIds.has(s.id) || usedSongTitles.has(s.title.toLowerCase().trim()));
+      
+      for (const it of songItems) {
+        const title = (it.name || it.data?.title || '').trim();
+        if (title && !bundledSongs.some(s => s.title.toLowerCase().trim() === title.toLowerCase())) {
+          if (it.data && (it.data.sections || it.data.lyrics)) {
+            bundledSongs.push({
+              id: it.contentId || it.id || `song-${Date.now()}`,
+              title,
+              author: it.data.author || '',
+              category: it.data.category || 'Hymns',
+              lyrics: it.data.lyrics || '',
+              sections: it.data.sections || [],
+              key: it.data.key || 'G',
+              ccli: it.data.ccli,
+              ccliNumber: it.data.ccliNumber
+            });
+          }
+        }
+      }
       
       await downloadSwsFile(updated, finalName, bundledSongs, allThemes, systemOptions, outputGroups);
       

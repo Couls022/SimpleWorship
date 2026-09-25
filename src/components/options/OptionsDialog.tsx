@@ -34,7 +34,10 @@ import {
   Download,
   Upload,
   ExternalLink,
-  MonitorPlay
+  MonitorPlay,
+  Type,
+  Zap,
+  Flame
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { dbApi } from '../../db';
@@ -49,15 +52,17 @@ import FontInspectorPopup from './FontInspectorPopup';
 import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
 import StageMonitorContent from '../workspace/StageMonitorContent';
+import FontCacheManagerPanel from './FontCacheManagerPanel';
 
 interface OptionsDialogProps {
   onClose: () => void;
+  initialCategory?: MainCategory;
 }
 
-type MainCategory = 'Main Output' | 'Alternate Output' | 'Foldback' | 'Service Intervals' | 'Slide Labels' | 'Appearance' | 'Advanced';
+type MainCategory = 'Main Output' | 'Alternate Output' | 'Foldback' | 'Service Intervals' | 'Slide Labels' | 'Appearance' | 'Font Cache' | 'Advanced';
 type OutputTab = 'General' | 'Song' | 'Scripture' | 'Transitions' | 'Alerts';
 
-function OptionsDialog({ onClose }: OptionsDialogProps) {
+function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
   const systemOptions = useStore(state => state.systemOptions);
   const updateSystemOptions = useStore(state => state.updateSystemOptions);
   const resetSystemOptions = useStore(state => state.resetSystemOptions);
@@ -73,7 +78,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
   const [localOptions, setLocalOptions] = useState<SystemOptions>(JSON.parse(JSON.stringify(systemOptions)));
 
   // Navigation state
-  const [activeCategory, setActiveCategory] = useState<MainCategory>('Main Output');
+  const [activeCategory, setActiveCategory] = useState<MainCategory>(initialCategory || 'Main Output');
   const [activeOutputTab, setActiveOutputTab] = useState<OutputTab>('General');
   const [activeAlertSubTab, setActiveAlertSubTab] = useState<'Nursery' | 'Message'>('Nursery');
 
@@ -121,8 +126,21 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
     { id: 'Service Intervals', label: 'Service Intervals', icon: <Clock size={15} className="text-amber-400" /> },
     { id: 'Slide Labels', label: 'Slide Labels', icon: <Tag size={15} className="text-purple-400" /> },
     { id: 'Appearance', label: 'UI Theme & Appearance', icon: <SunMoon size={15} className="text-amber-400" /> },
+    { id: 'Font Cache', label: 'Font Cache Manager', icon: <Type size={15} className="text-amber-400" /> },
     { id: 'Advanced', label: 'Advanced', icon: <Settings size={15} className="text-gray-400" /> },
   ];
+
+  useEffect(() => {
+    const handleCategorySwitch = (e: CustomEvent) => {
+      if (e.detail?.category) {
+        setActiveCategory(e.detail.category as MainCategory);
+      }
+    };
+    window.addEventListener('simpleworship:open-settings-category' as any, handleCategorySwitch);
+    return () => {
+      window.removeEventListener('simpleworship:open-settings-category' as any, handleCategorySwitch);
+    };
+  }, []);
 
   const outputTabs: OutputTab[] = ['General', 'Song', 'Scripture', 'Transitions', 'Alerts'];
 
@@ -588,6 +606,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                   {activeCategory === 'Service Intervals' && 'Service Interval Timers & Stage Countdowns'}
                   {activeCategory === 'Slide Labels' && 'Slide Label Badges & Navigation Shortcuts'}
                   {activeCategory === 'Appearance' && 'UI Theme, Accent Color & Display Scaling'}
+                  {activeCategory === 'Font Cache' && 'Font Cache Manager & Live Presentation Pre-Warming Engine'}
                   {activeCategory === 'Advanced' && 'Advanced System Settings & Database Maintenance'}
                 </span>
                 <span className="text-[10px] text-gray-400 font-mono">
@@ -596,6 +615,7 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                   {activeCategory === 'Service Intervals' && 'Clock & Countdown'}
                   {activeCategory === 'Slide Labels' && 'Tag Routing'}
                   {activeCategory === 'Appearance' && 'Customization'}
+                  {activeCategory === 'Font Cache' && 'RAM & GPU Cache'}
                   {activeCategory === 'Advanced' && 'Engine'}
                 </span>
               </div>
@@ -3628,6 +3648,27 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                       </div>
                     )}
                   </div>
+
+                  {/* Font Cache & Worship Typeface Engine Fast Action */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-2">
+                    <div className="font-bold text-gray-200 border-b border-[#292c36] pb-1 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-amber-300">
+                        <Type size={14} />
+                        <span>Font Cache & Worship Typeface Engine</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveCategory('Font Cache')}
+                        className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-black font-bold rounded flex items-center gap-1.5 transition-colors cursor-pointer text-[11px]"
+                      >
+                        <Zap size={12} className="fill-current" />
+                        <span>Open Font Cache Manager</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Pre-compile presentation typefaces into RAM/GPU cache to eliminate live slide transition lag and prevent Flash of Unstyled Text (FOUT) on congregation displays and stage monitors.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -3804,6 +3845,15 @@ function OptionsDialog({ onClose }: OptionsDialogProps) {
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* ========================================================= */}
+              {/* CATEGORY: FONT CACHE MANAGER */}
+              {/* ========================================================= */}
+              {activeCategory === 'Font Cache' && (
+                <FontCacheManagerPanel
+                  onNotify={(msg) => window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: msg }))}
+                />
               )}
 
             </div>

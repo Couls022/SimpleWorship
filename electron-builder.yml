@@ -7,30 +7,32 @@ directories:
 files:
   - dist/**/*
   - electron/**/*
+  - package.json
 extraMetadata:
   main: electron/main.cjs
 asar: true
+compression: normal
 win:
   target:
     - target: nsis
       arch:
         - x64
-    - target: zip
-      arch:
-        - x64
   icon: public/branding/logo/SimpleWorship.ico
   requestedExecutionLevel: asInvoker
+  artifactName: "${productName}-Setup-${version}.${ext}"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
-  createDesktopShortcut: true
+  createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: SimpleWorship
-  differentialPackage: true
+  differentialPackage: false
   runAfterFinish: true
+  deleteAppDataOnUninstall: false
 fileAssociations:
   - ext: sws
     name: SimpleWorship Service
     description: SimpleWorship Service Package
     role: Editor
+

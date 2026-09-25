@@ -19,13 +19,29 @@ export class PresentationContentResolver {
   static detectContentType(item: PresentationItem | null | undefined): ResolvedContentType {
     if (!item) return 'unknown';
     
-    // Explicit types
+    // Explicit presentation types and PPTX indicators
+    if (
+      item.type === 'presentation' || 
+      item.type === 'ppt' || 
+      (item.type as string) === 'pptx' ||
+      (item.data?.slides && Array.isArray(item.data.slides) && item.data.slides.length > 0) ||
+      (item.data?.fileBytes && isValidPptxBinary(item.data.fileBytes)) ||
+      item.name?.toLowerCase().endsWith('.pptx') ||
+      item.name?.toLowerCase().endsWith('.ppt') ||
+      item.name?.toLowerCase().endsWith('.ppsx') ||
+      item.data?.sourceFileName?.toLowerCase().endsWith('.pptx') ||
+      item.data?.sourceFileName?.toLowerCase().endsWith('.ppt') ||
+      ((item.type as string) === 'document' && (item.data?.slides || item.data?.fileBytes || item.data?.format === 'PPTX'))
+    ) {
+      return 'pptx';
+    }
+
+    // Explicit standard types
     if (item.type === 'song') return 'song';
     if (item.type === 'bible') return 'bible';
     if (item.type === 'video') return 'video';
     if (item.type === 'audio') return 'audio';
     if (item.type === 'image') return 'image';
-    if (item.type === 'presentation' || item.type === 'ppt') return 'pptx';
     if (item.type === 'camera') return 'camera';
     if (item.type === 'announcement') return 'announcement';
     if (item.type === 'countdown') return 'countdown';

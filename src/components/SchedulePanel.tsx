@@ -935,7 +935,9 @@ export default function SchedulePanel({ onEditSlide, onOpenNewSong, onEditSong }
           const isSelected = selectedScheduleItemIds.includes(item.id);
           const isItemInPreview = previewItemId === item.id;
           const isItemLive = activeControlState?.activeItemId === item.id;
-          const slides = PresentationCore.generateSlides(item, songsList, systemOptions);
+          const slides = (item.isExpanded && viewMode !== 'summary')
+            ? PresentationCore.generateSlides(item, songsList, systemOptions)
+            : [];
           const isDragOverThis = dragOverIdx === index;
           const isBeingDragged = draggedIdx === index;
 

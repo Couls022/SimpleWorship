@@ -55,7 +55,8 @@ import {
   Check,
   ChevronDown,
   List,
-  ListOrdered
+  ListOrdered,
+  FileUp,
 } from 'lucide-react';
 import { Asset, Slide, SlideObject, ShapeType, SlideTransitionType, AnimationType, AnimationCategory, ObjectAnimation } from '../types';
 import { savePresentation } from '../db/presentations';
@@ -66,6 +67,8 @@ import { NotesAndTimelineDrawer } from './presentation-editor/NotesAndTimelineDr
 import { TemplateGalleryModal, TEMPLATE_DEFINITIONS } from './presentation-editor/TemplateGalleryModal';
 import { ImagePickerModal } from './presentation-editor/ImagePickerModal';
 import { SystemFontPicker } from './common/SystemFontPicker';
+import { parsePptxOffline } from '../utils/pptxParser';
+import { scanPptxFontsDetailed, ensurePptxFontsLoaded } from '../utils/pptxFontManager';
 
 const QUICK_SWATCHES = ['#FFFFFF', '#38BDF8', '#10B981', '#F59E0B', '#EF4444', '#A855F7', '#64748B', '#000000'];
 
@@ -238,6 +241,8 @@ export function PresentationEditorModal({
 
   // Hidden Local Computer Image File Picker Ref
   const localImageInputRef = useRef<HTMLInputElement>(null);
+  const pptxImportFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImportingPptx, setIsImportingPptx] = useState(false);
 
   // Resizable & Collapsible Panels State
   const [leftWidth, setLeftWidth] = useState<number>(260); // Left thumbnail deck width
@@ -370,6 +375,52 @@ export function PresentationEditorModal({
       setActiveSlideIndex(updated.length - 1);
     } else {
       handleAddSlide(templateId);
+    }
+  };
+
+  // Import and Append PPTX Slides directly into this Presentation Deck
+  const handleImportPptxSlides = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsImportingPptx(true);
+      // Detailed font scan & auto-installer check
+      const fontScan = await scanPptxFontsDetailed(file);
+      if (fontScan.allFonts.length > 0) {
+        ensurePptxFontsLoaded(fontScan.allFonts.map(f => f.fontName)).catch(() => {});
+      }
+      if (fontScan.missingFonts.length > 0) {
+        window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
+          detail: {
+            presentationName: file.name.replace(/\.pptx?$/i, ''),
+            scanResult: fontScan,
+            autoTriggered: true,
+          }
+        }));
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+          detail: `⚠️ May ${fontScan.missingFonts.length} font na wala sa iyong device. Bukas ang 1-Click Download & Install.`
+        }));
+      } else if (fontScan.allFonts.length > 0) {
+        window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+          detail: `✓ Lahat ng ${fontScan.allFonts.length} fonts sa "${file.name}" ay nade-detect sa iyong device at gagamitin agad!`
+        }));
+      }
+
+      const parsedSlides = await parsePptxOffline(file);
+      if (parsedSlides && parsedSlides.length > 0) {
+        const preparedSlides = parsedSlides.map((s, idx) => ensureObjectsOnSlide({
+          ...s,
+          id: `slide-pptx-import-${Date.now()}-${slides.length + idx}`,
+        }));
+        const updated = [...slides, ...preparedSlides];
+        updateSlidesWithHistory(updated);
+        setActiveSlideIndex(slides.length);
+      }
+    } catch (err: any) {
+      console.error('Failed to import PPTX into deck:', err);
+    } finally {
+      setIsImportingPptx(false);
+      if (pptxImportFileInputRef.current) pptxImportFileInputRef.current.value = '';
     }
   };
 
@@ -1211,6 +1262,23 @@ export function PresentationEditorModal({
           >
             <Sparkles size={14} className="text-amber-400" />
             <span>Template Gallery</span>
+          </button>
+
+          <input
+            ref={pptxImportFileInputRef}
+            type="file"
+            accept=".pptx,.ppt,.ppsx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            className="hidden"
+            onChange={handleImportPptxSlides}
+          />
+          <button
+            className="px-2.5 py-1 bg-amber-600/80 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors border border-amber-500/60 shadow-sm"
+            onClick={() => pptxImportFileInputRef.current?.click()}
+            disabled={isImportingPptx}
+            title="Import & Adopt PPTX presentation slides into this deck"
+          >
+            <FileUp size={14} />
+            <span>{isImportingPptx ? 'Importing PPTX...' : 'Import PPTX'}</span>
           </button>
 
           <div className="h-4 w-px bg-slate-800" />
