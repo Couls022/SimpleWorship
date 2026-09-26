@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session, powerSaveBlo
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { exec, execFile } = require('child_process');
 
 // Register custom privileged scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -403,8 +404,6 @@ ipcMain.handle('shell:open-external', async (event, url) => {
 // -------------------------------------------------------------
 // NATIVE IPC HANDLERS
 // -------------------------------------------------------------
-
-const { exec } = require('child_process');
 
 let cachedWinMonitors = null;
 let monitorFetchPromise = null;
@@ -1197,16 +1196,295 @@ ipcMain.handle('system:get-hardware-info', async () => {
 
 
 
+// ============================================================================
+// MICROSOFT POWERPOINT AUTOMATION & NATIVE RENDERING ENGINE (WINDOWS ONLY)
+// ============================================================================
+
+// Detect local Microsoft PowerPoint installation on Windows
+ipcMain.handle('pptx:detect-powerpoint', async () => {
+  if (process.platform !== 'win32') {
+    return {
+      available: false,
+      platform: process.platform,
+      reason: 'Microsoft PowerPoint hardware-accelerated backend is only supported on Windows.'
+    };
+  }
+
+  // Check known standard installation paths across 64-bit and 32-bit Office / Microsoft 365
+  const standardOfficePaths = [
+    'C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE',
+    'C:\\Program Files (x86)\\Microsoft Office\\root\\Office16\\POWERPNT.EXE',
+    'C:\\Program Files\\Microsoft Office\\Office16\\POWERPNT.EXE',
+    'C:\\Program Files (x86)\\Microsoft Office\\Office16\\POWERPNT.EXE',
+    'C:\\Program Files\\Microsoft Office\\Office15\\POWERPNT.EXE',
+    'C:\\Program Files (x86)\\Microsoft Office\\Office15\\POWERPNT.EXE',
+    'C:\\Program Files\\Microsoft Office\\Office14\\POWERPNT.EXE',
+    'C:\\Program Files (x86)\\Microsoft Office\\Office14\\POWERPNT.EXE',
+  ];
+
+  for (const p of standardOfficePaths) {
+    if (fs.existsSync(p)) {
+      return {
+        available: true,
+        platform: 'win32',
+        executablePath: p,
+        version: 'Microsoft PowerPoint (Office/M365)',
+        reason: 'Microsoft PowerPoint found at ' + p
+      };
+    }
+  }
+
+  // Fallback: Test COM object availability via lightweight PowerShell command
+  return new Promise((resolve) => {
+    const comCheckCmd = `powershell.exe -NoProfile -NonInteractive -Command "$t = [Type]::GetTypeFromProgID('PowerPoint.Application'); if ($t) { Write-Output 'COM_FOUND' } else { Write-Output 'COM_NOT_FOUND' }"`;
+    exec(comCheckCmd, { timeout: 4000 }, (err, stdout) => {
+      if (!err && stdout && stdout.includes('COM_FOUND')) {
+        resolve({
+          available: true,
+          platform: 'win32',
+          version: 'Microsoft PowerPoint COM Automation',
+          reason: 'Microsoft PowerPoint COM automation interface is registered and ready'
+        });
+      } else {
+        resolve({
+          available: false,
+          platform: 'win32',
+          reason: 'Microsoft PowerPoint is not installed or registered on this Windows system.'
+        });
+      }
+    });
+  });
+});
+
+// Render PPTX presentation slides to deterministic PNG cache using installed PowerPoint
+ipcMain.handle('pptx:render-slides', async (event, payload) => {
+  if (process.platform !== 'win32') {
+    return { success: false, error: 'PowerPoint native rendering is only supported on Windows.' };
+  }
+
+  if (!payload || !payload.fileData) {
+    return { success: false, error: 'Invalid presentation payload provided.' };
+  }
+
+  const hash = payload.hash || 'deck_' + Date.now();
+  const cacheBaseDir = path.join(app.getPath('userData'), 'PptxRenderCache', hash);
+  const metadataPath = path.join(cacheBaseDir, 'metadata.json');
+
+  // Check persistent disk cache first for instant reloads
+  if (fs.existsSync(metadataPath)) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+      const slideFiles = fs.readdirSync(cacheBaseDir)
+        .filter(f => f.toLowerCase().endsWith('.png'))
+        .sort((a, b) => {
+          const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+          const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+          return numA - numB;
+        });
+
+      if (slideFiles.length > 0) {
+        const slides = slideFiles.map(f => {
+          const imgBuf = fs.readFileSync(path.join(cacheBaseDir, f));
+          return 'data:image/png;base64,' + imgBuf.toString('base64');
+        });
+
+        return {
+          success: true,
+          slides,
+          slideCount: slides.length,
+          width: meta.width || 1920,
+          height: meta.height || 1080,
+          aspectRatio: meta.aspectRatio || (16 / 9),
+          cached: true
+        };
+      }
+    } catch (e) {
+      console.warn('[PowerPoint Automation] Cache read warning:', e);
+    }
+  }
+
+  // Create clean temporary workspace
+  const tempId = 'sw_pptx_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+  const tempPptxPath = path.join(app.getPath('temp'), `${tempId}.pptx`);
+  const tempOutputDir = path.join(app.getPath('temp'), tempId + '_out');
+
+  try {
+    fs.mkdirSync(tempOutputDir, { recursive: true });
+
+    // Write binary input safely
+    if (typeof payload.fileData === 'string') {
+      const base64Data = payload.fileData.includes(',') ? payload.fileData.split(',')[1] : payload.fileData;
+      fs.writeFileSync(tempPptxPath, Buffer.from(base64Data, 'base64'));
+    } else {
+      fs.writeFileSync(tempPptxPath, Buffer.from(payload.fileData));
+    }
+
+    // PowerShell script with guaranteed cleanup and timeout safety
+    const psScript = `
+$ErrorActionPreference = "Stop"
+$ppt = $null
+$presentation = $null
+try {
+  $ppt = New-Object -ComObject PowerPoint.Application
+  $ppt.Visible = 0
+  $presentation = $ppt.Presentations.Open("${tempPptxPath.replace(/\\/g, '\\\\')}", -1, 0, 0)
+  
+  $slideW = $presentation.PageSetup.SlideWidth
+  $slideH = $presentation.PageSetup.SlideHeight
+  $aspect = 1.777778
+  if ($slideH -gt 0) {
+    $aspect = $slideW / $slideH
+  }
+
+  # Export all slides as PNG images
+  $presentation.SaveCopyAs("${tempOutputDir.replace(/\\/g, '\\\\')}", 18)
+  
+  $count = $presentation.Slides.Count
+  $presentation.Close()
+  $presentation = $null
+
+  if ($ppt.Presentations.Count -eq 0) {
+    $ppt.Quit()
+  }
+  [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ppt) | Out-Null
+  $ppt = $null
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+
+  Write-Output "RESULT:SUCCESS|COUNT:$count|ASPECT:$aspect"
+} catch {
+  if ($presentation -ne $null) {
+    try { $presentation.Close() } catch {}
+  }
+  if ($ppt -ne $null) {
+    try {
+      if ($ppt.Presentations.Count -eq 0) { $ppt.Quit() }
+      [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ppt) | Out-Null
+    } catch {}
+  }
+  [GC]::Collect()
+  Write-Error $_.Exception.Message
+}
+`;
+
+    const psScriptPath = path.join(tempOutputDir, 'run_render.ps1');
+    fs.writeFileSync(psScriptPath, psScript, 'utf-8');
+
+    return await new Promise((resolve) => {
+      exec(`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${psScriptPath}"`, { timeout: 60000 }, (error, stdout, stderr) => {
+        if (error || !stdout || !stdout.includes('RESULT:SUCCESS')) {
+          const errMsg = stderr || error?.message || 'PowerPoint automation process failed.';
+          console.warn('[PowerPoint Automation] Render error:', errMsg);
+          // Clean up temp
+          try {
+            if (fs.existsSync(tempPptxPath)) fs.unlinkSync(tempPptxPath);
+            if (fs.existsSync(tempOutputDir)) fs.rmSync(tempOutputDir, { recursive: true, force: true });
+          } catch (e) {}
+          return resolve({ success: false, error: errMsg });
+        }
+
+        try {
+          // Extract aspect ratio from script output if available
+          let aspectRatio = 16 / 9;
+          const aspectMatch = stdout.match(/ASPECT:([\d.]+)/);
+          if (aspectMatch && parseFloat(aspectMatch[1]) > 0) {
+            aspectRatio = parseFloat(aspectMatch[1]);
+          }
+
+          // Read exported slide images
+          const files = fs.readdirSync(tempOutputDir)
+            .filter(f => f.toLowerCase().endsWith('.png'))
+            .sort((a, b) => {
+              const numA = parseInt(a.replace(/[^0-9]/g, '')) || 0;
+              const numB = parseInt(b.replace(/[^0-9]/g, '')) || 0;
+              return numA - numB;
+            });
+
+          if (files.length === 0) {
+            return resolve({ success: false, error: 'No slide image files were generated by PowerPoint.' });
+          }
+
+          // Save to persistent cache directory
+          fs.mkdirSync(cacheBaseDir, { recursive: true });
+          const slides = [];
+
+          for (let i = 0; i < files.length; i++) {
+            const srcFile = path.join(tempOutputDir, files[i]);
+            const destFile = path.join(cacheBaseDir, `slide_${i + 1}.png`);
+            fs.copyFileSync(srcFile, destFile);
+
+            const imgBuf = fs.readFileSync(srcFile);
+            slides.push('data:image/png;base64,' + imgBuf.toString('base64'));
+          }
+
+          const width = 1920;
+          const height = Math.round(width / aspectRatio);
+
+          fs.writeFileSync(metadataPath, JSON.stringify({
+            presentationId: payload.presentationId || '',
+            hash,
+            slideCount: slides.length,
+            width,
+            height,
+            aspectRatio,
+            renderedAt: Date.now()
+          }, null, 2));
+
+          // Cleanup temp files
+          try {
+            if (fs.existsSync(tempPptxPath)) fs.unlinkSync(tempPptxPath);
+            if (fs.existsSync(tempOutputDir)) fs.rmSync(tempOutputDir, { recursive: true, force: true });
+          } catch (e) {}
+
+          resolve({
+            success: true,
+            slides,
+            slideCount: slides.length,
+            width,
+            height,
+            aspectRatio,
+            cached: false
+          });
+        } catch (postErr) {
+          resolve({ success: false, error: postErr.message });
+        }
+      });
+    });
+  } catch (err) {
+    try {
+      if (fs.existsSync(tempPptxPath)) fs.unlinkSync(tempPptxPath);
+      if (fs.existsSync(tempOutputDir)) fs.rmSync(tempOutputDir, { recursive: true, force: true });
+    } catch (e) {}
+    return { success: false, error: err.message };
+  }
+});
+
+// Clear PowerPoint cache
+ipcMain.handle('pptx:clear-cache', async (event, hash) => {
+  try {
+    const baseCache = path.join(app.getPath('userData'), 'PptxRenderCache');
+    if (hash) {
+      const targetDir = path.join(baseCache, hash);
+      if (fs.existsSync(targetDir)) {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+      }
+    } else if (fs.existsSync(baseCache)) {
+      fs.rmSync(baseCache, { recursive: true, force: true });
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 ipcMain.handle("convert-pptx", async (event, filePath) => {
   return new Promise((resolve, reject) => {
     if (process.platform !== "win32") {
       return reject(new Error("Native PowerPoint conversion is only supported on Windows."));
     }
-
+    // Backward compatibility wrapper
     const outputDir = path.join(os.tmpdir(), "simpleworship-pptx-" + Date.now());
     fs.mkdirSync(outputDir, { recursive: true });
-
-    // Sanitize path for PowerShell
     const psPath = filePath.replace(/\//g, "\\").replace(/"/g, '""');
     const psOut = outputDir.replace(/\//g, "\\").replace(/"/g, '""');
 
@@ -1217,9 +1495,7 @@ try {
   $presentation = $ppt.Presentations.Open("${psPath}", -1, 0, 0)
   $presentation.SaveCopyAs("${psOut}", 18)
   $presentation.Close()
-  if ($ppt.Presentations.Count -eq 0) {
-    $ppt.Quit()
-  }
+  if ($ppt.Presentations.Count -eq 0) { $ppt.Quit() }
   Write-Output "SUCCESS"
 } catch {
   Write-Error $_.Exception.Message
@@ -1240,7 +1516,6 @@ try {
             const numB = parseInt(b.replace(/[^0-9]/g, "")) || 0;
             return numA - numB;
           });
-          
           const images = files.map(file => {
             const imgPath = path.join(outputDir, file);
             const base64 = fs.readFileSync(imgPath, "base64");
@@ -1254,4 +1529,5 @@ try {
     });
   });
 });
+
 

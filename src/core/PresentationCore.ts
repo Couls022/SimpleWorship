@@ -490,6 +490,11 @@ export class PresentationCore {
           widthEmu: s.widthEmu,
           heightEmu: s.heightEmu,
           transition: s.transition,
+          nativeAnimations: s.nativeAnimations,
+          animations: s.animations,
+          animationSteps: s.animationSteps,
+          notes: s.notes,
+          isPptx: true,
         }));
       } else {
         generated = [

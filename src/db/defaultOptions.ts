@@ -95,6 +95,7 @@ export const defaultSystemOptions: SystemOptions = {
       titleFont: { ...defaultBaseFont, maxSize: 90, bold: true },
       subTitleFont: { ...defaultBaseFont, maxSize: 48, italic: true },
       contentFont: { ...defaultBaseFont, maxSize: 90 },
+      pptxEngineMode: 'auto',
     },
     transitions: {
       activeTab: 'Slide',

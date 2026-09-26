@@ -130,4 +130,35 @@ describe('pptxAnimationUtils', () => {
     
     expect(merged).toBeUndefined();
   });
+
+  it('correctly associates shapeId and paragraph builds from nativeAnimations', () => {
+    const mockSlideWithShapeId = {
+      id: 'slide-complex',
+      elements: [
+        { id: 'shape-4', shapeId: '4', text: 'Point 1\nPoint 2\nPoint 3' }
+      ],
+      nativeAnimations: [
+        {
+          presetClass: 'entr',
+          targetId: 'shape-4',
+          target: { shapeId: '4', paragraphIndex: 0 },
+          trigger: 'onClick',
+          action: 'fly-in'
+        },
+        {
+          presetClass: 'entr',
+          targetId: 'shape-4',
+          target: { shapeId: '4', paragraphIndex: 1 },
+          trigger: 'onClick',
+          action: 'fly-in'
+        }
+      ]
+    };
+
+    const ids = getSlideEntranceElementIds(mockSlideWithShapeId);
+    expect(ids.has('shape-4')).toBe(true);
+    expect(ids.has('4')).toBe(true);
+    expect(ids.has('shape-4::p0')).toBe(true);
+    expect(ids.has('shape-4::p1')).toBe(true);
+  });
 });

@@ -39,6 +39,7 @@ import {
   getAllStoredCustomFonts,
   deleteStoredFont,
   exportAllFontsAsZip,
+  exportWindowsFontInstallerPackage,
   importFontsFromZip
 } from '../../utils/fontStorage';
 import { useStore } from '../../store/useStore';
@@ -322,14 +323,20 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     setStatusMessage(`Downloading and installing all ${missingFonts.length} missing fonts into IndexedDB...`);
 
     let count = 0;
+    const installedNames: string[] = [];
     for (let i = 0; i < missingFonts.length; i++) {
       const font = missingFonts[i];
-      const family = font.normalizedFamily || font.fontName;
+      const displayFamily = font.fontName.includes(',')
+        ? font.fontName.split(',')[0].replace(/^["'\s]+|["'\s]+$/g, '').trim()
+        : font.fontName.replace(/^["']+|["']+$/g, '').trim();
+      const family = font.normalizedFamily || displayFamily;
+
       setBatchProgress({ current: i + 1, total: missingFonts.length, fontName: family });
       try {
         const ok = await fetchAndInstallGoogleFont(family);
         if (ok) {
           count += 1;
+          installedNames.push(family);
           setInstalledSet(prev => new Set([...prev, family.toLowerCase(), font.fontName.toLowerCase()]));
           registerFontAliasesInDom([family, font.fontName]);
         }
@@ -340,9 +347,58 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
 
     setBatchProgress(null);
     setIsInstallingAll(false);
-    setStatusMessage(`✓ Completed! Successfully installed ${count} of ${missingFonts.length} fonts into offline storage.`);
     refreshStoredDbFonts();
-    setTimeout(() => setStatusMessage(null), 5000);
+
+    // Trigger instant re-render across all presentation canvases & overlays
+    window.dispatchEvent(new CustomEvent('simpleworship:fonts-updated', { detail: { loaded: installedNames } }));
+    window.dispatchEvent(new CustomEvent('simpleworship:pptx-fonts-loaded', { detail: { loaded: installedNames } }));
+
+    // Automatically trigger Windows 1-Click Font Auto-Installer Package download
+    try {
+      const zipBlob = await exportWindowsFontInstallerPackage(installedNames);
+      if (zipBlob) {
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `SimpleWorship-Windows-Font-Installer.zip`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 2000);
+      }
+    } catch {}
+
+    setStatusMessage(`✓ Handa na! Na-install ang ${count} fonts sa SimpleWorship. I-extract ang nadownload na ZIP at i-double click ang "Install-Fonts-Windows.cmd" para ma-install sa buong Windows OS!`);
+    setTimeout(() => setStatusMessage(null), 8000);
+  };
+
+  const handleDownloadWindowsInstaller = async () => {
+    try {
+      setStatusMessage('Creating Windows 1-Click Auto-Installer Package (.cmd + Fonts)...');
+      const targetFamilies = missingFonts.map(f => f.normalizedFamily || f.fontName);
+      const zipBlob = await exportWindowsFontInstallerPackage(targetFamilies);
+      if (zipBlob) {
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `SimpleWorship-Windows-Font-Installer.zip`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 2000);
+        setStatusMessage('✓ Download started! I-extract ang ZIP at i-double click ang "Install-Fonts-Windows.cmd" para ma-install sa buong Windows OS!');
+      } else {
+        setStatusMessage('I-click muna ang "1-Click Download & Install" upang ma-download ang font files.');
+      }
+    } catch {
+      setStatusMessage('Failed to create Windows font installer package.');
+    } finally {
+      setTimeout(() => setStatusMessage(null), 6000);
+    }
   };
 
   // Manual File Upload handler
@@ -562,6 +618,15 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                         <Zap size={15} className="text-amber-300 fill-amber-300" />
                       )}
                       <span>⚡ 1-Click Download & Install All ({missingFonts.length} Fonts)</span>
+                    </button>
+
+                    <button
+                      onClick={handleDownloadWindowsInstaller}
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-md transition-all cursor-pointer active:scale-95"
+                      title="Download Windows Auto-Installer Script (.cmd) + Font Files package"
+                    >
+                      <Download size={14} className="text-cyan-300" />
+                      <span>⚡ Windows 1-Click Auto-Installer (.cmd Package)</span>
                     </button>
 
                     <button

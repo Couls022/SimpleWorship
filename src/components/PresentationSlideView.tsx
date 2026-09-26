@@ -17,6 +17,8 @@ interface PresentationSlideViewProps {
   targetWidth?: number;
   targetHeight?: number;
   isProjectorMode?: boolean;
+  isOverlayLayer?: boolean;
+  presentationElementStates?: Map<string, any>;
 }
 
 export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React.memo(({
@@ -28,9 +30,28 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
   targetWidth,
   targetHeight,
   isProjectorMode,
+  isOverlayLayer,
+  presentationElementStates,
 }) => {
   const [containerSize, setContainerSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [, setFontLoadTick] = React.useState<number>(0);
   const roRef = React.useRef<ResizeObserver | null>(null);
+
+  // Re-render when fonts are downloaded or installed into IndexedDB / document.fonts
+  useEffect(() => {
+    const handler = () => {
+      setFontLoadTick(t => t + 1);
+    };
+    window.addEventListener('simpleworship:fonts-updated', handler);
+    window.addEventListener('simpleworship:pptx-fonts-loaded', handler);
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(handler).catch(() => {});
+    }
+    return () => {
+      window.removeEventListener('simpleworship:fonts-updated', handler);
+      window.removeEventListener('simpleworship:pptx-fonts-loaded', handler);
+    };
+  }, []);
 
   const containerCallbackRef = React.useCallback((el: HTMLDivElement | null) => {
     if (roRef.current) {
@@ -62,15 +83,29 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
   }, []);
   // Clean paragraphs and bullets
   const paragraphs = useMemo(() => {
+    let rawList: string[] = [];
     if (Array.isArray(slide.bullets) && slide.bullets.length > 0) {
-      return slide.bullets.filter(b => typeof b === 'string' && b.trim().length > 0);
+      rawList = slide.bullets.filter(b => typeof b === 'string' && b.trim().length > 0);
+    } else if (slide.text) {
+      rawList = slide.text
+        .split('\n\n')
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
     }
-    if (!slide.text) return [];
-    return slide.text
-      .split('\n\n')
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
-  }, [slide.text, slide.bullets]);
+    // Clean out duplicate title if slide.text repeated the title as first paragraph
+    if (slide.title && rawList.length > 0) {
+      const cleanTitle = slide.title.trim().toLowerCase().replace(/[:.]/g, '');
+      const firstPara = rawList[0].trim().toLowerCase().replace(/[:.]/g, '');
+      if (cleanTitle && (firstPara === cleanTitle || firstPara.startsWith(cleanTitle + '\n'))) {
+        if (firstPara === cleanTitle) {
+          rawList = rawList.slice(1);
+        } else {
+          rawList[0] = rawList[0].slice(slide.title.length).trim();
+        }
+      }
+    }
+    return rawList;
+  }, [slide.title, slide.text, slide.bullets]);
 
   const isTitleSlide = Boolean(slide.isTitleSlide || (slideIndex === 0 && paragraphs.length <= 1));
 
@@ -85,6 +120,11 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
 
   // Background styling using slide background or active theme background
   const bgStyle: React.CSSProperties = useMemo(() => {
+    // If in projector overlay mode and no explicit media background, stay 100% transparent
+    if (isProjectorMode && isOverlayLayer && !slide.backgroundUrl) {
+      return { backgroundColor: 'transparent' };
+    }
+
     // 1. Direct slide background URL (PPTX background or custom slide background)
     const resolvedSlideBg = resolveAssetUrl(slide.backgroundUrl);
     if (resolvedSlideBg) {
@@ -126,7 +166,7 @@ export const PresentationSlideView: React.FC<PresentationSlideViewProps> = React
     }
     // 5. Default canvas: if PPTX slide has no explicit bg, default to clean #FFFFFF; for native blackout canvas, use #000000
     return { backgroundColor: isPptxOrDeck ? '#FFFFFF' : '#000000' };
-  }, [slide.backgroundUrl, slide.backgroundColor, themeStyles, isPptxOrDeck]);
+  }, [slide.backgroundUrl, slide.backgroundColor, themeStyles, isPptxOrDeck, isProjectorMode, isOverlayLayer]);
 
   // Determine light vs dark background
   const isDarkBg = Boolean(
@@ -274,7 +314,7 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
   return (
     <div 
       ref={containerCallbackRef}
-      className="w-full h-full relative flex items-center justify-center overflow-hidden select-none bg-black"
+      className={`w-full h-full relative flex items-center justify-center overflow-hidden select-none ${isProjectorMode ? 'bg-transparent' : 'bg-black'}`}
     >
       {/* Aspect-Preserved Auto-Fitted Slide Stage */}
       <div 
@@ -309,11 +349,24 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
       {/* Render Object Canvas if objects exist */}
       {hasObjects ? (
         <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
-          {sanitizedObjects.filter(obj => obj.visible !== false).map((obj) => {
+          {sanitizedObjects.filter(obj => {
+            if (mode === 'thumbnail') return true;
+            const animState = presentationElementStates?.get(obj.id)
+              ?? (obj.shapeId ? presentationElementStates?.get(obj.shapeId) : undefined)
+              ?? (obj.shapeId ? presentationElementStates?.get(`shape-${obj.shapeId}`) : undefined);
+            if (animState && animState.visible !== undefined) {
+              return animState.visible !== false;
+            }
+            return obj.visible !== false;
+          }).map((obj) => {
             const leftPx = Math.round(obj.x * fitScale);
             const topPx = Math.round(obj.y * fitScale);
             const widthPx = Math.round(obj.width * fitScale);
             const heightPx = Math.round(obj.height * fitScale);
+
+            const animState = presentationElementStates?.get(obj.id)
+              ?? (obj.shapeId ? presentationElementStates?.get(obj.shapeId) : undefined)
+              ?? (obj.shapeId ? presentationElementStates?.get(`shape-${obj.shapeId}`) : undefined);
 
             const style = obj.style || {};
             const objFont = getCompatibleFontStack(style.fontFamily || (obj.type === 'shape' ? bodyFont : titleFont));
@@ -327,7 +380,7 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                   fontSize: style.fontSize || 36,
                   fontFamily: objFont,
                   fontWeight: style.fontWeight || (obj.type === 'text' ? 'bold' : 'normal'),
-                  lineHeightRatio: 1.2,
+                  lineHeightRatio: style.lineSpacing || 1.2,
                   padding: style.padding || 8,
                 })
               : 1;
@@ -335,6 +388,10 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
             const baseFontSz = style.fontSize || 36;
             const fontPx = Math.max(6, Math.round(baseFontSz * fitScale * autoFitFactor));
             const paddingPx = Math.max(0, Math.round((style.padding || 8) * fitScale));
+            const paddingTopPx = style.paddingTop !== undefined ? Math.round(style.paddingTop * fitScale) : paddingPx;
+            const paddingBottomPx = style.paddingBottom !== undefined ? Math.round(style.paddingBottom * fitScale) : paddingPx;
+            const paddingLeftPx = style.paddingLeft !== undefined ? Math.round(style.paddingLeft * fitScale) : paddingPx;
+            const paddingRightPx = style.paddingRight !== undefined ? Math.round(style.paddingRight * fitScale) : paddingPx;
 
             const shadowCss = style.shadowEnabled
               ? `${Math.round((style.shadowOffsetX || 0) * fitScale)}px ${Math.round((style.shadowOffsetY || 4) * fitScale)}px ${Math.round((style.shadowBlur || 8) * fitScale)}px ${style.shadowColor || 'rgba(0,0,0,0.3)'}`
@@ -350,8 +407,7 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                   left: `${leftPx}px`,
                   top: `${topPx}px`,
                   width: `${widthPx}px`,
-                  height: obj.type === 'text' ? 'auto' : `${heightPx}px`,
-                  minHeight: `${heightPx}px`,
+                  height: `${heightPx}px`,
                   transform: `rotate(${obj.rotation || 0}deg)`,
                   zIndex: obj.zIndex ?? (obj.type === 'text' ? 2 : 1),
                   opacity: (obj.opacity ?? 1) * (style.opacity ?? 1),
@@ -361,12 +417,16 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                   borderStyle: style.borderColor ? 'solid' : 'none',
                   borderRadius: style.borderRadius ? `${Math.round(style.borderRadius * fitScale)}px` : undefined,
                   boxShadow: shadowCss,
-                  padding: `${paddingPx}px`,
+                  paddingTop: `${paddingTopPx}px`,
+                  paddingBottom: `${paddingBottomPx}px`,
+                  paddingLeft: `${paddingLeftPx}px`,
+                  paddingRight: `${paddingRightPx}px`,
+                  animation: animState?.cssAnimation || undefined,
                 }}
               >
                 {obj.type === 'text' && (
                   <div
-                    className="w-full leading-normal break-words whitespace-pre-wrap flex flex-col antialiased overflow-visible"
+                    className="w-full h-full break-words flex flex-col antialiased"
                     style={{
                       fontFamily: objFont,
                       fontSize: `${fontPx}px`,
@@ -376,13 +436,51 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                       textDecoration: style.textDecoration || 'none',
                       letterSpacing: style.letterSpacing ? `${style.letterSpacing * fitScale}px` : undefined,
                       textAlign: style.textAlign || 'left',
-                      justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'safe center' : 'flex-start',
+                      lineHeight: style.lineSpacing ? `${style.lineSpacing}` : '1.2',
+                      justifyContent: style.alignVertical === 'bottom' ? 'flex-end' : style.alignVertical === 'middle' ? 'center' : 'flex-start',
                       textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.7)' : 'none',
                       wordBreak: 'normal',
                       overflowWrap: 'break-word',
                     }}
                   >
-                    {obj.text}
+                    {obj.paragraphs && obj.paragraphs.length > 0 ? (
+                      obj.paragraphs.map((para, pIdx) => (
+                        <div 
+                          key={pIdx} 
+                          className="w-full"
+                          style={{ 
+                            textAlign: para.textAlign || style.textAlign || 'left',
+                            marginBottom: pIdx < obj.paragraphs!.length - 1 ? `${Math.round(8 * fitScale)}px` : 0 
+                          }}
+                        >
+                          {para.runs && para.runs.length > 0 ? (
+                            para.runs.map((r, rIdx) => {
+                              const rFont = r.fontFamily ? getCompatibleFontStack(r.fontFamily) : objFont;
+                              const rFontPx = r.fontSize ? Math.max(6, Math.round(r.fontSize * fitScale * autoFitFactor)) : fontPx;
+                              return (
+                                <span
+                                  key={rIdx}
+                                  style={{
+                                    color: r.color ? ensureContrast(r.color, isDarkBg) : objColor,
+                                    fontWeight: r.bold ? 'bold' : (style.fontWeight || 'normal'),
+                                    fontStyle: r.italic ? 'italic' : 'normal',
+                                    textDecoration: r.underline ? 'underline' : 'none',
+                                    fontFamily: rFont,
+                                    fontSize: `${rFontPx}px`,
+                                  }}
+                                >
+                                  {r.text}
+                                </span>
+                              );
+                            })
+                          ) : (
+                            <span>{obj.text}</span>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="w-full whitespace-pre-wrap">{obj.text}</div>
+                    )}
                   </div>
                 )}
 
@@ -414,6 +512,57 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                 {obj.type === 'line' && (
                   <div className="w-full h-full flex items-center">
                     <div className="w-full" style={{ height: `${Math.max(1, Math.round((style.borderWidth || 2) * fitScale))}px`, backgroundColor: style.borderColor || accentColor }} />
+                  </div>
+                )}
+
+                {obj.type === 'table' && obj.tableData && (
+                  <div className="w-full h-full flex flex-col overflow-hidden">
+                    <table className="w-full h-full border-collapse table-fixed">
+                      <tbody>
+                        {obj.tableData.rows.map((row, rIdx) => (
+                          <tr key={rIdx}>
+                            {row.cells.map((cell, cIdx) => (
+                              <td
+                                key={cIdx}
+                                colSpan={cell.colSpan}
+                                rowSpan={cell.rowSpan}
+                                style={{
+                                  backgroundColor: cell.backgroundColor || 'transparent',
+                                  borderColor: cell.borderColor || 'rgba(255,255,255,0.2)',
+                                  borderWidth: cell.borderWidth ? `${Math.max(1, Math.round(cell.borderWidth * fitScale))}px` : '1px',
+                                  borderStyle: 'solid',
+                                  color: cell.fontColor ? ensureContrast(cell.fontColor, isDarkBg) : objColor,
+                                  fontSize: cell.fontSize ? `${Math.max(6, Math.round(cell.fontSize * fitScale))}px` : `${fontPx}px`,
+                                  fontWeight: (cell.fontWeight as any) || 'normal',
+                                  textAlign: cell.textAlign || 'left',
+                                  verticalAlign: cell.alignVertical === 'bottom' ? 'bottom' : cell.alignVertical === 'middle' ? 'middle' : 'top',
+                                  padding: `${Math.round(4 * fitScale)}px`,
+                                }}
+                              >
+                                {cell.runs && cell.runs.length > 0 ? (
+                                  cell.runs.map((r, runIdx) => (
+                                    <span
+                                      key={runIdx}
+                                      style={{
+                                        color: r.color ? ensureContrast(r.color, isDarkBg) : undefined,
+                                        fontWeight: r.bold ? 'bold' : undefined,
+                                        fontStyle: r.italic ? 'italic' : undefined,
+                                        textDecoration: r.underline ? 'underline' : undefined,
+                                        fontSize: r.fontSize ? `${Math.max(6, Math.round(r.fontSize * fitScale))}px` : undefined,
+                                      }}
+                                    >
+                                      {r.text}
+                                    </span>
+                                  ))
+                                ) : (
+                                  cell.text
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 

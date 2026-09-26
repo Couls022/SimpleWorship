@@ -239,6 +239,9 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     (displayId && (displayId.toLowerCase().includes('stage') || displayId.toLowerCase().includes('foldback')))
   );
 
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const routeActivationStack = useStore(state => state.routeActivationStack || []);
+
   // Candidate Output Groups targeted to THIS physical display (recalculated only when display/groups topology changes)
   const candidateGroupIds = useMemo<string[]>(() => {
     if (isStageWindow) {
@@ -256,124 +259,111 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       });
     }
 
-    // Fallback 1: If displayId didn't match any configured displays yet, but an explicit route was requested
-    if (candidateSet.size === 0 && (currentRouteGroupId || routedGroupId)) {
+    // Fallback 1: If an explicit route was requested in URL / prop
+    if (currentRouteGroupId || routedGroupId) {
       const targetGid = currentRouteGroupId || routedGroupId;
-      if (outputGroups.some(g => g.id === targetGid)) {
+      if (outputGroups.some(g => g.id === targetGid && g.role !== 'confidence' && g.id !== 'group-stage')) {
         candidateSet.add(targetGid);
       }
     }
 
-    // Fallback 2: Check displayId heuristics (e.g. Monitor 2 / Secondary / Projector)
-    if (candidateSet.size === 0 && displayId) {
-      const dLower = displayId.toLowerCase();
-      if (dLower.includes('2') || dLower.includes('secondary') || dLower.includes('projector') || dLower.includes('alternate')) {
-        const broadcastGroup = outputGroups.find(g => g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2');
-        if (broadcastGroup) {
-          candidateSet.add(broadcastGroup.id);
+    // Fallback 2: Any broadcast route without an explicit target assignment can target presentation display
+    outputGroups.forEach(g => {
+      if (g.role !== 'confidence' && g.id !== 'group-stage') {
+        const hasExplicit = (g.displayIds && g.displayIds.length > 0) || Boolean(g.targetDisplayId);
+        if (!hasExplicit) {
+          candidateSet.add(g.id);
         }
       }
-    }
+    });
 
-    // Fallback 3: Default first broadcast group
+    // Fallback 3: Default all broadcast groups
     if (candidateSet.size === 0) {
-      const defaultGroup = outputGroups.find(g => g.role !== 'confidence' && g.id !== 'group-stage') || outputGroups[0];
-      if (defaultGroup) {
-        candidateSet.add(defaultGroup.id);
-      }
+      outputGroups.forEach(g => {
+        if (g.role !== 'confidence' && g.id !== 'group-stage') {
+          candidateSet.add(g.id);
+        }
+      });
     }
 
     return Array.from(candidateSet);
   }, [isStageWindow, displayId, currentRouteGroupId, routedGroupId, outputGroups, screens]);
 
-  // Granular winning route selector: subscribes ONLY to candidate groups' live flags and routeActivationStack
-  const winningGroupId = useStore(React.useCallback((state) => {
-    if (candidateGroupIds.length === 0) return null;
-    
+  const groupStates = useStore(state => state.groupStates);
+
+  // Determine all candidate routes currently LIVE on this display
+  const liveCandidateGroupIds = useMemo(() => {
     if (isStageWindow) {
-      return Boolean(state.groupStates['group-stage']?.isLiveEnabled) ? 'group-stage' : null;
+      return Boolean(groupStates['group-stage']?.isLiveEnabled) ? ['group-stage'] : [];
     }
 
-    // Filter candidate groups whose Live state is ON
-    const liveIds = candidateGroupIds.filter(gid => Boolean(state.groupStates[gid]?.isLiveEnabled));
-    if (liveIds.length === 0) return null;
-    if (liveIds.length === 1) return liveIds[0];
+    // 1. Check live state of candidate routes
+    const liveFromCandidates = candidateGroupIds.filter(gid => Boolean(groupStates[gid]?.isLiveEnabled));
+    if (liveFromCandidates.length > 0) return liveFromCandidates;
 
-    // Arbitration: sort by routeActivationStack MRU (Most Recently Used)
-    const stackRankMap = new Map<string, number>();
-    (state.routeActivationStack || []).forEach((id, idx) => stackRankMap.set(id, idx));
+    // 2. Resilient fallback: If any broadcast group is marked live in groupStates, show it immediately
+    const liveBroadcasts = outputGroups
+      .filter(g => g.role !== 'confidence' && g.id !== 'group-stage' && Boolean(groupStates[g.id]?.isLiveEnabled))
+      .map(g => g.id);
+    if (liveBroadcasts.length > 0) return liveBroadcasts;
 
-    const sorted = [...liveIds].sort((a, b) => {
-      const rankA = stackRankMap.has(a) ? stackRankMap.get(a)! : 999;
-      const rankB = stackRankMap.has(b) ? stackRankMap.get(b)! : 999;
-      return rankA - rankB;
+    // 3. Any key in groupStates marked live
+    return Object.keys(groupStates || {}).filter(k => k !== 'group-stage' && Boolean(groupStates[k]?.isLiveEnabled));
+  }, [candidateGroupIds, isStageWindow, groupStates, outputGroups]);
+
+  const isLive = useMemo(() => {
+    if (isStageWindow) {
+      return Boolean(groupStates['group-stage']?.isLiveEnabled);
+    }
+    if (liveCandidateGroupIds.length > 0) return true;
+    return Object.values(groupStates || {}).some(st => Boolean((st as any)?.isLiveEnabled));
+  }, [isStageWindow, liveCandidateGroupIds, groupStates]);
+
+  // Stacking Resolution:
+  // Render live layers in ascending z-index order (bottom to top).
+  // The active control route (activeControlGroupId) must ALWAYS be at the top of the stack (highest z-index),
+  // ensuring the route the operator is actively selecting overlays on top cleanly.
+  const stackedLayers = useMemo(() => {
+    const designatedDefaultId = candidateGroupIds[0] || currentRouteGroupId || routedGroupId || outputGroups[0]?.id || 'group-congregation';
+
+    if (liveCandidateGroupIds.length === 0) {
+      return [{
+        groupId: designatedDefaultId,
+        isBase: true,
+        isOverlay: false,
+        zIndex: 10
+      }];
+    }
+
+    if (liveCandidateGroupIds.length === 1) {
+      return [{
+        groupId: liveCandidateGroupIds[0],
+        isBase: true,
+        isOverlay: false,
+        zIndex: 10
+      }];
+    }
+
+    // When 2+ routes are live on this projector display:
+    // Sort so inactive routes come first (lower z-index) and the active control route comes LAST (highest z-index, on top)
+    const sorted = [...liveCandidateGroupIds].sort((a, b) => {
+      if (a === activeControlGroupId) return 1;
+      if (b === activeControlGroupId) return -1;
+      // MRU activation stack fallback
+      const idxA = routeActivationStack.indexOf(a);
+      const idxB = routeActivationStack.indexOf(b);
+      return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
     });
 
-    return sorted[0] || null;
-  }, [candidateGroupIds, isStageWindow]));
-
-  // Persistent Route Management:
-  // We keep the canvas permanently mounted on the designated primary route so WebGL, video decoders,
-  // PPTX parse pipelines, and font auto-fit engines NEVER get torn down on live/standby toggles.
-  const designatedGroupId = candidateGroupIds[0] || currentRouteGroupId || routedGroupId || outputGroups[0]?.id || 'group-congregation';
-  const lastActiveGroupIdRef = useRef<string>(designatedGroupId);
-  if (winningGroupId) {
-    lastActiveGroupIdRef.current = winningGroupId;
-  }
-  const activeGroupId = winningGroupId || lastActiveGroupIdRef.current || designatedGroupId;
-
-  const activeGroup = useMemo(() => {
-    return outputGroups.find(g => g.id === activeGroupId) || outputGroups[0];
-  }, [activeGroupId, outputGroups]);
-
-  // Granular active state selector: subscribes to the active route's state
-  const rawActiveState = useStore(React.useCallback((state) => {
-    return state.groupStates[activeGroupId] || state.stagedGroupStates[activeGroupId];
-  }, [activeGroupId]));
-
-  const lastValidStateRef = useRef<any>(rawActiveState);
-  if (rawActiveState) {
-    lastValidStateRef.current = rawActiveState;
-  }
-  const activeState = rawActiveState || lastValidStateRef.current;
-
-  // Multi-route overlay detection: Check if any secondary candidate route is also live on this display
-  const secondaryOverlayGroupId = useStore(React.useCallback((state) => {
-    if (isStageWindow || candidateGroupIds.length <= 1) return null;
-    const liveIds = candidateGroupIds.filter(gid => Boolean(state.groupStates[gid]?.isLiveEnabled));
-    if (liveIds.length <= 1) return null;
-    // Return secondary live group (different from the base activeGroupId)
-    const secondary = liveIds.find(id => id !== activeGroupId);
-    return secondary || null;
-  }, [candidateGroupIds, isStageWindow, activeGroupId]));
-
-  const secondaryOverlayGroup = useMemo(() => {
-    if (!secondaryOverlayGroupId) return undefined;
-    return outputGroups.find(g => g.id === secondaryOverlayGroupId);
-  }, [secondaryOverlayGroupId, outputGroups]);
-
-  const secondaryOverlayState = useStore(React.useCallback((state) => {
-    if (!secondaryOverlayGroupId) return undefined;
-    return state.groupStates[secondaryOverlayGroupId] || state.stagedGroupStates[secondaryOverlayGroupId];
-  }, [secondaryOverlayGroupId]));
-
-  const isLive = Boolean(winningGroupId);
-
-  const effectiveActiveState = useMemo(() => {
-    if (!activeState) return undefined;
-    return {
-      ...activeState,
-      isLiveEnabled: isLive
-    };
-  }, [activeState, isLive]);
-
-  const effectiveSecondaryState = useMemo(() => {
-    if (!secondaryOverlayState) return undefined;
-    return {
-      ...secondaryOverlayState,
-      isLiveEnabled: isLive
-    };
-  }, [secondaryOverlayState, isLive]);
+    // The bottom-most layer provides the foundational presentation canvas/background
+    // All subsequent layers overlay transparently on top with increasing z-index
+    return sorted.map((gId, idx) => ({
+      groupId: gId,
+      isBase: idx === 0,
+      isOverlay: idx > 0,
+      zIndex: 10 + idx * 10
+    }));
+  }, [liveCandidateGroupIds, candidateGroupIds, currentRouteGroupId, routedGroupId, outputGroups, activeControlGroupId, routeActivationStack]);
 
   return (
     <div 
@@ -392,52 +382,31 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         cursor: cursorVisible ? 'default' : 'none'
       }}
     >
-      {/* Base Primary Presentation Layer: Stays permanently mounted to prevent video/canvas/font flicker */}
-      <div 
-        className="absolute inset-0 pointer-events-auto z-10 w-full h-full m-0 p-0 overflow-hidden" 
-        style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
-      >
-        <ProjectorErrorBoundary fallbackGroupId={activeGroupId}>
-          <MonitorPreviewCanvas
-            groupId={activeGroupId}
-            customGroup={activeGroup}
-            customState={effectiveActiveState}
-            isProjectorMode={true}
-            isOverlayLayer={false}
-            className="w-full h-full"
+      {/* Dynamic Multi-Route Projector Stack: Active route is always on top (highest z-index) with transparent overlay */}
+      {stackedLayers.map((layer) => {
+        const groupObj = outputGroups.find(g => g.id === layer.groupId) || outputGroups[0];
+        return (
+          <ProjectorLayer
+            key={layer.groupId}
+            groupId={layer.groupId}
+            group={groupObj}
+            isLive={isLive}
+            isOverlay={layer.isOverlay}
+            zIndex={layer.zIndex}
           />
-        </ProjectorErrorBoundary>
-      </div>
-
-      {/* Secondary Multi-Route Overlay Layer (e.g. Lower-Third / Scripture overlay on top of congregation slide) */}
-      {secondaryOverlayGroupId && secondaryOverlayGroup && secondaryOverlayState && (
-        <div 
-          className="absolute inset-0 pointer-events-none z-20 w-full h-full m-0 p-0 overflow-hidden" 
-          style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
-        >
-          <ProjectorErrorBoundary fallbackGroupId={secondaryOverlayGroupId}>
-            <MonitorPreviewCanvas
-              groupId={secondaryOverlayGroupId}
-              customGroup={secondaryOverlayGroup}
-              customState={effectiveSecondaryState}
-              isProjectorMode={true}
-              isOverlayLayer={true}
-              className="w-full h-full"
-            />
-          </ProjectorErrorBoundary>
-        </div>
-      )}
+        );
+      })}
 
       {/* Seamless Standby Veil: When no routes are live, fade smoothly to solid black without unmounting canvas */}
       <div 
-        className={`absolute inset-0 z-40 bg-black pointer-events-none transition-opacity duration-300 ease-in-out ${
+        className={`absolute inset-0 z-50 bg-black pointer-events-none transition-opacity duration-300 ease-in-out ${
           isLive ? 'opacity-0' : 'opacity-100'
         }`} 
       />
 
       {/* Standby Diagnostics Pill: Visible only when in standby mode or moving mouse, giving instant feedback */}
       {!isLive && cursorVisible && (
-        <div className="absolute bottom-4 left-4 z-50 pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 border border-white/10 text-white/60 text-xs font-mono backdrop-blur-sm transition-opacity duration-300">
+        <div className="absolute bottom-4 left-4 z-[60] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 border border-white/10 text-white/60 text-xs font-mono backdrop-blur-sm transition-opacity duration-300">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           <span>{displayId ? `Target: ${displayId}` : `Display ${displayIndex}`}</span>
           <span className="text-white/30">•</span>
@@ -468,4 +437,37 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     </div>
   );
 }
+
+interface ProjectorLayerProps {
+  groupId: string;
+  group: any;
+  isLive: boolean;
+  isOverlay: boolean;
+  zIndex: number;
+}
+
+const ProjectorLayer = React.memo(function ProjectorLayer({
+  groupId,
+  group,
+  isLive: _isLive,
+  isOverlay,
+  zIndex
+}: ProjectorLayerProps) {
+  return (
+    <div 
+      className="absolute inset-0 pointer-events-none w-full h-full m-0 p-0 overflow-hidden" 
+      style={{ zIndex, transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+    >
+      <ProjectorErrorBoundary fallbackGroupId={groupId}>
+        <MonitorPreviewCanvas
+          groupId={groupId}
+          customGroup={group}
+          isProjectorMode={true}
+          isOverlayLayer={isOverlay}
+          className="w-full h-full"
+        />
+      </ProjectorErrorBoundary>
+    </div>
+  );
+});
 

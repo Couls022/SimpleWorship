@@ -63,5 +63,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getHardwareInfo: () => ipcRenderer.invoke('system:get-hardware-info'),
   convertPptx: (filePath) => ipcRenderer.invoke('convert-pptx', filePath),
+  detectPowerPoint: () => ipcRenderer.invoke('pptx:detect-powerpoint'),
+  renderPptxWithPowerPoint: (payload) => ipcRenderer.invoke('pptx:render-slides', payload),
+  clearPowerPointCache: (hash) => ipcRenderer.invoke('pptx:clear-cache', hash),
   openExternalUrl: (url) => ipcRenderer.invoke('shell:open-external', url),
 });

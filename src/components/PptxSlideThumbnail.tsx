@@ -3,6 +3,7 @@ import { Slide, PresentationItem, ThemeStyles } from '../types';
 import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
 import { getCachedPptxSlides, getOrParsePptxSlides } from '../utils/pptxParser';
+import { PptxRenderCacheManager } from '../utils/pptxBackend';
 import { getDB } from '../db';
 
 interface PptxSlideThumbnailProps {
@@ -26,7 +27,43 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
 
   const contentId = liveItem?.contentId || (slide as any).presentationId || (slide as any).deckId || liveItem?.id;
 
-  // 1. Check if full parsed slide is already in memory cache or in slide prop
+  const [, setCanonicalTick] = useState(0);
+  useEffect(() => {
+    const handleUpdate = () => {
+      setCanonicalTick(t => t + 1);
+    };
+    window.addEventListener('simpleworship:canonical-frame-updated', handleUpdate);
+    return () => window.removeEventListener('simpleworship:canonical-frame-updated', handleUpdate);
+  }, []);
+
+  // 1. Authoritative check: If PowerPoint COM or rasterized canonical frame is already in cache, render immediately
+  const canonicalFrame = PptxRenderCacheManager.getCanonicalFrame(contentId, slideIndex);
+  if (canonicalFrame?.dataUrl) {
+    return (
+      <div 
+        ref={containerRef}
+        className="w-full h-full bg-black relative overflow-hidden select-none flex items-center justify-center pointer-events-none"
+        style={{
+          contain: 'strict',
+          transform: 'translateZ(0)',
+        }}
+      >
+        <div className="w-full h-full relative overflow-hidden flex items-center justify-center shrink-0 pointer-events-none">
+          <img 
+            src={canonicalFrame.dataUrl} 
+            alt={`Slide ${slideIndex + 1}`}
+            className="w-full h-full object-contain pointer-events-none select-none"
+            style={{ maxWidth: '100%', maxHeight: '100%' }}
+          />
+        </div>
+        <div className="absolute bottom-1 right-2 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono font-bold text-amber-300 border border-amber-500/30 pointer-events-none z-20 shadow-sm">
+          Slide {slideIndex + 1}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Check if full parsed slide is already in memory cache or in slide prop
   const currentSlide = useMemo(() => {
     if (asyncSlide) return asyncSlide;
     if (slide.backgroundUrl || slide.backgroundColor || (slide.objects && slide.objects.length > 0)) {

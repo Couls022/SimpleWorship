@@ -180,6 +180,18 @@ export default function PresentationsTab() {
     );
     setSelectedPresIds(selectedIds);
     setAnchorPresId(anchorId);
+
+    const { setPreviewItem } = useStore.getState();
+    const item = {
+      id: pres.id,
+      type: 'presentation' as const,
+      contentId: pres.id,
+      name: pres.name,
+      notes: `${pres.data?.slides?.length || 0} slides`,
+      data: pres.data,
+      isExpanded: false
+    };
+    setPreviewItem(item, 0);
   };
 
   const handleContextMenu = (e: React.MouseEvent, pres: Asset) => {

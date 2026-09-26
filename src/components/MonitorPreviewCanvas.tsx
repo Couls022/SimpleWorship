@@ -32,6 +32,25 @@ interface MonitorPreviewCanvasProps {
   isThumbnail?: boolean;
 }
 
+const STATIC_FALLBACK_STATE: PresentationState = Object.freeze({
+  activeScheduleId: null,
+  activeItemId: null,
+  activeSlideIndex: 0,
+  nextSlideIndex: 1,
+  isBlack: false,
+  isClear: false,
+  showLogo: false,
+  timestamp: 0,
+  isLiveEnabled: false,
+} as PresentationState);
+
+const STATIC_FALLBACK_ALERT = Object.freeze({
+  active: false,
+  showNursery: false,
+  message: '',
+  nurseryText: ''
+} as any);
+
 const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   groupId,
   customGroup,
@@ -49,29 +68,21 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
       : { width: 0, height: 0 }
   ));
 
-  const group = useStore(useCallback(state => customGroup || state.outputGroups.find(g => g.id === groupId) || state.outputGroups[0], [customGroup, groupId]));
+  const storeGroup = useStore(useCallback(state => state.outputGroups.find(g => g.id === groupId) || state.outputGroups[0], [groupId]));
+  const group = customGroup || storeGroup;
 
-  const fallbackState = useMemo(() => ({
-    activeScheduleId: null,
-    activeItemId: null,
-    activeSlideIndex: 0,
-    nextSlideIndex: 1,
-    isBlack: false,
-    isClear: false,
-    showLogo: false,
-    timestamp: Date.now(),
-    isLiveEnabled: false,
-  } as PresentationState), []);
-
-  const presentationState = useStore(useCallback(state => customState || state.stagedGroupStates[groupId] || fallbackState, [customState, groupId, fallbackState]));
+  const stagedGroupState = useStore(useCallback(state => state.stagedGroupStates[groupId], [groupId]));
+  const liveGroupState = useStore(useCallback(state => state.groupStates[groupId], [groupId]));
+  const presentationState = customState || (isProjectorMode ? (liveGroupState || stagedGroupState) : (stagedGroupState || liveGroupState)) || STATIC_FALLBACK_STATE;
 
   const activeSchedule = useStore(state => state.activeSchedule);
   const songsList = useStore(state => state.songsList);
   const themesList = useStore(state => state.themesList);
   const setStagedGroupState = useStore(state => state.setStagedGroupState);
   
-  const fallbackAlert = useMemo(() => ({ active: false, showNursery: false, message: '', nurseryText: '' } as any), []);
-  const currentAlert = useStore(useCallback(state => (groupId && state.groupAlerts?.[groupId]) || state.alert || fallbackAlert, [groupId, fallbackAlert]));
+  const groupAlert = useStore(useCallback(state => (groupId && state.groupAlerts?.[groupId]), [groupId]));
+  const globalAlert = useStore(state => state.alert);
+  const currentAlert = groupAlert || globalAlert || STATIC_FALLBACK_ALERT;
   
   const systemOptions = useStore(state => state.systemOptions);
 
@@ -718,17 +729,17 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             height: `${targetHeight}px`,
             transform: `scale(${scale})`,
             fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
-            background: isGradient 
-              ? gradientVal 
-              : isOverlayGroup
-                ? 'transparent'
+            background: (isOverlayGroup && !hasExplicitCustomBackground)
+              ? 'transparent'
+              : isGradient 
+                ? gradientVal 
                 : (resolvedStyles.backgroundColor || '#000000'),
           }}
         >
           {/* Live Display Canvas Content */}
           <div className="absolute inset-0 w-full h-full">
             {/* Background Layer - Solid Crossfade (Never drops to black) */}
-            <div className="absolute inset-0 z-0 overflow-hidden">
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
               {/* Underlying persistent buffer to guarantee ZERO black flash during crossfade or image loading */}
               {!isOverlayGroup && lastValidBgRef.current && (
                 <div 
@@ -741,15 +752,17 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
               )}
               <AnimatePresence mode="sync">
                 <motion.div
-                  key={`bg-${effectiveBackgroundUrl || videoSrc || gradientVal || (isOverlayGroup ? 'trans' : resolvedStyles.backgroundColor)}`}
-                  initial={{ opacity: (isOverlayGroup && !effectiveBackgroundUrl && !videoSrc) ? 1 : 0 }}
+                  key={`bg-${(isOverlayGroup && !hasExplicitCustomBackground) ? 'overlay-trans' : (effectiveBackgroundUrl || videoSrc || gradientVal || resolvedStyles.backgroundColor)}`}
+                  initial={{ opacity: (isOverlayGroup && !hasExplicitCustomBackground) ? 1 : 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 1, zIndex: 0 }}
                   transition={{ duration: 0.35, ease: 'easeInOut' }}
                   className="absolute inset-0 w-full h-full"
                   style={{ zIndex: 1 }}
                 >
-                {isVideo && videoSrc ? (
+                {(isOverlayGroup && !hasExplicitCustomBackground) ? (
+                  <div className="w-full h-full bg-transparent" />
+                ) : isVideo && videoSrc ? (
                   <video
                     ref={(el) => {
                       if (el) {
@@ -808,17 +821,15 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                   <div 
                     className="w-full h-full" 
                     style={{ 
-                      backgroundColor: isOverlayGroup
-                        ? 'transparent'
-                        : (resolvedStyles.backgroundColor || '#000000') 
+                      backgroundColor: resolvedStyles.backgroundColor || '#000000'
                     }} 
                   />
                 )}
                 </motion.div>
               </AnimatePresence>
 
-              {/* Tint Overlay - Omit on projector mode when no explicit background media is present */}
-              {contentType !== 'video' && (!isProjectorMode || effectiveBackgroundUrl || videoSrc || isGradient) && (
+              {/* Tint Overlay - Omit on overlay mode or when no explicit background media is present */}
+              {contentType !== 'video' && !(isOverlayGroup && !hasExplicitCustomBackground) && (!isProjectorMode || effectiveBackgroundUrl || videoSrc || isGradient) && (
                 <div 
                   className="absolute inset-0 pointer-events-none"
                   style={{
@@ -1007,7 +1018,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
               >
                   <PptxRenderOverlay
                     fileBytes={activeItem?.data?.fileBytes}
-                    contentId={activeItem?.contentId}
+                    contentId={activeItem?.contentId || activeItem?.id}
                     activeSlideIndex={presentationState.activeSlideIndex ?? 0}
                     currentSlide={currentSlide}
                     themeStyles={resolvedStyles}
@@ -1017,6 +1028,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     onAnimationGroupChange={handlePptxAnimationGroupChange}
                     onActiveSlideChange={handlePptxSlideChange}
                     isProjectorMode={isProjectorMode}
+                    isOverlayLayer={isOverlayGroup}
                     targetWidth={targetWidth}
                     targetHeight={targetHeight}
                   />

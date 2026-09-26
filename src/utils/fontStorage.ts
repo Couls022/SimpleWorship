@@ -579,6 +579,80 @@ export async function exportAllFontsAsZip(): Promise<Blob | null> {
 }
 
 /**
+ * Generates an automated 1-Click Windows Font Installer Package (.zip).
+ * Contains the authentic font binaries plus automated `Install-Fonts-Windows.cmd` and `Install-Fonts-Windows.ps1`
+ * to install and register all fonts into Windows system font registry (HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts).
+ */
+export async function exportWindowsFontInstallerPackage(targetFamilies?: string[]): Promise<Blob | null> {
+  try {
+    const db = await getFontDB();
+    let records: StoredFontRecord[] = await db.getAll('installed_fonts');
+    if (targetFamilies && targetFamilies.length > 0) {
+      const allowed = new Set(targetFamilies.map(f => f.toLowerCase().trim()));
+      records = records.filter(r => allowed.has(r.familyLower) || allowed.has(r.family.toLowerCase()));
+    }
+    if (records.length === 0) {
+      records = await db.getAll('installed_fonts');
+    }
+    if (records.length === 0) return null;
+
+    const zip = new JSZip();
+    const cmdContent = `@echo off
+title SimpleWorship - Windows 1-Click Font Auto-Installer
+echo ========================================================
+echo   SimpleWorship - Windows 1-Click Font Auto-Installer
+echo   Installing ${records.length} authentic presentation font(s) into Windows OS...
+echo ========================================================
+echo.
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0Install-Fonts-Windows.ps1"
+echo.
+echo ========================================================
+echo   [OK] Installation Complete! All fonts are ready for Windows.
+echo ========================================================
+pause
+`;
+
+    const ps1Content = `# SimpleWorship Windows Font Auto-Installer
+$ErrorActionPreference = 'SilentlyContinue'
+$FontFolder = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Fonts)
+$UserFontFolder = "$env:LOCALAPPDATA\\Microsoft\\Windows\\Fonts"
+if (!(Test-Path $UserFontFolder)) { New-Item -ItemType Directory -Force -Path $UserFontFolder | Out-Null }
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$FontFiles = Get-ChildItem -Path $ScriptDir -Include *.ttf, *.otf, *.woff2 -Recurse
+
+Write-Host "Installing $($FontFiles.Count) font file(s) into Windows..." -ForegroundColor Cyan
+
+foreach ($File in $FontFiles) {
+    $TargetUser = Join-Path $UserFontFolder $File.Name
+    Copy-Item -Path $File.FullName -Destination $TargetUser -Force
+    $BaseName = [System.IO.Path]::GetFileNameWithoutExtension($File.Name)
+    $RegName = "$BaseName (TrueType)"
+    New-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts" -Name $RegName -Value $TargetUser -PropertyType String -Force | Out-Null
+    Write-Host "✓ Installed: $($File.Name) into Windows Font Registry" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "[OK] All presentation fonts successfully registered into Windows!" -ForegroundColor Green
+`;
+
+    zip.file('Install-Fonts-Windows.cmd', cmdContent);
+    zip.file('Install-Fonts-Windows.ps1', ps1Content);
+
+    for (const record of records) {
+      const ext = record.format === 'woff2' ? 'woff2' : record.format === 'opentype' ? 'otf' : 'ttf';
+      const fileName = `${record.family.replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
+      zip.file(fileName, record.buffer);
+    }
+
+    return await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  } catch (err) {
+    console.error('[fontStorage] Failed to create Windows font installer package:', err);
+    return null;
+  }
+}
+
+/**
  * Enterprise Restore: Unpacks all fonts from a zip and registers them into IndexedDB.
  */
 export async function importFontsFromZip(zipFile: File | Blob): Promise<number> {

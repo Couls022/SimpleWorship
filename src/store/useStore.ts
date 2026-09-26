@@ -2056,7 +2056,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     const targetGroupIds = groupId 
       ? [groupId] 
-      : outputGroups.filter(g => g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2').map(g => g.id);
+      : outputGroups.filter(g => g.role !== 'confidence' && g.id !== 'group-stage').map(g => g.id);
 
     let nextStack = get().routeActivationStack || [];
     if (groupId && nextLive) {

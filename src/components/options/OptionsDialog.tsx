@@ -53,6 +53,7 @@ import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
 import StageMonitorContent from '../workspace/StageMonitorContent';
 import FontCacheManagerPanel from './FontCacheManagerPanel';
+import { PptxBackendSelector, PptxBackendCapabilities } from '../../utils/pptxBackend';
 
 interface OptionsDialogProps {
   onClose: () => void;
@@ -98,6 +99,21 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
   const [highlightedLabelId, setHighlightedLabelId] = useState<string | null>(null);
   const [resetConfirmSuccess, setResetConfirmSuccess] = useState<boolean>(false);
   const [addLabelSuccess, setAddLabelSuccess] = useState<boolean>(false);
+
+  // PPTX Hardware & Automation Backend Capability State
+  const [pptxCaps, setPptxCaps] = useState<{
+    native: PptxBackendCapabilities;
+    powerpoint: PptxBackendCapabilities;
+  } | null>(null);
+
+  useEffect(() => {
+    PptxBackendSelector.queryBackendCapabilities().then((res) => {
+      setPptxCaps({
+        native: res.native,
+        powerpoint: res.powerpoint
+      });
+    }).catch(() => {});
+  }, []);
 
   const [timerNow, setTimerNow] = useState<number>(Date.now());
   useEffect(() => {
@@ -3556,6 +3572,73 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                         />
                       </div>
                     )}
+                  </div>
+
+                  {/* PPTX Presentation Rendering Backend */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-md p-3 space-y-3">
+                    <div className="font-bold text-gray-200 border-b border-[#292c36] pb-1 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-amber-300">
+                        <MonitorPlay size={14} />
+                        <span>PPTX Presentation Rendering Backend</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {pptxCaps?.powerpoint.available ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/60 text-emerald-300 text-[10px] font-mono font-bold flex items-center gap-1">
+                            <Check size={11} />
+                            <span>PowerPoint Available</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-400 text-[10px] font-mono">
+                            Native Only
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-gray-300 text-[11px] block font-semibold">
+                        Rendering Engine Mode:
+                      </label>
+                      <select
+                        value={localOptions.mainOutput?.presentations?.pptxEngineMode || 'auto'}
+                        onChange={(e) => {
+                          const val = e.target.value as 'auto' | 'native' | 'powerpoint';
+                          setLocalOptions((prev) => ({
+                            ...prev,
+                            mainOutput: {
+                              ...prev.mainOutput,
+                              presentations: {
+                                ...prev.mainOutput.presentations,
+                                pptxEngineMode: val
+                              }
+                            }
+                          }));
+                        }}
+                        className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-white font-medium text-xs outline-none focus:border-amber-500"
+                      >
+                        <option value="auto">Auto (Recommended: Microsoft PowerPoint if detected, else Native)</option>
+                        <option value="native">Native SimpleWorship (Universal OpenXML Vector Engine)</option>
+                        <option value="powerpoint">Microsoft PowerPoint (Local Windows Hardware Engine)</option>
+                      </select>
+
+                      <div className="p-2.5 rounded bg-[#101216] border border-[#272b36] text-[11px] space-y-1.5">
+                        <div className="flex items-center justify-between text-gray-300">
+                          <span className="font-semibold">Microsoft PowerPoint Engine:</span>
+                          <span className={pptxCaps?.powerpoint.available ? "text-emerald-400 font-bold" : "text-gray-500"}>
+                            {pptxCaps?.powerpoint.available ? "✓ Available & Connected" : "✗ Not Detected on this OS"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-gray-300">
+                          <span className="font-semibold">Native SimpleWorship Engine:</span>
+                          <span className="text-cyan-400 font-bold">✓ Active (Universal Fallback)</span>
+                        </div>
+                        {pptxCaps?.powerpoint.reason && (
+                          <p className="text-[10px] text-gray-400 font-mono mt-1 pt-1 border-t border-[#232733]">
+                            Status: {pptxCaps.powerpoint.reason}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Reset Workspace Layout */}

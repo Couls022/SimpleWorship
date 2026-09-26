@@ -9,12 +9,14 @@ import { useStore } from '../store/useStore';
 import { Slide, ThemeStyles } from '../types';
 import { PresentationSlideView } from './PresentationSlideView';
 import { getSlideEntranceElementIds, buildMergedPresentationElementStates } from '../utils/pptxAnimationUtils';
+import { PptxBackendSelector, PptxPresentationSession, PptxRenderCacheManager, CanonicalSlideRender } from '../utils/pptxBackend';
 
 interface PptxRenderOverlayProps {
   fileBytes?: Uint8Array | ArrayBuffer | any;
   contentId?: string;
   isThumbnail?: boolean;
   isProjectorMode?: boolean;
+  isOverlayLayer?: boolean;
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
   pptxAnimationGroupIndex?: number;
@@ -56,6 +58,7 @@ interface PptxViewerInnerProps {
   contentId?: string;
   isThumbnail?: boolean;
   isProjectorMode?: boolean;
+  isOverlayLayer?: boolean;
   pptxAction?: 'next' | 'prev' | null;
   pptxActionTimestamp?: number;
   pptxAnimationGroupIndex?: number;
@@ -73,6 +76,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
   contentId,
   isThumbnail, 
   isProjectorMode, 
+  isOverlayLayer,
   pptxAction, 
   pptxActionTimestamp, 
   pptxAnimationGroupIndex,
@@ -94,6 +98,57 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
   const [slideCount, setSlideCount] = useState<number>(1);
   const [allSlidesState, setAllSlidesState] = useState<any[]>([]);
   const [, setFontLoadTick] = useState<number>(0);
+  const [powerPointSession, setPowerPointSession] = useState<PptxPresentationSession | null>(() => {
+    return PptxRenderCacheManager.getCanonicalSession(contentId || 'deck');
+  });
+  const pptxEngineMode = useStore(state => state.systemOptions?.mainOutput?.presentations?.pptxEngineMode || 'auto');
+
+  // React to canonical session updates dispatched globally
+  useEffect(() => {
+    const handleUpdate = () => {
+      const session = PptxRenderCacheManager.getCanonicalSession(contentId || 'deck');
+      if (session && session.backendUsed === 'powerpoint') {
+        setPowerPointSession(session);
+      } else if (session && session.backendUsed === 'native') {
+        setPowerPointSession(null);
+      }
+    };
+    window.addEventListener('simpleworship:canonical-frame-updated', handleUpdate);
+    return () => window.removeEventListener('simpleworship:canonical-frame-updated', handleUpdate);
+  }, [contentId]);
+
+  // Proactively check and load presentation via PowerPoint Hardware-Accelerated Backend if configured
+  useEffect(() => {
+    if (!bytes) return;
+    let isSubscribed = true;
+
+    if (pptxEngineMode === 'native') {
+      setPowerPointSession(null);
+      return;
+    }
+
+    PptxBackendSelector.loadPresentation(contentId || 'deck', bytes, pptxEngineMode)
+      .then((session) => {
+        if (isSubscribed && session && session.backendUsed === 'powerpoint' && session.slides.length > 0) {
+          setPowerPointSession(session);
+          PptxRenderCacheManager.registerCanonicalSession(session, [contentId || 'deck']);
+        } else if (isSubscribed && session && session.backendUsed === 'native') {
+          setPowerPointSession(null);
+          PptxRenderCacheManager.registerCanonicalSession(session, [contentId || 'deck']);
+        }
+      })
+      .catch((e) => {
+        // Safe fallback - native engine will continue
+        console.warn('[PptxRenderOverlay] PowerPoint backend load error:', e);
+        if (isSubscribed) {
+          setPowerPointSession(null);
+        }
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [bytes, contentId, pptxEngineMode]);
 
   // Proactively extract and register fonts from PPTX binary (for Canva & custom fonts)
   useEffect(() => {
@@ -132,7 +187,14 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
       setFontLoadTick(t => t + 1);
     };
     window.addEventListener('simpleworship:pptx-fonts-loaded', handler);
-    return () => window.removeEventListener('simpleworship:pptx-fonts-loaded', handler);
+    window.addEventListener('simpleworship:fonts-updated', handler);
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(handler).catch(() => {});
+    }
+    return () => {
+      window.removeEventListener('simpleworship:pptx-fonts-loaded', handler);
+      window.removeEventListener('simpleworship:fonts-updated', handler);
+    };
   }, []);
 
   const containerCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -275,6 +337,20 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
     themeColorMap: (blocks.canvasProps as any)?.themeColorMap
   });
 
+  // Stable playback methods ref to eliminate re-render loops
+  const playbackRef = useRef({
+    clearPresentationTimers,
+    seedSlideAnimations,
+    startSlideAnimations,
+    playNextAnimationGroup,
+  });
+  playbackRef.current = {
+    clearPresentationTimers,
+    seedSlideAnimations,
+    startSlideAnimations,
+    playNextAnimationGroup,
+  };
+
   const effectiveActiveSlide = useMemo(() => {
     if (slides && slides[activeSlideIndex]) {
       return slides[activeSlideIndex];
@@ -302,19 +378,19 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
     if (isThumbnail || !slides || slides.length === 0) return;
 
     try {
-      clearPresentationTimers();
-      seedSlideAnimations(activeSlideIndex);
+      playbackRef.current.clearPresentationTimers();
+      playbackRef.current.seedSlideAnimations(activeSlideIndex);
 
       if (pptxAnimationGroupIndex && pptxAnimationGroupIndex > 0) {
         // Fast-forward to the desired animation group state (e.g. stepping backwards or syncing)
         for (let i = 0; i < pptxAnimationGroupIndex; i++) {
-          playNextAnimationGroup();
+          playbackRef.current.playNextAnimationGroup();
         }
       } else {
         // Auto-play opening withPrevious / afterPrevious groups if authored,
         // while all on-click entrance animations remain guaranteed hidden until user clicks!
-        if (typeof startSlideAnimations === 'function') {
-          startSlideAnimations(activeSlideIndex);
+        if (typeof playbackRef.current.startSlideAnimations === 'function') {
+          playbackRef.current.startSlideAnimations(activeSlideIndex);
         }
       }
     } catch (e) {
@@ -322,9 +398,9 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
     }
 
     return () => {
-      clearPresentationTimers();
+      playbackRef.current.clearPresentationTimers();
     };
-  }, [activeSlideIndex, isThumbnail, slides, seedSlideAnimations, startSlideAnimations, playNextAnimationGroup, clearPresentationTimers, pptxAnimationGroupIndex]);
+  }, [activeSlideIndex, isThumbnail, pptxAnimationGroupIndex, slides?.length]);
 
   // Mouse wheel listener with discrete debounced stepping
   
@@ -344,7 +420,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
       // Step 1: Attempt to trigger next animation/effect group inside current slide
       let playedAnimation = false;
       try {
-        playedAnimation = Boolean(playNextAnimationGroup());
+        playedAnimation = Boolean(playbackRef.current.playNextAnimationGroup());
       } catch (e) {
         console.warn('[PptxRenderOverlay] playNextAnimationGroup error:', e);
         playedAnimation = false;
@@ -378,7 +454,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
         handleSlideChange(activeSlideIndex - 1);
       }
     }
-  }, [pptxAction, pptxActionTimestamp, activeSlideIndex, isThumbnail, playNextAnimationGroup, handleSlideChange, slides.length, slideCount, onAnimationGroupChange, pptxAnimationGroupIndex]);
+  }, [pptxAction, pptxActionTimestamp, activeSlideIndex, isThumbnail, handleSlideChange, slides.length, slideCount, onAnimationGroupChange, pptxAnimationGroupIndex]);
 
   // Synchronize viewer mode and active slide index
   useEffect(() => {
@@ -435,7 +511,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
   return (
     <div 
       ref={containerCallbackRef} 
-      className="w-full h-full bg-black overflow-hidden relative flex flex-col items-center justify-center select-none pptx-strict-typography cursor-pointer"
+      className={`w-full h-full overflow-hidden relative flex flex-col items-center justify-center select-none pptx-strict-typography cursor-pointer ${isProjectorMode ? 'bg-transparent' : 'bg-black'}`}
       style={{
         contain: 'strict',
         transform: 'translateZ(0)',
@@ -450,50 +526,84 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
         }
       }}
     >
-      {blocks.loading || blocks.error || !blocks.canvasProps ? (
-        currentSlide ? (
-          <PresentationSlideView 
-            slide={currentSlide} 
-            slideIndex={activeSlideIndex} 
-            themeStyles={themeStyles} 
-            targetWidth={targetWidth}
-            targetHeight={targetHeight}
-            isProjectorMode={isProjectorMode}
-            mode={isThumbnail ? 'thumbnail' : 'full'}
-          />
-        ) : (
-          <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs select-none">
+      {(() => {
+        const canonical = PptxRenderCacheManager.getCanonicalFrame(contentId, activeSlideIndex);
+        const effectiveDataUrl = canonical?.dataUrl || powerPointSession?.slides?.[activeSlideIndex]?.dataUrl;
+
+        if (effectiveDataUrl) {
+          return (
+            <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden pointer-events-none">
+              <img 
+                src={effectiveDataUrl} 
+                alt={`Slide ${activeSlideIndex + 1}`}
+                className="w-full h-full object-contain pointer-events-none select-none"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                }}
+              />
+            </div>
+          );
+        }
+
+        if (blocks.canvasProps && !blocks.loading && !blocks.error) {
+          return (
+            <SlideCanvas 
+              {...blocks.canvasProps} 
+              activeSlide={effectiveActiveSlide}
+              presentationElementStates={!isThumbnail ? mergedElementStates : undefined}
+              presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
+              zoom={customZoom} 
+              mode="present"
+              showRulers={false} 
+              showGrid={false} 
+              canEdit={false} 
+            />
+          );
+        }
+
+        if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl || currentSlide.text)) {
+          return (
+            <PresentationSlideView 
+              slide={currentSlide} 
+              slideIndex={activeSlideIndex} 
+              themeStyles={themeStyles} 
+              targetWidth={targetWidth}
+              targetHeight={targetHeight}
+              isProjectorMode={isProjectorMode}
+              isOverlayLayer={isOverlayLayer}
+              mode={isThumbnail ? 'thumbnail' : 'full'}
+              presentationElementStates={!isThumbnail ? mergedElementStates : undefined}
+            />
+          );
+        }
+
+        return (
+          <div className={`w-full h-full flex items-center justify-center text-white/40 font-mono text-xs select-none ${isProjectorMode ? 'bg-transparent' : 'bg-black'}`}>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
               <span>Rendering Presentation Slide...</span>
             </div>
           </div>
-        )
-      ) : (
-        <SlideCanvas 
-          {...blocks.canvasProps} 
-          activeSlide={effectiveActiveSlide}
-          presentationElementStates={!isThumbnail ? mergedElementStates : undefined}
-          presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
-          zoom={customZoom} 
-          mode="present"
-          showRulers={false} 
-          showGrid={false} 
-          canEdit={false} 
-        />
-      )}
+        );
+      })()}
     </div>
   );
 }, (prevProps, nextProps) => {
   return (
     prevProps.activeSlideIndex === nextProps.activeSlideIndex && 
     prevProps.bytes === nextProps.bytes &&
+    prevProps.contentId === nextProps.contentId &&
     prevProps.isThumbnail === nextProps.isThumbnail &&
     prevProps.isProjectorMode === nextProps.isProjectorMode &&
+    prevProps.isOverlayLayer === nextProps.isOverlayLayer &&
     prevProps.targetWidth === nextProps.targetWidth &&
     prevProps.targetHeight === nextProps.targetHeight &&
     prevProps.pptxAction === nextProps.pptxAction &&
-    prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp
+    prevProps.pptxActionTimestamp === nextProps.pptxActionTimestamp &&
+    prevProps.pptxAnimationGroupIndex === nextProps.pptxAnimationGroupIndex &&
+    prevProps.themeStyles === nextProps.themeStyles &&
+    prevProps.currentSlide === nextProps.currentSlide
   );
 });
 
@@ -548,11 +658,12 @@ export const pptxRawDeckCache = new WeakMap<object, CachedPptxDeck>();
 const PptxDirectThumbnail: React.FC<{
   cachedDeck: CachedPptxDeck;
   slideIndex: number;
+  contentId?: string;
   targetWidth?: number;
   targetHeight?: number;
   currentSlide?: Slide | null;
   themeStyles?: ThemeStyles;
-}> = React.memo(({ cachedDeck, slideIndex, targetWidth, targetHeight, currentSlide, themeStyles }) => {
+}> = React.memo(({ cachedDeck, slideIndex, contentId, targetWidth, targetHeight, currentSlide, themeStyles }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>(() => ({
     width: targetWidth || 280,
@@ -602,45 +713,70 @@ const PptxDirectThumbnail: React.FC<{
     return { ...cachedDeck.canvasProps.zoom, editorScale: scale };
   }, [cachedDeck.canvasProps?.zoom, effectiveContainerW, effectiveContainerH, cWidth, cHeight]);
 
-  if (!targetSlide) {
-    if (currentSlide) {
-      return (
-        <PresentationSlideView
-          slide={currentSlide}
-          slideIndex={slideIndex}
-          themeStyles={themeStyles}
-          targetWidth={targetWidth}
-          targetHeight={targetHeight}
-          mode="thumbnail"
+  // 1. Authoritative check: If PowerPoint COM or rasterized canonical frame is available, render exact image!
+  const canonical = PptxRenderCacheManager.getCanonicalFrame(contentId, slideIndex);
+  if (canonical?.dataUrl) {
+    return (
+      <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden pointer-events-none">
+        <img 
+          src={canonical.dataUrl} 
+          alt={`Slide ${slideIndex + 1}`}
+          className="w-full h-full object-contain pointer-events-none select-none"
+          style={{ maxWidth: '100%', maxHeight: '100%' }}
         />
-      );
-    }
-    return null;
+      </div>
+    );
+  }
+
+  // 2. Native OpenXML vector canvas render when ready
+  if (cachedDeck.canvasProps && targetSlide) {
+    return (
+      <div
+        ref={containerCallbackRef}
+        className="w-full h-full bg-black overflow-hidden relative flex flex-col items-center justify-center select-none pointer-events-none pptx-strict-typography"
+        style={{
+          contain: 'strict',
+          transform: 'translateZ(0)',
+        }}
+      >
+        <SlideCanvas
+          {...cachedDeck.canvasProps}
+          activeSlide={targetSlide}
+          zoom={customZoom}
+          mode="present"
+          showRulers={false}
+          showGrid={false}
+          canEdit={false}
+        />
+      </div>
+    );
+  }
+
+  // 3. Fallback only if genuinely necessary
+  if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl)) {
+    return (
+      <PresentationSlideView
+        slide={currentSlide}
+        slideIndex={slideIndex}
+        themeStyles={themeStyles}
+        targetWidth={targetWidth}
+        targetHeight={targetHeight}
+        mode="thumbnail"
+      />
+    );
   }
 
   return (
-    <div
-      ref={containerCallbackRef}
-      className="w-full h-full bg-black overflow-hidden relative flex flex-col items-center justify-center select-none pointer-events-none pptx-strict-typography"
-      style={{
-        contain: 'strict',
-        transform: 'translateZ(0)',
-      }}
-    >
-      <SlideCanvas
-        {...cachedDeck.canvasProps}
-        activeSlide={targetSlide}
-        zoom={customZoom}
-        mode="present"
-        showRulers={false}
-        showGrid={false}
-        canEdit={false}
-      />
+    <div className="w-full h-full bg-black flex items-center justify-center text-white/40 font-mono text-xs select-none">
+      <div className="flex items-center gap-1.5">
+        <div className="w-2.5 h-2.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+        <span>Slide {slideIndex + 1}</span>
+      </div>
     </div>
   );
 });
 
-export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, pptxAction, pptxActionTimestamp, pptxAnimationGroupIndex, onAnimationGroupChange, onActiveSlideChange, currentSlide, themeStyles, targetWidth, targetHeight }) => {
+export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({ fileBytes, contentId, activeSlideIndex, isThumbnail, isProjectorMode, isOverlayLayer, pptxAction, pptxActionTimestamp, pptxAnimationGroupIndex, onAnimationGroupChange, onActiveSlideChange, currentSlide, themeStyles, targetWidth, targetHeight }) => {
   const [cachedDeck, setCachedDeck] = useState<CachedPptxDeck | null>(() => {
     if (contentId && pptxDeckSharedCache.has(contentId)) {
       return pptxDeckSharedCache.get(contentId)!;
@@ -704,19 +840,50 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
       }
       if (isValidPptxBinary(fileBytes)) {
         const valid = toValidPptxUint8Array(fileBytes);
-        if (typeof fileBytes === 'object') rawBytesCache.set(fileBytes, valid);
-        if (contentId) pptxBytesCache.set(contentId, valid);
-        setLocalBytes(valid);
+        if (valid) {
+          if (typeof fileBytes === 'object') rawBytesCache.set(fileBytes, valid);
+          if (contentId) pptxBytesCache.set(contentId, valid);
+          setLocalBytes(valid);
+          return;
+        }
+      } else if (fileBytes instanceof Blob) {
+        fileBytes.arrayBuffer().then((buf: ArrayBuffer) => {
+          if (isValidPptxBinary(buf)) {
+            const valid = toValidPptxUint8Array(buf);
+            if (valid && isMounted) {
+              if (contentId) pptxBytesCache.set(contentId, valid);
+              setLocalBytes(valid);
+            }
+          }
+        }).catch(() => {});
         return;
       }
     }
     if (contentId) {
       import('../db').then(({ getDB }) => {
-        getDB().then(db => db.get('assets', contentId)).then(asset => {
+        getDB().then(async (db) => {
+          let asset = await db.get('assets', contentId);
+          if (!asset && contentId.startsWith('asset-')) {
+            asset = await db.get('assets', contentId.replace('asset-', ''));
+          } else if (!asset && !contentId.startsWith('asset-')) {
+            asset = await db.get('assets', `asset-${contentId}`);
+          }
           if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
             const bytes = toValidPptxUint8Array(asset.data.fileBytes);
-            pptxBytesCache.set(contentId, bytes);
-            if (isMounted) setLocalBytes(bytes);
+            if (bytes) {
+              pptxBytesCache.set(contentId, bytes);
+              if (isMounted) setLocalBytes(bytes);
+            }
+          } else if (asset?.blob) {
+            asset.blob.arrayBuffer().then((buf: ArrayBuffer) => {
+              if (isValidPptxBinary(buf)) {
+                const bytes = toValidPptxUint8Array(buf);
+                if (bytes) {
+                  pptxBytesCache.set(contentId, bytes);
+                  if (isMounted) setLocalBytes(bytes);
+                }
+              }
+            }).catch(() => {});
           }
         }).catch(e => console.error('[PptxRenderOverlay] Error loading PPTX from DB', e));
       });
@@ -724,12 +891,47 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     return () => { isMounted = false; };
   }, [fileBytes, contentId]);
 
-  // If this is a thumbnail and we have the shared deck cached, render PptxDirectThumbnail
+  const [, setCanonicalFrameTick] = useState(0);
+  useEffect(() => {
+    const handleFrameUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{ presentationId: string; aliases?: string[] }>;
+      if (
+        !contentId ||
+        customEvent.detail?.presentationId === contentId ||
+        customEvent.detail?.aliases?.includes(contentId)
+      ) {
+        setCanonicalFrameTick(t => t + 1);
+      }
+    };
+    window.addEventListener('simpleworship:canonical-frame-updated', handleFrameUpdate);
+    return () => window.removeEventListener('simpleworship:canonical-frame-updated', handleFrameUpdate);
+  }, [contentId]);
+
+  // 1. Authoritative check: If PowerPoint COM or rasterized canonical frame is available, render exact image!
+  const canonicalFrame = PptxRenderCacheManager.getCanonicalFrame(contentId, activeSlideIndex);
+  if (canonicalFrame?.dataUrl) {
+    return (
+      <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden pointer-events-none">
+        <img 
+          src={canonicalFrame.dataUrl} 
+          alt={`Slide ${activeSlideIndex + 1}`}
+          className="w-full h-full object-contain pointer-events-none select-none"
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+          }}
+        />
+      </div>
+    );
+  }
+
+  // 2. If this is a thumbnail and we have the shared deck cached, render PptxDirectThumbnail
   if (isThumbnail && cachedDeck) {
     return (
       <PptxDirectThumbnail
         cachedDeck={cachedDeck}
         slideIndex={activeSlideIndex}
+        contentId={contentId}
         targetWidth={targetWidth}
         targetHeight={targetHeight}
         currentSlide={currentSlide}
@@ -739,7 +941,8 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
   }
 
   if (!localBytes) {
-    if (currentSlide) {
+    // Only fall back to PresentationSlideView if rich elements/objects exist
+    if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl)) {
       return (
         <PresentationSlideView 
           slide={currentSlide} 
@@ -748,11 +951,19 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
           targetWidth={targetWidth}
           targetHeight={targetHeight}
           isProjectorMode={isProjectorMode}
+          isOverlayLayer={isOverlayLayer}
           mode={isThumbnail ? 'thumbnail' : 'full'}
         />
       );
     }
-    return null;
+    return (
+      <div className={`w-full h-full flex items-center justify-center text-white/40 font-mono text-xs select-none ${isProjectorMode ? 'bg-transparent' : 'bg-black'}`}>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <span>Loading Presentation Deck...</span>
+        </div>
+      </div>
+    );
   }
 
   const fallbackView = currentSlide ? (
@@ -763,6 +974,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
       targetWidth={targetWidth}
       targetHeight={targetHeight}
       isProjectorMode={isProjectorMode}
+      isOverlayLayer={isOverlayLayer}
       mode={isThumbnail ? 'thumbnail' : 'full'}
     />
   ) : undefined;
@@ -775,6 +987,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
         contentId={contentId} 
         isThumbnail={isThumbnail} 
         isProjectorMode={isProjectorMode} 
+        isOverlayLayer={isOverlayLayer}
         pptxAction={pptxAction} 
         pptxActionTimestamp={pptxActionTimestamp} 
         pptxAnimationGroupIndex={pptxAnimationGroupIndex}
@@ -794,6 +1007,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     prevProps.fileBytes === nextProps.fileBytes &&
     prevProps.isThumbnail === nextProps.isThumbnail &&
     prevProps.isProjectorMode === nextProps.isProjectorMode &&
+    prevProps.isOverlayLayer === nextProps.isOverlayLayer &&
     prevProps.targetWidth === nextProps.targetWidth &&
     prevProps.targetHeight === nextProps.targetHeight &&
     prevProps.pptxAction === nextProps.pptxAction &&

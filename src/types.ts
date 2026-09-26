@@ -121,6 +121,7 @@ export interface SystemOptions {
       titleFont: FontStyleOptions;
       subTitleFont: FontStyleOptions;
       contentFont: FontStyleOptions;
+      pptxEngineMode?: 'auto' | 'native' | 'powerpoint';
     };
     transitions: {
       activeTab: 'Slide' | 'Black' | 'Clear' | 'Logo';
@@ -356,6 +357,7 @@ export type ObjectType =
   | 'image' 
   | 'shape' 
   | 'line' 
+  | 'table'
   | 'video' 
   | 'audio' 
   | 'scripture' 
@@ -425,6 +427,10 @@ export interface ObjectStyle {
   lineSpacing?: number;
   letterSpacing?: number;
   padding?: number;
+  paddingTop?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  paddingRight?: number;
   backgroundColor?: string;
   borderColor?: string;
   borderWidth?: number;
@@ -436,6 +442,24 @@ export interface ObjectStyle {
   shadowOffsetX?: number;
   shadowOffsetY?: number;
   crop?: { x: number; y: number; width: number; height: number };
+}
+
+export interface TextRun {
+  text: string;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+export interface ParagraphRun {
+  runs: TextRun[];
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  lineSpacing?: number;
+  spaceBefore?: number;
+  spaceAfter?: number;
 }
 
 export interface SlideObject {
@@ -452,12 +476,36 @@ export interface SlideObject {
   locked?: boolean;
   groupId?: string;
   text?: string;
+  runs?: TextRun[];
+  paragraphs?: ParagraphRun[];
   imageUrl?: string;
   mediaUrl?: string;
   shapeType?: ShapeType;
   style?: ObjectStyle;
   animations?: ObjectAnimation[];
+  shapeId?: string;
+  spid?: string;
   placeholderLabel?: string;
+  tableData?: {
+    columns: number[];
+    rows: {
+      height?: number;
+      cells: {
+        text: string;
+        runs?: TextRun[];
+        backgroundColor?: string;
+        borderColor?: string;
+        borderWidth?: number;
+        fontColor?: string;
+        fontSize?: number;
+        fontWeight?: string;
+        textAlign?: 'left' | 'center' | 'right' | 'justify';
+        alignVertical?: 'top' | 'middle' | 'bottom';
+        colSpan?: number;
+        rowSpan?: number;
+      }[];
+    }[];
+  };
 }
 
 export type SlideTransitionType = 
@@ -530,6 +578,9 @@ export interface Slide {
   autoAdvanceSeconds?: number;
   widthEmu?: number;
   heightEmu?: number;
+  nativeAnimations?: any[];
+  animations?: any[];
+  animationSteps?: any[];
 }
 
 export interface PresentationItem {
@@ -841,6 +892,10 @@ declare global {
       openSwsFile?: () => Promise<{ canceled: boolean; filePath?: string; data?: ArrayBuffer | Uint8Array }>;
       readSwsFromPath?: (filePath: string) => Promise<{ canceled: boolean; filePath?: string; data?: ArrayBuffer | Uint8Array; error?: string }>;
       onFileAssociationOpened?: (callback: (filePath: string) => void) => () => void;
+      getHardwareInfo?: () => Promise<any>;
+      detectPowerPoint?: () => Promise<{ available: boolean; platform: string; executablePath?: string; version?: string; reason?: string }>;
+      renderPptxWithPowerPoint?: (payload: any) => Promise<{ success: boolean; slides?: string[]; slideCount?: number; width?: number; height?: number; aspectRatio?: number; cached?: boolean; error?: string }>;
+      clearPowerPointCache?: (hash?: string) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }
