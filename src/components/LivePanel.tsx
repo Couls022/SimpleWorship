@@ -91,6 +91,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const updateOutputGroup = useStore(state => state.updateOutputGroup);
   const updateRouterPanel = useStore(state => state.updateRouterPanel);
   const routerPanels = useStore(state => state.routerPanels);
+  const groupStates = useStore(state => state.groupStates);
+  const addRouterPanel = useStore(state => state.addRouterPanel);
+  const removeRouterPanel = useStore(state => state.removeRouterPanel);
   
   const activeRouterId = useStore(state => state.activeRouterId);
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
@@ -142,18 +145,25 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   };
 
   const handleAddPanel = () => {
-    const nextNum = outputGroups.length + 1;
-    const newGroup = {
-      id: `group-${Date.now()}`,
-      name: `Route ${nextNum}`,
-      role: 'broadcast' as const,
-      displayIds: []
-    };
-    addOutputGroup(newGroup);
+    const nextNum = routerPanels.length + 1;
+    const cleanRouteName = `Route ${nextNum}`;
+    addRouterPanel({
+      routerId: `router-${Date.now()}`,
+      name: cleanRouteName,
+      targetOutputGroupId: null,
+      active: true,
+      visible: true,
+      focused: true
+    });
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { detail: `Provisioned isolated route: ${cleanRouteName}` })
+    );
   };
 
   const handleRemovePanel = () => {
-    if (outputGroups.length > 1 && activeGroup) {
+    if (routerPanels.length > 2 && matchedRouter) {
+      removeRouterPanel(matchedRouter.routerId);
+    } else if (outputGroups.length > 1 && activeGroup) {
       removeOutputGroup(activeGroup.id);
     }
   };
@@ -397,7 +407,8 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const remaining = Math.max(0, duration - elapsed);
-      setAutoAdvanceTimeLeft(Math.ceil(remaining / 1000));
+      const nextVal = Math.ceil(remaining / 1000);
+      setAutoAdvanceTimeLeft(prev => (prev === nextVal ? prev : nextVal));
 
       if (remaining <= 0) {
         clearInterval(interval);
@@ -449,7 +460,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
         </div>
       )}
 
-      {/* Live Header */}
+      {/* ACTIVE ROUTE HEADER TOOLBAR WITH PER-ROUTE CONTROLS */}
       <div 
         draggable
         onDragStart={(e) => {
@@ -530,17 +541,10 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 </button>
               </div>
             )}
-            {liveItem?.name && (
-              <>
-                <span className="text-gray-500 shrink-0 hidden min-[520px]:inline">•</span>
-                <span className="text-[11px] font-medium text-gray-300 truncate max-w-[80px] min-[600px]:max-w-[120px] hidden min-[520px]:inline" title={liveItem?.name}>
-                  {liveItem?.name}
-                </span>
-              </>
-            )}
           </div>
         </div>
 
+        {/* Right Action Tools: View Options, Remove Panel, and Settings */}
         <div 
           className="flex items-center gap-1.5 shrink-0" 
           onClick={(e) => e.stopPropagation()} 

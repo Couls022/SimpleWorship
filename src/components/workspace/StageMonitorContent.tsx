@@ -48,15 +48,23 @@ export default function StageMonitorContent({ isProjectorMode = false }: StageMo
   // Automatic broadcast & engine connection watchdog
   const { status: connStatus, reconnectAttempts, latency, reconnect: forceReconnect } = useStageConnection();
 
-  const liveItem = activeControlState ? PresentationCore.getActiveContent(activeSchedule, activeControlState, activeControlState.directLiveItem) : null;
-  const slides = liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
+  const liveItem = React.useMemo(() => {
+    return activeControlState ? PresentationCore.getActiveContent(activeSchedule, activeControlState, activeControlState.directLiveItem) : null;
+  }, [activeSchedule, activeControlState]);
+
+  const slides = React.useMemo(() => {
+    return liveItem ? PresentationCore.generateSlides(liveItem, songsList, systemOptions) : [];
+  }, [liveItem, songsList, systemOptions]);
+
   const currentSlideIndex = activeControlState?.activeSlideIndex ?? 0;
   const currentSlide = slides[currentSlideIndex] || null;
   const nextSlide = slides[currentSlideIndex + 1] || null;
 
   const foldbackFont = systemOptions?.foldback?.defaultFont;
-  const foldbackThemeStyles = ThemeEngine.fontStyleToThemeStyles(foldbackFont);
-  const foldbackTextStyle = ThemeEngine.getTextStyle(foldbackThemeStyles, isProjectorMode ? 1.0 : 0.45);
+  const foldbackTextStyle = React.useMemo(() => {
+    const foldbackThemeStyles = ThemeEngine.fontStyleToThemeStyles(foldbackFont);
+    return ThemeEngine.getTextStyle(foldbackThemeStyles, isProjectorMode ? 1.0 : 0.45);
+  }, [foldbackFont, isProjectorMode]);
 
   const clockEnabled = systemOptions?.foldback?.clockEnabled ?? true;
   const countdownEnabled = systemOptions?.serviceIntervals?.countdownEnabled ?? true;

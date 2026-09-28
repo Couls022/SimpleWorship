@@ -1155,14 +1155,169 @@ ipcMain.handle('file:read-sws-path', async (event, filePath) => {
   }
 });
 
+// Helper to classify GPU type
+function classifyGpuDevice(name, vendor) {
+  const s = `${name} ${vendor}`.toLowerCase();
+  if (s.includes('swiftshader') || s.includes('llvmpipe') || s.includes('software') || s.includes('basic render')) return 'software';
+  if (s.includes('virtualbox') || s.includes('vmware') || s.includes('hyper-v') || s.includes('qemu')) return 'virtual';
+  if (/nvidia|geforce|rtx|gtx|quadro|titan|tesla/i.test(s)) return 'discrete';
+  if (/radeon\s+(rx|pro|vii|hd\s+[789]\d{3})|discrete|dedicated/i.test(s)) return 'discrete';
+  if (/arc(\s+pro|\s+a\d{3})/i.test(s)) return 'discrete';
+  if (/intel.*(uhd|iris|hd\s+graphics)|amd\s+radeon(\(tm\))?\s+graphics|apu|vega\s+\d+|integrated/i.test(s)) return 'integrated';
+  if (/intel/i.test(s)) return 'integrated';
+  if (/nvidia|amd/i.test(s)) return 'discrete';
+  return 'unknown';
+}
+
+function cleanVendorName(vendor, name) {
+  const s = `${vendor} ${name}`.toLowerCase();
+  if (s.includes('nvidia') || s.includes('geforce')) return 'NVIDIA';
+  if (s.includes('intel')) return 'Intel';
+  if (s.includes('amd') || s.includes('ati') || s.includes('radeon')) return 'AMD';
+  if (s.includes('apple')) return 'Apple';
+  if (s.includes('microsoft')) return 'Microsoft';
+  return vendor || 'Vendor';
+}
+
+// Query physical video controllers on Windows
+async function queryWindowsDisplayAdapters() {
+  if (process.platform !== 'win32') return [];
+  return new Promise((resolve) => {
+    const psCmd = 'powershell.exe -NoProfile -NonInteractive -Command "Get-CimInstance Win32_VideoController | Select-Object Name, VideoProcessor, AdapterRAM, DriverVersion, Status | ConvertTo-Json"';
+    exec(psCmd, { timeout: 3000, windowsHide: true }, (err, stdout) => {
+      if (err || !stdout) {
+        exec('wmic path win32_VideoController get name, driverversion /format:csv', { timeout: 2000, windowsHide: true }, (wErr, wStdout) => {
+          if (wErr || !wStdout) return resolve([]);
+          try {
+            const lines = wStdout.split(/\r?\n/).filter(l => l.trim() && !l.toLowerCase().startsWith('node'));
+            const gpus = [];
+            for (const line of lines) {
+              const parts = line.split(',');
+              if (parts.length >= 2) {
+                const name = (parts[parts.length - 2] || '').trim();
+                const ver = (parts[parts.length - 1] || '').trim();
+                if (name && name.toLowerCase() !== 'name') {
+                  const ven = cleanVendorName('', name);
+                  gpus.push({
+                    name,
+                    vendor: ven,
+                    type: classifyGpuDevice(name, ven),
+                    driverVersion: ver
+                  });
+                }
+              }
+            }
+            resolve(gpus);
+          } catch {
+            resolve([]);
+          }
+        });
+        return;
+      }
+      try {
+        let parsed = JSON.parse(stdout.trim());
+        if (!Array.isArray(parsed)) parsed = [parsed];
+        const gpus = parsed.map(item => {
+          const name = (item.Name || '').trim();
+          const ven = cleanVendorName('', name);
+          return {
+            name,
+            vendor: ven,
+            type: classifyGpuDevice(name, ven),
+            driverVersion: (item.DriverVersion || '').trim(),
+            vramMb: typeof item.AdapterRAM === 'number' ? Math.round(item.AdapterRAM / (1024 * 1024)) : undefined
+          };
+        }).filter(g => g.name);
+        resolve(gpus);
+      } catch {
+        resolve([]);
+      }
+    });
+  });
+}
+
 // Real Device Hardware Diagnostics & Adaptive Engine IPC
 ipcMain.handle('system:get-hardware-info', async () => {
   try {
     const gpuFeatures = app.getGPUFeatureStatus();
     let gpuInfo = null;
+    let completeGpuInfo = null;
     try {
       gpuInfo = await app.getGPUInfo('basic');
     } catch (e) {}
+    try {
+      completeGpuInfo = await app.getGPUInfo('complete');
+    } catch (e) {}
+
+    const detectedGpus = [];
+    const addGpu = (gpu) => {
+      if (!gpu.name) return;
+      const lower = gpu.name.toLowerCase();
+      const existing = detectedGpus.find(g => g.name.toLowerCase() === lower);
+      if (!existing) {
+        detectedGpus.push(gpu);
+      } else {
+        if (gpu.driverVersion && !existing.driverVersion) existing.driverVersion = gpu.driverVersion;
+        if (gpu.vramMb && !existing.vramMb) existing.vramMb = gpu.vramMb;
+      }
+    };
+
+    // 1. Physical video adapters from Windows CIM
+    if (process.platform === 'win32') {
+      const winGpus = await queryWindowsDisplayAdapters().catch(() => []);
+      for (const wg of winGpus) {
+        addGpu(wg);
+      }
+    }
+
+    // 2. Chromium complete GPU device list
+    if (completeGpuInfo && Array.isArray(completeGpuInfo.gpuDevice)) {
+      for (const dev of completeGpuInfo.gpuDevice) {
+        let venName = 'Vendor';
+        if (dev.vendorId === 0x10de || dev.vendorId === 4318) venName = 'NVIDIA';
+        else if (dev.vendorId === 0x1002 || dev.vendorId === 4098) venName = 'AMD';
+        else if (dev.vendorId === 0x8086 || dev.vendorId === 32902) venName = 'Intel';
+        else if (dev.vendorId === 0x106b || dev.vendorId === 4203) venName = 'Apple';
+        else if (dev.vendorId === 0x1414 || dev.vendorId === 5140) venName = 'Microsoft';
+
+        const rawDriver = dev.driverVendor || dev.driverVersion || '';
+        const guessType = (venName === 'NVIDIA' || venName === 'AMD') ? 'discrete' : 'integrated';
+        if (venName !== 'Vendor') {
+          // Check if this vendor is already matched
+          const existing = detectedGpus.find(g => g.vendor.toLowerCase() === venName.toLowerCase());
+          if (existing) {
+            if (dev.driverVersion && !existing.driverVersion) existing.driverVersion = dev.driverVersion;
+            if (dev.active) existing.isActive = true;
+          } else {
+            addGpu({
+              name: `${venName} Graphics Adapter`,
+              vendor: venName,
+              type: guessType,
+              driverVersion: dev.driverVersion,
+              isActive: Boolean(dev.active)
+            });
+          }
+        }
+      }
+    }
+
+    // 3. Fallback to basic auxAttributes if no GPUs found
+    if (detectedGpus.length === 0 && gpuInfo && gpuInfo.auxAttributes) {
+      const aux = gpuInfo.auxAttributes;
+      const r = aux.glRenderer || 'Graphics Adapter';
+      const v = cleanVendorName(aux.glVendor || '', r);
+      addGpu({
+        name: r,
+        vendor: v,
+        type: classifyGpuDevice(r, v),
+        isActive: true
+      });
+    }
+
+    const nonSoftware = detectedGpus.filter(g => g.type !== 'software' && g.type !== 'virtual');
+    const discreteGpu = nonSoftware.find(g => g.type === 'discrete') || null;
+    const integratedGpu = nonSoftware.find(g => g.type === 'integrated') || null;
+    const isDualGpu = (discreteGpu !== null && integratedGpu !== null) || nonSoftware.length > 1;
 
     let memInfo = null;
     if (process.getProcessMemoryInfo) {
@@ -1186,6 +1341,10 @@ ipcMain.handle('system:get-hardware-info', async () => {
       processMemMb: memInfo ? Math.round(memInfo.residentSet / 1024) : null,
       gpuFeatures,
       gpuInfo,
+      gpus: detectedGpus,
+      isDualGpu,
+      discreteGpu,
+      integratedGpu,
       isHardwareAccelerated: gpuFeatures?.gpu_compositing === 'enabled' || gpuFeatures?.['rasterization'] === 'enabled_force' || gpuFeatures?.['rasterization'] === 'enabled',
       directXStatus: process.platform === 'win32' ? 'Direct3D 11 Active' : 'Native Compositor Active'
     };

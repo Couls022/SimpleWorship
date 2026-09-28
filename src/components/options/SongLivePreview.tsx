@@ -505,59 +505,76 @@ export default function SongLivePreview({
               </>
             )}
 
-            {showLabel && labelLoc === 'Header' && formattedLabel && (
-              <div
-                className="relative z-10 text-center font-bold tracking-wider mb-4 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
-                style={{
-                  ...ThemeEngine.getTextStyle(labelThemeStyles, 1),
-                  fontSize: labelThemeStyles.fontSize ? `${labelThemeStyles.fontSize}px` : '36px',
-                  color: labelThemeStyles.fontColor || '#67E8F9',
-                  textAlign: (labelThemeStyles.textAlign as any) || 'center',
-                }}
-              >
-                {formattedLabel}
-              </div>
-            )}
-
             {(() => {
               const rawLyrics = currentSlide.lines.join('\n');
-              const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
-                text: rawLyrics,
-                baseFontSize: ThemeEngine.normalizeFontSize(songThemeStyles.fontSize || songOptions?.songFont?.maxSize),
-                fontFamily: songThemeStyles.fontFamily,
-                fontWeight: songThemeStyles.fontWeight,
-                fontStyle: songThemeStyles.fontStyle,
-                hasHeader: showLabel && labelLoc === 'Header',
-                hasFooter: isCopyrightVisible,
-                scale: 1,
-                minFontSize: songOptions?.minFontSize || 24,
-                maxFontSize: 160,
-                isUppercase: allCapsLyrics || songOptions?.songFont?.casing === 'uppercase' || songThemeStyles.textTransform === 'uppercase',
-                lineSpacing: songOptions?.lineSpacing || songOptions?.songFont?.lineSpacing || songThemeStyles.lineHeight || 1.35,
-                widthPercent: songThemeStyles.widthPercent,
-                margins: margins,
-                containerWidth: width,
-                containerHeight: height,
-              });
+              const baseFontSize = ThemeEngine.normalizeFontSize(songThemeStyles.fontSize || songOptions?.songFont?.maxSize);
+              const shouldAutoAdjust = songOptions?.autoAdjust ?? true;
+              const hasHeader = showLabel && labelLoc === 'Header' && Boolean(formattedLabel);
+
+              const autoFitSize = shouldAutoAdjust 
+                ? ThemeEngine.calculateAutoFitFontSize({
+                    text: rawLyrics,
+                    baseFontSize,
+                    fontFamily: songThemeStyles.fontFamily,
+                    fontWeight: songThemeStyles.fontWeight,
+                    fontStyle: songThemeStyles.fontStyle,
+                    hasHeader,
+                    hasFooter: isCopyrightVisible,
+                    scale: 1,
+                    minFontSize: songOptions?.minFontSize || 24,
+                    maxFontSize: baseFontSize,
+                    isUppercase: allCapsLyrics || songOptions?.songFont?.casing === 'uppercase' || songThemeStyles.textTransform === 'uppercase',
+                    lineSpacing: songOptions?.lineSpacing || songOptions?.songFont?.lineSpacing || songThemeStyles.lineHeight || 1.35,
+                    widthPercent: songThemeStyles.widthPercent || 90,
+                    margins: margins,
+                    containerWidth: width,
+                    containerHeight: height,
+                  })
+                : baseFontSize;
+
+              const containerAlignmentStyle = ThemeEngine.getContainerAlignmentStyle(songThemeStyles, margins);
+              const cardStyle = ThemeEngine.getCardStyle(songThemeStyles);
 
               return (
-                <div className="relative z-10 my-auto flex flex-col justify-center items-center w-full px-6 py-2 overflow-hidden">
+                <div 
+                  className="relative z-10 flex-1 w-full h-full overflow-hidden"
+                  style={containerAlignmentStyle}
+                >
                   <div
-                    className="font-bold leading-snug max-w-full drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] whitespace-pre-line"
-                    style={{
-                      ...ThemeEngine.getTextStyle(songThemeStyles, 1),
-                      fontSize: `${autoFitSize}px`,
-                      fontFamily: songThemeStyles.fontFamily || 'Tahoma, sans-serif',
-                      textAlign: (songThemeStyles.textAlign as any) || 'center',
-                      color: songThemeStyles.fontColor || '#FFFFFF',
-                      lineHeight: songOptions?.lineSpacing || songOptions?.songFont?.lineSpacing || 1.35,
-                      textTransform: (allCapsLyrics || songOptions?.songFont?.casing === 'uppercase') ? 'uppercase' : undefined,
-                      fontWeight: songThemeStyles.fontWeight || (songOptions?.songFont?.bold ? '700' : '400'),
-                      fontStyle: songThemeStyles.fontStyle || (songOptions?.songFont?.italic ? 'italic' : 'normal'),
-                      textDecoration: songThemeStyles.textDecoration || (songOptions?.songFont?.underline ? 'underline' : 'none'),
-                    }}
+                    className={cardStyle.className}
+                    style={cardStyle.style}
                   >
-                    {rawLyrics}
+                    {hasHeader && (
+                      <h2
+                        className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full text-center"
+                        style={{
+                          ...ThemeEngine.getTextStyle(labelThemeStyles, 1),
+                          fontSize: labelThemeStyles.fontSize ? `${labelThemeStyles.fontSize}px` : '36px',
+                          color: labelThemeStyles.fontColor || '#67E8F9',
+                        }}
+                      >
+                        {formattedLabel}
+                      </h2>
+                    )}
+                    <div
+                      className="font-bold leading-snug max-w-full drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] whitespace-pre-line break-words [overflow-wrap:break-word] [word-break:normal]"
+                      style={{
+                        ...ThemeEngine.getTextStyle(songThemeStyles, 1),
+                        fontSize: `${autoFitSize}px`,
+                        fontFamily: songThemeStyles.fontFamily || 'Tahoma, sans-serif',
+                        textAlign: (songThemeStyles.textAlign as any) || 'center',
+                        color: songThemeStyles.fontColor || '#FFFFFF',
+                        lineHeight: songOptions?.lineSpacing || songOptions?.songFont?.lineSpacing || 1.35,
+                        textTransform: (allCapsLyrics || songOptions?.songFont?.casing === 'uppercase') ? 'uppercase' : undefined,
+                        fontWeight: songThemeStyles.fontWeight || (songOptions?.songFont?.bold ? '700' : '400'),
+                        fontStyle: songThemeStyles.fontStyle || (songOptions?.songFont?.italic ? 'italic' : 'normal'),
+                        textDecoration: songThemeStyles.textDecoration || (songOptions?.songFont?.underline ? 'underline' : 'none'),
+                        wordBreak: 'normal',
+                        overflowWrap: 'break-word',
+                      }}
+                    >
+                      {rawLyrics}
+                    </div>
                   </div>
                 </div>
               );

@@ -1,11 +1,13 @@
 import { withPortal } from './common/withPortal';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 import { 
   X, 
   Minus, 
   Square, 
   Copy,
+  ExternalLink,
   Type, 
   BookOpen, 
   Shapes, 
@@ -34,10 +36,15 @@ import {
   Check,
   GripVertical,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  ArrowDown,
+  ArrowUp,
+  SlidersHorizontal,
+  Trash2
 } from 'lucide-react';
 import { Song, SongSection, ThemeStyles, PresentationItem } from '../types';
 import { useStore } from '../store/useStore';
+import { isMediaLibraryAsset } from '../db/assets';
 import { ThemeEngine } from '../core/ThemeEngine';
 import { SystemFontPicker } from './common/SystemFontPicker';
 
@@ -315,6 +322,253 @@ function SongEditorModal({
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
 
+  // Floating Window Drag, 8-Direction Resize & Splitter State
+  const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null);
+  const [windowSize, setWindowSize] = useState<{ width: number; height: number }>({
+    width: typeof window !== 'undefined' ? Math.min(1340, Math.max(860, window.innerWidth - 48)) : 1240,
+    height: typeof window !== 'undefined' ? Math.min(880, Math.max(580, window.innerHeight - 56)) : 780,
+  });
+  const [isDraggingWindow, setIsDraggingWindow] = useState(false);
+  const [resizeDirection, setResizeDirection] = useState<'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null>(null);
+  const [isActiveWindow, setIsActiveWindow] = useState(true);
+  const [isPoppedOut, setIsPoppedOut] = useState(false);
+  const popoutRef = useRef<Window | null>(null);
+
+  // Left vs Right column resizable splitter width
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(390);
+  const [isDraggingSplitter, setIsDraggingSplitter] = useState(false);
+  const splitterStartRef = useRef<{ mouseX: number; initialW: number }>({ mouseX: 0, initialW: 390 });
+
+  const windowDragStartRef = useRef<{
+    mouseX: number;
+    mouseY: number;
+    initialX: number;
+    initialY: number;
+    initialW: number;
+    initialH: number;
+  }>({
+    mouseX: 0,
+    mouseY: 0,
+    initialX: 0,
+    initialY: 0,
+    initialW: 1240,
+    initialH: 780,
+  });
+
+  // Center window on initial load
+  useEffect(() => {
+    if (windowPos === null && typeof window !== 'undefined') {
+      const x = Math.max(10, Math.round((window.innerWidth - windowSize.width) / 2));
+      const y = Math.max(12, Math.round((window.innerHeight - windowSize.height) / 2));
+      setWindowPos({ x, y });
+    }
+  }, [windowPos, windowSize.width, windowSize.height]);
+
+  // Handle Dragging, 8-Direction Resizing, and Column Splitter
+  useEffect(() => {
+    if (!isDraggingWindow && !resizeDirection && !isDraggingSplitter) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingWindow) {
+        const dx = e.clientX - windowDragStartRef.current.mouseX;
+        const dy = e.clientY - windowDragStartRef.current.mouseY;
+        const newX = windowDragStartRef.current.initialX + dx;
+        const newY = windowDragStartRef.current.initialY + dy;
+        const minX = -(windowSize.width - 100);
+        const maxX = window.innerWidth - 100;
+        const minY = 0;
+        const maxY = window.innerHeight - 50;
+        setWindowPos({
+          x: Math.min(maxX, Math.max(minX, newX)),
+          y: Math.min(maxY, Math.max(minY, newY)),
+        });
+      } else if (resizeDirection) {
+        const dx = e.clientX - windowDragStartRef.current.mouseX;
+        const dy = e.clientY - windowDragStartRef.current.mouseY;
+        const { initialX, initialY, initialW, initialH } = windowDragStartRef.current;
+
+        let newW = initialW;
+        let newH = initialH;
+        let newX = initialX;
+        let newY = initialY;
+
+        // East (Right)
+        if (resizeDirection.includes('e')) {
+          newW = Math.max(640, Math.min(window.innerWidth - 8, initialW + dx));
+        }
+        // South (Bottom)
+        if (resizeDirection.includes('s')) {
+          newH = Math.max(420, Math.min(window.innerHeight - 8, initialH + dy));
+        }
+        // West (Left)
+        if (resizeDirection.includes('w')) {
+          const maxDeltaW = initialW - 640;
+          const clampedDx = Math.min(maxDeltaW, dx);
+          newW = initialW - clampedDx;
+          newX = initialX + clampedDx;
+        }
+        // North (Top)
+        if (resizeDirection.includes('n')) {
+          const maxDeltaH = initialH - 420;
+          const clampedDy = Math.min(maxDeltaH, dy);
+          newH = initialH - clampedDy;
+          newY = initialY + clampedDy;
+        }
+
+        setWindowSize({ width: newW, height: newH });
+        setWindowPos({ x: newX, y: newY });
+      } else if (isDraggingSplitter) {
+        const dx = e.clientX - splitterStartRef.current.mouseX;
+        const newW = Math.max(260, Math.min(windowSize.width - 320, splitterStartRef.current.initialW + dx));
+        setLeftPanelWidth(newW);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingWindow(false);
+      setResizeDirection(null);
+      setIsDraggingSplitter(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingWindow, resizeDirection, isDraggingSplitter, windowSize.width, windowSize.height]);
+
+  // Handle External Popout Window (Detach to separate monitor or app window)
+  const handlePopOutWindow = () => {
+    if (isPoppedOut && popoutRef.current && !popoutRef.current.closed) {
+      popoutRef.current.focus();
+      return;
+    }
+
+    const w = Math.min(1360, window.screen.availWidth - 100);
+    const h = Math.min(880, window.screen.availHeight - 100);
+    const left = Math.max(40, window.screenX + 50);
+    const top = Math.max(40, window.screenY + 40);
+
+    const popout = window.open(
+      '',
+      'SimpleWorshipUniversalSongEditor',
+      `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes`
+    );
+
+    if (popout) {
+      popout.document.title = `${mode === 'schedule-item' ? 'Universal Slide Editor' : 'Universal Song Editor'} - [${title || 'Untitled'}] - SimpleWorship`;
+      
+      Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach((node) => {
+        popout.document.head.appendChild(node.cloneNode(true));
+      });
+
+      popout.document.body.style.margin = '0';
+      popout.document.body.style.backgroundColor = '#13151b';
+      popout.document.body.style.overflow = 'hidden';
+      popout.document.body.className = 'dark select-none';
+
+      popoutRef.current = popout;
+      setIsPoppedOut(true);
+
+      const handlePopoutClose = () => {
+        setIsPoppedOut(false);
+        popoutRef.current = null;
+      };
+
+      popout.addEventListener('beforeunload', handlePopoutClose);
+      popout.focus();
+    }
+  };
+
+  // Close external popup when unmounting
+  useEffect(() => {
+    return () => {
+      if (popoutRef.current && !popoutRef.current.closed) {
+        popoutRef.current.close();
+      }
+    };
+  }, []);
+
+  // Window Broadcast & Focus Communication
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('simpleworship:window-opened', {
+      detail: { id: 'song-editor', title: title || 'Untitled', type: 'song-editor', isMinimized }
+    }));
+
+    const handleFocusActiveWindow = () => {
+      setIsMinimized(false);
+      setIsActiveWindow(true);
+      if (isPoppedOut && popoutRef.current && !popoutRef.current.closed) {
+        popoutRef.current.focus();
+      }
+    };
+
+    const handleToggleMinimize = () => {
+      setIsMinimized(prev => !prev);
+    };
+
+    window.addEventListener('simpleworship:focus-active-window', handleFocusActiveWindow);
+    window.addEventListener('simpleworship:toggle-minimize-song-editor', handleToggleMinimize);
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('simpleworship:window-closed', {
+        detail: { id: 'song-editor' }
+      }));
+      window.removeEventListener('simpleworship:focus-active-window', handleFocusActiveWindow);
+      window.removeEventListener('simpleworship:toggle-minimize-song-editor', handleToggleMinimize);
+    };
+  }, [title, isPoppedOut]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('simpleworship:window-minimized', {
+      detail: { id: 'song-editor', isMinimized, title: title || 'Untitled' }
+    }));
+  }, [isMinimized, title]);
+
+  // Title bar drag start handler
+  const handleTitleBarMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button, input, select, textarea, a')) return;
+    if (isMaximized || isPoppedOut) return;
+    setIsActiveWindow(true);
+    setIsDraggingWindow(true);
+    windowDragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      initialX: windowPos?.x ?? Math.max(10, Math.round((window.innerWidth - windowSize.width) / 2)),
+      initialY: windowPos?.y ?? Math.max(10, Math.round((window.innerHeight - windowSize.height) / 2)),
+      initialW: windowSize.width,
+      initialH: windowSize.height,
+    };
+  };
+
+  // Directional window resize start handler (8 directions)
+  const handleResizeStart = (direction: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsActiveWindow(true);
+    setResizeDirection(direction);
+    windowDragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      initialX: windowPos?.x ?? 0,
+      initialY: windowPos?.y ?? 0,
+      initialW: windowSize.width,
+      initialH: windowSize.height,
+    };
+  };
+
+  // Interior column splitter drag start
+  const handleSplitterMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingSplitter(true);
+    splitterStartRef.current = {
+      mouseX: e.clientX,
+      initialW: leftPanelWidth,
+    };
+  };
+
   // Active Ribbon Tool ('format' | 'template' | 'media' | 'animate' | null)
   const [activeRibbonTool, setActiveRibbonTool] = useState<string | null>('format');
 
@@ -372,6 +626,28 @@ function SongEditorModal({
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const stageContainerRef = useRef<HTMLDivElement>(null);
+  const [stageContainerSize, setStageContainerSize] = useState<{ width: number; height: number }>({ width: 880, height: 495 });
+
+  useEffect(() => {
+    if (!stageContainerRef.current) return;
+    const updateSize = () => {
+      if (stageContainerRef.current) {
+        const rect = stageContainerRef.current.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          setStageContainerSize({
+            width: Math.max(320, rect.width - 32),
+            height: Math.max(180, rect.height - 32)
+          });
+        }
+      }
+    };
+    updateSize();
+    const obs = new ResizeObserver(updateSize);
+    obs.observe(stageContainerRef.current);
+    return () => obs.disconnect();
+  }, []);
+
   const dragStartRef = useRef<{
     mouseX: number;
     mouseY: number;
@@ -481,8 +757,8 @@ function SongEditorModal({
   // Selected Slide Index
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
-  // Canvas Zoom control
-  const [zoomPercent, setZoomPercent] = useState<number>(35);
+  // Canvas Zoom control (100% = Fit Window)
+  const [zoomPercent, setZoomPercent] = useState<number>(100);
 
   // Scope selection
   const [applyToSchedule, setApplyToSchedule] = useState(true);
@@ -567,12 +843,124 @@ function SongEditorModal({
     }
   }, [parsedSlides.length, activeSlideIndex]);
 
-  // Quick tag insertion helper (International & Tagalog presets)
+  // Textarea ref and cursor tracking for flexible insertion at cursor
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cursorSelectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
+  const [showLabelMenu, setShowLabelMenu] = useState(false);
+  const [showAddCustomTag, setShowAddCustomTag] = useState(false);
+  const [customTagInput, setCustomTagInput] = useState('');
+  const [customTags, setCustomTags] = useState<string[]>(['Intro', 'Outro', 'Interlude', 'Ending 2']);
+
+  // Update cursor position so inserting labels places them exactly where the user is typing
+  const updateCursorState = () => {
+    if (!textareaRef.current) return;
+    const start = textareaRef.current.selectionStart ?? 0;
+    const end = textareaRef.current.selectionEnd ?? 0;
+    cursorSelectionRef.current = { start, end };
+  };
+
+  // Smart dynamic suggestions based on existing tags in text
+  const smartSuggestions = useMemo(() => {
+    const text = rawLyrics;
+    const verseMatches = [...text.matchAll(/\[Verse\s*(\d+)\]/gi)].map(m => parseInt(m[1], 10));
+    const maxVerse = verseMatches.length > 0 ? Math.max(...verseMatches) : 0;
+    const nextVerse = maxVerse > 0 ? `Verse ${maxVerse + 1}` : 'Verse 1';
+
+    const chorusMatches = [...text.matchAll(/\[Chorus(?:\s*(\d+))?\]/gi)].map(m => m[1] ? parseInt(m[1], 10) : 1);
+    const maxChorus = chorusMatches.length > 0 ? Math.max(...chorusMatches) : 0;
+    const nextChorus = maxChorus > 0 ? `Chorus ${maxChorus + 1}` : 'Chorus';
+
+    const talataMatches = [...text.matchAll(/\[Talatâ\s*(\d+)\]/gi)].map(m => parseInt(m[1], 10));
+    const maxTalata = talataMatches.length > 0 ? Math.max(...talataMatches) : 0;
+    const nextTalata = maxTalata > 0 ? `Talatâ ${maxTalata + 1}` : 'Talatâ 1';
+
+    return { nextVerse, nextChorus, nextTalata };
+  }, [rawLyrics]);
+
+  // EasyWorship-style Tag & Slide insertion: inserts directly at cursor / typing position
   const handleInsertTag = (tag: string) => {
-    setRawLyrics((prev) => {
-      const cleanPrev = prev.trimEnd();
-      return `${cleanPrev}\n\n[${tag}]\n`;
+    const currentLyrics = rawLyrics;
+    const textarea = textareaRef.current;
+
+    let start = cursorSelectionRef.current.start;
+    let end = cursorSelectionRef.current.end;
+
+    // If textarea has active selection, use live values
+    if (textarea && document.activeElement === textarea) {
+      start = textarea.selectionStart;
+      end = textarea.selectionEnd;
+      cursorSelectionRef.current = { start, end };
+    }
+
+    start = Math.max(0, Math.min(start, currentLyrics.length));
+    end = Math.max(start, Math.min(end, currentLyrics.length));
+
+    const hasSelection = start < end;
+    const selectedText = hasSelection ? currentLyrics.slice(start, end) : '';
+    const cleanTag = tag.replace(/^\[+|\]+$/g, '').trim();
+
+    const textBefore = currentLyrics.slice(0, start);
+    const textAfter = currentLyrics.slice(end);
+
+    let insertion = '';
+    const prefix = start > 0 ? (textBefore.endsWith('\n\n') ? '' : textBefore.endsWith('\n') ? '\n' : '\n\n') : '';
+
+    if (cleanTag === 'Slide Break' || cleanTag === '---') {
+      const suffix = textAfter.startsWith('\n') ? '\n' : '\n\n';
+      insertion = `${prefix}---\n${suffix}`;
+    } else if (cleanTag === 'Blank Slide' || cleanTag === 'Blank') {
+      const suffix = textAfter.startsWith('\n') ? '\n' : '\n\n';
+      insertion = `${prefix}[Blank]\n${suffix}`;
+    } else if (cleanTag === 'Title') {
+      const suffix = textAfter.startsWith('\n') ? '\n' : '\n\n';
+      insertion = `${prefix}[Title]\n${title.trim() || 'Untitled'}${suffix}`;
+    } else {
+      if (hasSelection) {
+        insertion = `${prefix}[${cleanTag}]\n${selectedText.trim()}\n\n`;
+      } else {
+        insertion = `${prefix}[${cleanTag}]\n`;
+      }
+    }
+
+    const newLyrics = textBefore + insertion + textAfter;
+    const newCursorPos = textBefore.length + insertion.length;
+
+    setRawLyrics(newLyrics);
+    cursorSelectionRef.current = { start: newCursorPos, end: newCursorPos };
+
+    // Seamlessly refocus and place cursor right under the inserted tag ready to continue typing
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        updateCursorState();
+      }
     });
+
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Inserted [${cleanTag}]!` 
+      })
+    );
+  };
+
+  // Add custom user-defined tag
+  const handleAddCustomTag = (tagName: string) => {
+    const trimmed = tagName.replace(/^\[+|\]+$/g, '').trim();
+    if (!trimmed) return;
+    if (!customTags.includes(trimmed)) {
+      setCustomTags(prev => [...prev, trimmed]);
+    }
+    handleInsertTag(trimmed);
+    setCustomTagInput('');
+    setShowAddCustomTag(false);
+  };
+
+  // Remove custom user-defined tag
+  const handleRemoveCustomTag = (tagName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setCustomTags(prev => prev.filter(t => t !== tagName));
   };
 
   // Auto-split long scripture/song block into clean 2-3 line slides
@@ -831,61 +1219,137 @@ function SongEditorModal({
       lineHeight,
       textTransform
     }
-    
   );
 
-  if (isMinimized) {
-    return (
-    
-      <div className="fixed bottom-4 right-4 z-50 bg-[#1f2229] border border-cyan-500/50 shadow-2xl rounded-lg px-4 py-2 flex items-center gap-3 text-gray-200 animate-in slide-in-from-bottom-5">
-        <span className="text-xs font-semibold text-cyan-400">Editor Minimized:</span>
-        <span className="text-xs text-gray-300 font-medium truncate max-w-[200px]">{title || 'Untitled'}</span>
-        <button
-          onClick={() => setIsMinimized(false)}
-          className="px-2.5 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded font-medium transition-colors"
-        >
-          Restore
-        </button>
-        <button
-          onClick={onClose}
-          className="p-1 hover:bg-rose-600 rounded text-gray-400 hover:text-white transition-colors"
-          title="Close Editor"
-        >
-          <X size={14} />
-        </button>
-      </div>
-      
-  );
-  }
+  const songOpts = systemOptions?.mainOutput?.song;
+  const scriptureOpts = systemOptions?.mainOutput?.scripture;
+  const isSong = itemContentType === 'song';
+  const isBible = itemContentType === 'bible';
 
-  return (
-    
-    <div className={`fixed inset-0 z-[99999] bg-black/75 flex items-center justify-center select-none animate-in fade-in duration-150 ${isMaximized ? 'p-0' : 'p-2'}`}>
-      <div className={`bg-[#1f2229] border border-[#363a47] shadow-2xl flex flex-col overflow-hidden text-gray-200 animate-in fade-in zoom-in-95 duration-150 ${
-        isMaximized ? 'w-full h-full rounded-none' : 'w-full max-w-7xl h-[94vh] max-h-[calc(100vh-1rem)] max-h-[calc(100dvh-1rem)] rounded-md'
-      }`}>
-        
-        {/* 1. Header Title Bar */}
-        <div className="h-8 bg-[#292d37] border-b border-[#181a20] px-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-cyan-400 font-bold text-xs">SimpleWorship</span>
-            <span className="text-gray-400 text-xs">-</span>
-            <span className="font-semibold text-xs text-gray-100 truncate max-w-lg">
-              {mode === 'schedule-item' 
-                ? `Universal Slide & Template Editor - [${title || 'Untitled'}] (Schedule Item)`
-                : `Universal Song & Template Editor - [${title || 'Untitled'}] (Library)`}
+  const activeBaseSize = fontSize || previewThemeStyles.fontSize || (isSong ? songOpts?.songFont?.maxSize : scriptureOpts?.scriptureFont?.maxSize) || 90;
+  const shouldAutoAdjust = isSong ? (songOpts?.autoAdjust ?? true) : (isBible ? (scriptureOpts?.autoAdjust ?? true) : true);
+
+  const showVerseChorusLabel = isSong ? (songOpts?.showVerseChorusLabel ?? true) : false;
+  const songLabelLoc = isSong ? (songOpts?.labelLocation || 'Header') : 'Header';
+  const hasHeader = Boolean(activeSlide.label && isSong && showVerseChorusLabel && songLabelLoc === 'Header');
+
+  const effectiveMargins = isSong && songOpts?.margins
+    ? songOpts.margins
+    : (isBible && scriptureOpts?.margins ? scriptureOpts.margins : (systemOptions?.mainOutput?.general?.margins || { left: 0, top: 0, right: 0, bottom: 0 }));
+
+  const effectiveLineSpacing = previewThemeStyles.lineHeight || lineHeight || (isSong ? (songOpts?.lineSpacing || songOpts?.songFont?.lineSpacing) : scriptureOpts?.lineSpacing) || 1.35;
+
+  const effectiveWidthPercent = previewThemeStyles.widthPercent || widthPercent || 90;
+
+  const isUppercase = previewThemeStyles.textTransform === 'uppercase' || 
+    textTransform === 'uppercase' || 
+    Boolean(isSong && (songOpts?.allCapsLyrics || songOpts?.songFont?.casing === 'uppercase'));
+
+  const targetWidth = aspectRatio === '16:9' ? (systemOptions?.mainOutput?.general?.position?.width || 1920) : 1024;
+  const targetHeight = aspectRatio === '16:9' ? (systemOptions?.mainOutput?.general?.position?.height || 1080) : 768;
+  const fitScale = Math.min(stageContainerSize.width / targetWidth, stageContainerSize.height / targetHeight);
+  const scale = Math.max(0.1, fitScale * (zoomPercent / 100));
+
+  const autoFitFontSize = shouldAutoAdjust
+    ? ThemeEngine.calculateAutoFitFontSize({
+        text: activeSlide.text,
+        baseFontSize: activeBaseSize,
+        fontFamily: previewThemeStyles.fontFamily || 'Tahoma, sans-serif',
+        fontWeight: previewThemeStyles.fontWeight || (songOpts?.songFont?.bold ? '700' : '400'),
+        fontStyle: previewThemeStyles.fontStyle || (songOpts?.songFont?.italic ? 'italic' : 'normal'),
+        hasHeader,
+        hasFooter: Boolean(isSong && songOpts?.displayCopyrightInfo),
+        scale: 1,
+        minFontSize: isSong ? (songOpts?.minFontSize || 24) : (scriptureOpts?.minFontSize || 24),
+        maxFontSize: activeBaseSize,
+        containerWidth: targetWidth,
+        containerHeight: targetHeight,
+        isUppercase,
+        lineSpacing: effectiveLineSpacing,
+        widthPercent: effectiveWidthPercent,
+        margins: effectiveMargins,
+      })
+    : activeBaseSize;
+
+  const containerAlignmentStyle = ThemeEngine.getContainerAlignmentStyle(previewThemeStyles, effectiveMargins);
+  const cardStyle = ThemeEngine.getCardStyle(previewThemeStyles);
+  const labelThemeStyles = isSong && songOpts?.labelFont
+    ? ThemeEngine.fontStyleToThemeStyles(songOpts.labelFont)
+    : undefined;
+  const labelCss = labelThemeStyles ? ThemeEngine.getTextStyle(labelThemeStyles, 1) : {};
+
+  const renderWindowContent = (inPopout = false) => (
+    <div className={`bg-[#1f2229] border border-[#363a47] shadow-2xl flex flex-col overflow-hidden text-gray-200 relative ${
+      inPopout || isMaximized ? 'w-full h-full rounded-none' : 'w-full h-full rounded-lg'
+    }`}>
+      {/* 1. Header Title Bar (Draggable in app) */}
+      <div 
+        onMouseDown={inPopout ? undefined : handleTitleBarMouseDown}
+        className={`h-8 border-b px-3 flex items-center justify-between shrink-0 select-none ${
+          inPopout || isMaximized ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+        } ${
+          isActiveWindow ? 'bg-[#292e3c] border-[#161820]' : 'bg-[#222530] border-[#181a20]'
+        }`}
+      >
+        <div className="flex items-center gap-2 pointer-events-none">
+          <span className="text-cyan-400 font-extrabold text-xs tracking-wide flex items-center gap-1">
+            <span className="text-cyan-400 text-[10px]">▶</span> SimpleWorship
+          </span>
+          <span className="text-gray-500 text-xs">•</span>
+          <span className="font-semibold text-xs text-gray-100 truncate max-w-xs sm:max-w-md md:max-w-lg">
+            {mode === 'schedule-item' 
+              ? `Universal Slide & Template Editor - [${title || 'Untitled'}] (Schedule Item)`
+              : `Universal Song & Template Editor - [${title || 'Untitled'}] (Library)`}
+          </span>
+          {inPopout && (
+            <span className="ml-2 px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700/60 text-[9px] font-mono font-bold">
+              EXTERNAL POP-OUT
             </span>
-          </div>
-          <div className="flex items-center h-full -mr-3">
+          )}
+        </div>
+
+        <div className="flex items-center h-full -mr-3">
+          {/* Pop-Out / Detach External Window Button */}
+          {!inPopout ? (
+            <button 
+              id="btn-song-editor-popout"
+              onClick={handlePopOutWindow}
+              className="w-9 h-full flex items-center justify-center text-gray-400 hover:text-cyan-300 hover:bg-[#3d4251] active:bg-[#4d5366] transition-colors cursor-pointer" 
+              title="Pop out into separate external window (Multi-monitor / Move anywhere outside browser)"
+              aria-label="Pop Out Window"
+            >
+              <ExternalLink size={12} strokeWidth={2} />
+            </button>
+          ) : (
+            <button 
+              onClick={() => {
+                if (popoutRef.current && !popoutRef.current.closed) {
+                  popoutRef.current.close();
+                }
+                setIsPoppedOut(false);
+              }}
+              className="px-2.5 h-full flex items-center justify-center text-cyan-300 hover:text-white hover:bg-[#3d4251] text-[10px] font-bold transition-colors cursor-pointer" 
+              title="Dock back to main application"
+            >
+              Dock Back
+            </button>
+          )}
+
+          {/* Minimize */}
+          {!inPopout && (
             <button 
               id="btn-song-editor-minimize"
               onClick={() => setIsMinimized(true)}
               className="w-9 h-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#3d4251] active:bg-[#4d5366] transition-colors cursor-pointer" 
-              title="Minimize Editor"
+              title="Minimize Editor to taskbar"
               aria-label="Minimize Editor"
             >
               <Minus size={12} strokeWidth={2} />
             </button>
+          )}
+
+          {/* Maximize / Restore */}
+          {!inPopout && (
             <button 
               id="btn-song-editor-maximize"
               onClick={() => setIsMaximized(!isMaximized)}
@@ -899,19 +1363,27 @@ function SongEditorModal({
                 <Square size={10} strokeWidth={2} />
               )}
             </button>
-            <button 
-              id="btn-song-editor-close"
-              onClick={onClose}
-              className="w-10 h-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#e81123] active:bg-[#c4101e] transition-colors cursor-pointer" 
-              title="Close Editor"
-              aria-label="Close Editor"
-            >
-              <X size={13} strokeWidth={2} />
-            </button>
-          </div>
-        </div>
+          )}
 
-        {/* 2. Top Title Input & Toolbar Ribbon */}
+          {/* Close */}
+          <button 
+            id="btn-song-editor-close"
+            onClick={() => {
+              if (inPopout && popoutRef.current && !popoutRef.current.closed) {
+                popoutRef.current.close();
+              }
+              onClose();
+            }}
+            className="w-10 h-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#e81123] active:bg-[#c4101e] transition-colors cursor-pointer" 
+            title="Close Editor"
+            aria-label="Close Editor"
+          >
+            <X size={13} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Top Title Input & Toolbar Ribbon */}
         <div className="bg-[#242731] border-b border-[#181a20] px-3 py-2 shrink-0 flex flex-wrap items-center justify-between gap-2">
           {/* Left Title & Category */}
           <div className="flex items-center gap-3">
@@ -1037,10 +1509,10 @@ function SongEditorModal({
               <span className="text-gray-400 text-[11px]">Size:</span>
               <input
                 type="number"
-                min="16"
-                max="100"
-                value={fontSize || previewThemeStyles.fontSize || 42}
-                onChange={(e) => setFontSize(Number(e.target.value))}
+                min="12"
+                max="160"
+                value={fontSize ?? previewThemeStyles.fontSize ?? 90}
+                onChange={(e) => setFontSize(Math.max(12, Math.min(160, Number(e.target.value) || 12)))}
                 className="w-14 bg-[#242732] border border-[#3b3f4f] rounded px-1.5 py-0.5 text-xs text-white text-center font-bold"
               />
               <span className="text-gray-500 text-[10px]">pt</span>
@@ -1210,10 +1682,10 @@ function SongEditorModal({
           <div className="bg-[#181a20] border-b border-[#2d313d] p-3 animate-in slide-in-from-top-2 duration-100">
             <div className="text-[11px] font-semibold text-gray-400 mb-2 flex items-center justify-between">
               <span>Select Slide Background Media:</span>
-              <span className="text-cyan-400 font-mono text-[10px]">{assetsList.length} items available</span>
+              <span className="text-cyan-400 font-mono text-[10px]">{assetsList.filter(isMediaLibraryAsset).length} items available</span>
             </div>
             <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
-              {assetsList.map((asset) => (
+              {assetsList.filter(isMediaLibraryAsset).map((asset) => (
                 <button
                   key={asset.id}
                   onClick={() => setBackgroundUrl(asset.id)}
@@ -1297,8 +1769,11 @@ function SongEditorModal({
 
         {/* 3. Main Body: Left Editor Sidebar & Right Stage Canvas */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Left Column: Words vs Slides Tabs */}
-          <div className="w-80 md:w-96 bg-[#181a20] border-r border-[#131519] flex flex-col shrink-0 overflow-hidden">
+          {/* Left Column: Words vs Slides Tabs (Resizable width) */}
+          <div 
+            style={{ width: `${leftPanelWidth}px` }} 
+            className="bg-[#181a20] flex flex-col shrink-0 overflow-hidden min-w-[260px] max-w-[80vw]"
+          >
             {/* Tab Headers */}
             <div className="h-8 bg-[#20232a] border-b border-[#131519] flex items-center px-2 space-x-1 shrink-0">
               <button
@@ -1324,66 +1799,39 @@ function SongEditorModal({
             </div>
 
             {/* Left Content Area */}
-            <div className="flex-1 overflow-hidden p-2 flex flex-col">
+            <div className="flex-1 overflow-hidden p-2 flex flex-col min-h-0">
               {activeLeftTab === 'Words' ? (
-                <div className="flex-1 flex flex-col h-full">
-                  <div className="flex items-center justify-between text-[11px] text-gray-400 mb-1.5 px-1">
-                    <span className="font-semibold">Format: Use [Verse 1], [John 3:16], etc.</span>
-                    <span className="font-mono text-emerald-400">{parsedSlides.length} slides</span>
+                <div className="flex-1 flex flex-col h-full gap-2 min-h-0">
+                  {/* Clean, Full-Height Lyrics Textarea */}
+                  <div className="relative flex flex-1 min-h-[200px] border border-[#2b3040] rounded-lg bg-[#121418] overflow-hidden focus-within:border-cyan-500 transition-colors shadow-inner">
+                    <textarea
+                      ref={textareaRef}
+                      value={rawLyrics}
+                      onSelect={updateCursorState}
+                      onClick={updateCursorState}
+                      onKeyUp={updateCursorState}
+                      onKeyDown={updateCursorState}
+                      onFocus={updateCursorState}
+                      wrap="soft"
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        const titleMatch = val.match(/^\s*(?:Title\s*:|Title)\s*\n?([^\n]+)(?:\n\s*\n|\n|$)/i);
+                        if (titleMatch) {
+                          setTitle(titleMatch[1].trim());
+                          val = val.replace(titleMatch[0], '').trimStart();
+                        }
+                        setRawLyrics(val);
+                        updateCursorState();
+                      }}
+                      className="w-full h-full flex-1 bg-transparent p-3 text-sm text-gray-100 font-sans leading-relaxed resize-none custom-scrollbar focus:outline-none whitespace-pre-wrap break-words"
+                      placeholder="Type or paste lyrics here...&#10;&#10;Type labels like [Verse 1], [Chorus 1], [Bridge], or --- to split into slides."
+                    />
                   </div>
 
-                  {/* Raw Text Editor */}
-                  <textarea
-                    value={rawLyrics}
-                    onChange={(e) => {
-                      let val = e.target.value;
-                      const titleMatch = val.match(/^\s*(?:Title\s*:|Title)\s*\n?([^\n]+)(?:\n\s*\n|\n|$)/i);
-                      if (titleMatch) {
-                        setTitle(titleMatch[1].trim());
-                        val = val.replace(titleMatch[0], '').trimStart();
-                      }
-                      setRawLyrics(val);
-                    }}
-                    className="flex-1 w-full bg-[#121418] border border-[#2d313f] rounded p-2.5 text-xs text-gray-200 font-mono focus:outline-none focus:border-indigo-500 leading-relaxed resize-none custom-scrollbar"
-                    placeholder="Enter lyrics, scripture passage, or slide text..."
-                  />
-
-                  {/* Quick Tag Dock (International & Local Tagalog presets) */}
-                  <div className="mt-2 flex flex-wrap gap-1 items-center bg-[#15171d] p-1.5 rounded border border-[#2a2e3a]">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase mr-1">Insert Tag:</span>
-                    {[
-                      'Title',
-                      'Verse 1',
-                      'Verse 2',
-                      'Verse 3',
-                      'Chorus',
-                      'Refrain',
-                      'Bridge',
-                      'Pre-Chorus',
-                      'Tag',
-                      'Ending',
-                      'Talatâ 1',
-                      'Koro',
-                      'Tulay',
-                      'Scripture Quote',
-                      'Slide Break'
-                    ].map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={() => {
-                          if (tag === 'Slide Break') {
-                            setRawLyrics(prev => `${prev}\n---\n`);
-                          } else if (tag === 'Title') {
-                            setRawLyrics(prev => `[Title]\n${title}\n\n${prev}`);
-                          } else {
-                            handleInsertTag(tag);
-                          }
-                        }}
-                        className="px-1.5 py-0.5 bg-[#252936] hover:bg-[#343a4d] text-indigo-300 hover:text-white rounded text-[10px] font-semibold transition-colors"
-                      >
-                        +{tag}
-                      </button>
-                    ))}
+                  {/* Clean Slide Counter & Tip */}
+                  <div className="flex items-center justify-between text-[11px] text-gray-400 px-1 shrink-0 py-0.5 border-t border-[#232733]">
+                    <span className="font-semibold text-cyan-400">{parsedSlides.length} slides detected</span>
+                    <span className="text-gray-500 text-[10px]">Type [Verse 1], [Chorus], or --- to split slides</span>
                   </div>
                 </div>
               ) : (
@@ -1412,6 +1860,17 @@ function SongEditorModal({
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Vertical Resizable Splitter between Left Editor and Right Stage Canvas */}
+          <div
+            onMouseDown={handleSplitterMouseDown}
+            className={`w-1.5 hover:w-2 bg-[#14161f] hover:bg-cyan-500 cursor-col-resize flex items-center justify-center shrink-0 transition-all select-none z-20 group relative border-x border-[#232738] ${
+              isDraggingSplitter ? 'bg-cyan-500 w-2' : ''
+            }`}
+            title="Drag to resize text editor and preview width"
+          >
+            <div className="w-0.5 h-8 bg-gray-500 group-hover:bg-white rounded transition-colors" />
           </div>
 
           {/* Right Column: Stage Canvas Preview with Interactive Drag/Resize Frame */}
@@ -1443,174 +1902,213 @@ function SongEditorModal({
             </div>
 
             {/* Canvas Viewport (Interactive Stage Preview) */}
-            <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+            <div 
+              ref={stageContainerRef}
+              className="flex-1 flex items-center justify-center p-4 overflow-auto relative select-none"
+            >
               <div
-                className={`relative rounded-md shadow-2xl overflow-hidden flex flex-col max-h-full justify-between transition-all duration-150 border border-gray-700 ${
-                  aspectRatio === '16:9' ? 'aspect-video w-full max-w-4xl' : 'aspect-4/3 w-full max-w-3xl'
-                }`}
+                className="relative shadow-2xl rounded-md overflow-hidden border border-gray-700 bg-black shrink-0 transition-all duration-100"
                 style={{
-                  backgroundImage: `url(${assetsList.find(a => a.id === backgroundUrl || a.url === backgroundUrl)?.url || backgroundUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center'
+                  width: `${Math.round(targetWidth * scale)}px`,
+                  height: `${Math.round(targetHeight * scale)}px`,
                 }}
               >
-                {/* Background Dim / Overlay */}
-                <div className="absolute inset-0 bg-black/35 pointer-events-none" />
-
-                {/* Top Slide Header Label */}
-                <div className="relative z-10 px-4 pt-3 text-right">
-                  <span className="text-[10px] font-bold text-amber-300/90 uppercase tracking-widest bg-black/50 px-2.5 py-0.5 rounded backdrop-blur-xs border border-white/10">
-                    {activeSlide.label}
-                  </span>
-                </div>
-
-                {/* Interactive Bounding Frame & Content Area */}
-                <div 
+                <div
                   ref={canvasViewportRef}
-                  className="relative z-10 flex-1 w-full h-full overflow-hidden"
-                  style={ThemeEngine.getContainerAlignmentStyle(previewThemeStyles)}
+                  className="absolute top-0 left-0 origin-top-left overflow-hidden flex flex-col justify-between"
+                  style={{
+                    width: `${targetWidth}px`,
+                    height: `${targetHeight}px`,
+                    transform: `scale(${scale})`,
+                    backgroundImage: `url(${assetsList.find(a => a.id === backgroundUrl || a.url === backgroundUrl)?.url || backgroundUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
                 >
-                  {/* Readjustable Container Card Frame (Support Hold & Drag) */}
-                  <div 
-                    onClick={() => setSelectedCanvasElement('card')}
-                    onMouseDown={handleMouseDownDrag}
-                    onTouchStart={handleMouseDownDrag}
-                    className={`relative group ${ThemeEngine.getCardStyle(previewThemeStyles).className} ${
-                      selectedCanvasElement === 'card' ? 'ring-2 ring-cyan-400 border-cyan-400/80 shadow-2xl' : ''
-                    } ${isDragging ? 'cursor-grabbing ring-2 ring-amber-400 scale-[1.01]' : 'cursor-grab'}`}
-                    style={ThemeEngine.getCardStyle(previewThemeStyles).style}
-                  >
-                    {/* Top Hold & Drag Move Handle Ribbon */}
-                    <div className="absolute -top-3 left-3 bg-cyan-950/90 border border-cyan-400/60 text-cyan-200 text-[10px] font-bold px-2 py-0.5 rounded shadow-lg flex items-center gap-1 cursor-grab active:cursor-grabbing opacity-90 group-hover:opacity-100 transition-opacity">
-                      <Move size={11} className="text-cyan-400 animate-pulse" />
-                      <span>Hold & Drag</span>
-                      {positionX !== undefined && (
-                        <span className="text-[9px] text-amber-300 font-mono ml-1">({positionX}%, {positionY}%)</span>
-                      )}
+                  {/* Background Dim / Overlay */}
+                  <div className="absolute inset-0 bg-black/35 pointer-events-none" />
+
+                  {/* Corner Verse/Chorus Label if not Header position */}
+                  {showVerseChorusLabel && songLabelLoc !== 'Header' && activeSlide.label && (
+                    <div 
+                      className={`absolute z-20 px-4 py-2 font-bold ${
+                        songLabelLoc === 'Top Left' ? 'top-6 left-8' :
+                        songLabelLoc === 'Top Right' ? 'top-6 right-8' :
+                        songLabelLoc === 'Bottom Left' ? 'bottom-6 left-8' : 'bottom-6 right-8'
+                      }`}
+                    >
+                      <span 
+                        className="px-4 py-1.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/15 drop-shadow-xl font-bold"
+                        style={{
+                          ...labelCss,
+                          fontSize: labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '32px',
+                          color: labelThemeStyles?.fontColor || '#67E8F9',
+                        }}
+                      >
+                        {activeSlide.label}
+                      </span>
                     </div>
+                  )}
 
-                    {/* Bounding Resize Corner Handles (Drag Corners to Resize Width) */}
+                  {/* Interactive Bounding Frame & Content Area using Canonical Layout */}
+                  <div 
+                    className="relative z-10 flex-1 w-full h-full overflow-hidden"
+                    style={containerAlignmentStyle}
+                  >
+                    {/* Readjustable Container Card Frame (Support Hold & Drag) */}
                     <div 
-                      onMouseDown={handleMouseDownResize} 
-                      onTouchStart={handleMouseDownResize}
-                      className="absolute -top-2 -left-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" 
-                      title="Drag corner to resize slide box width"
-                    />
-                    <div 
-                      onMouseDown={handleMouseDownResize} 
-                      onTouchStart={handleMouseDownResize}
-                      className="absolute -top-2 -right-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nesw-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" 
-                      title="Drag corner to resize slide box width"
-                    />
-                    <div 
-                      onMouseDown={handleMouseDownResize} 
-                      onTouchStart={handleMouseDownResize}
-                      className="absolute -bottom-2 -left-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nesw-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" 
-                      title="Drag corner to resize slide box width"
-                    />
-                    <div 
-                      onMouseDown={handleMouseDownResize} 
-                      onTouchStart={handleMouseDownResize}
-                      className="absolute -bottom-2 -right-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-20" 
-                      title="Drag corner to resize slide box width"
-                    />
+                      onClick={() => setSelectedCanvasElement('card')}
+                      onMouseDown={handleMouseDownDrag}
+                      onTouchStart={handleMouseDownDrag}
+                      className={`relative group ${cardStyle.className} ${
+                        selectedCanvasElement === 'card' ? 'ring-2 ring-cyan-400 border-cyan-400/80 shadow-2xl' : ''
+                      } ${isDragging ? 'cursor-grabbing ring-2 ring-amber-400 scale-[1.01]' : 'cursor-grab'}`}
+                      style={cardStyle.style}
+                    >
+                      {/* Top Slide Header Label if Header location */}
+                      {hasHeader && activeSlide.label && (
+                        <h2 
+                          className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full text-center"
+                          style={{
+                            ...labelCss,
+                            fontSize: labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '36px',
+                            fontFamily: labelThemeStyles?.fontFamily || previewThemeStyles.fontFamily,
+                            textAlign: (labelThemeStyles?.textAlign || previewThemeStyles.textAlign || 'center') as any,
+                            color: labelThemeStyles?.fontColor || '#67E8F9',
+                          }}
+                        >
+                          {activeSlide.label.replace(/:(.*)/, '') || activeSlide.label}
+                        </h2>
+                      )}
 
-                    {/* Main Slide Text */}
-                    {isCanvasEditing ? (
-                      <textarea
-                        value={activeSlide.text}
-                        onChange={(e) => {
-                          const updatedLyrics = rawLyrics.replace(activeSlide.text, e.target.value);
-                          setRawLyrics(updatedLyrics);
-                        }}
-                        onBlur={() => setIsCanvasEditing(false)}
-                        autoFocus
-                        className="w-full bg-black/60 text-white font-bold p-2 rounded border border-cyan-400 text-center leading-tight focus:outline-none cursor-text"
-                        style={{
-                          fontFamily,
-                          fontSize: `${Math.max(16, fontSize * 0.7)}px`,
-                        }}
+                      {/* Top Hold & Drag Move Handle Ribbon */}
+                      <div className="absolute -top-3 left-3 bg-cyan-950/90 border border-cyan-400/60 text-cyan-200 text-[10px] font-bold px-2 py-0.5 rounded shadow-lg flex items-center gap-1 cursor-grab active:cursor-grabbing opacity-90 group-hover:opacity-100 transition-opacity z-30">
+                        <Move size={11} className="text-cyan-400 animate-pulse" />
+                        <span>Hold & Drag</span>
+                        {positionX !== undefined && (
+                          <span className="text-[9px] text-amber-300 font-mono ml-1">({positionX}%, {positionY}%)</span>
+                        )}
+                      </div>
+
+                      {/* Bounding Resize Corner Handles (Drag Corners to Resize Width) */}
+                      <div 
+                        onMouseDown={handleMouseDownResize} 
+                        onTouchStart={handleMouseDownResize}
+                        className="absolute -top-2 -left-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-30" 
+                        title="Drag corner to resize slide box width"
                       />
-                    ) : (
-                      <p
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          setIsCanvasEditing(true);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCanvasElement('text');
-                        }}
-                        className="font-bold leading-snug whitespace-pre-line select-none cursor-pointer hover:ring-1 hover:ring-cyan-400/50 rounded p-1 transition-all"
-                        style={{
-                          ...ThemeEngine.getTextStyle(previewThemeStyles, (zoomPercent / 35)),
-                          fontSize: `${ThemeEngine.calculateAutoFitFontSize({
-                            text: activeSlide.text,
-                            baseFontSize: previewThemeStyles.fontSize || fontSize,
-                            fontFamily: previewThemeStyles.fontFamily,
-                            fontWeight: previewThemeStyles.fontWeight,
-                            fontStyle: previewThemeStyles.fontStyle,
-                            hasHeader: Boolean(activeSlide.label),
-                            scale: (zoomPercent / 100) * 1.35,
-                            minFontSize: 16,
-                            maxFontSize: 160,
-                            lineSpacing: previewThemeStyles.lineHeight || lineHeight,
-                            widthPercent: previewThemeStyles.widthPercent || widthPercent,
-                            isUppercase: previewThemeStyles.textTransform === 'uppercase' || textTransform === 'uppercase',
-                            margins: systemOptions.mainOutput.general.margins,
-                            containerWidth: aspectRatio === '16:9' ? (systemOptions.mainOutput.general.position.width || 1920) : 1024,
-                            containerHeight: aspectRatio === '16:9' ? (systemOptions.mainOutput.general.position.height || 1080) : 768,
-                          })}px`,
-                        }}
-                        title="Double-click to edit text directly on slide"
-                      >
-                        {activeSlide.text || 'Double click to edit text'}
-                      </p>
-                    )}
+                      <div 
+                        onMouseDown={handleMouseDownResize} 
+                        onTouchStart={handleMouseDownResize}
+                        className="absolute -top-2 -right-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nesw-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-30" 
+                        title="Drag corner to resize slide box width"
+                      />
+                      <div 
+                        onMouseDown={handleMouseDownResize} 
+                        onTouchStart={handleMouseDownResize}
+                        className="absolute -bottom-2 -left-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nesw-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-30" 
+                        title="Drag corner to resize slide box width"
+                      />
+                      <div 
+                        onMouseDown={handleMouseDownResize} 
+                        onTouchStart={handleMouseDownResize}
+                        className="absolute -bottom-2 -right-2 w-4 h-4 bg-cyan-400 border-2 border-black rounded-full cursor-nwse-resize opacity-0 group-hover:opacity-100 transition-opacity hover:scale-125 z-30" 
+                        title="Drag corner to resize slide box width"
+                      />
 
-                    {/* Floating Quick Formatting Controls on Hover */}
-                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs shadow-xl z-30">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setFontSize(prev => Math.min(100, prev + 4)); }}
-                        className="px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 rounded font-bold"
-                        title="Increase Font Size"
-                      >
-                        A+
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setFontSize(prev => Math.max(16, prev - 4)); }}
-                        className="px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 rounded font-bold"
-                        title="Decrease Font Size"
-                      >
-                        A-
-                      </button>
-                      <div className="w-px h-4 bg-gray-600"></div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPositionX(undefined);
-                          setPositionY(undefined);
-                        }}
-                        className="px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-[10px] flex items-center gap-1 text-amber-300"
-                        title="Reset custom drag position to center alignment"
-                      >
-                        <RotateCcw size={10} />
-                        <span>Center</span>
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setBoxStyle(prev => prev === 'none' ? 'glass' : prev === 'glass' ? 'solid' : prev === 'solid' ? 'border' : 'none'); }}
-                        className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 rounded text-[10px] font-bold"
-                        title="Cycle Box Style"
-                      >
-                        Backdrop
-                      </button>
+                      {/* Main Slide Text */}
+                      {isCanvasEditing ? (
+                        <textarea
+                          value={activeSlide.text}
+                          onChange={(e) => {
+                            const updatedLyrics = rawLyrics.replace(activeSlide.text, e.target.value);
+                            setRawLyrics(updatedLyrics);
+                          }}
+                          onBlur={() => setIsCanvasEditing(false)}
+                          autoFocus
+                          className="w-full bg-black/75 text-white font-bold p-3 rounded border-2 border-cyan-400 text-center leading-tight focus:outline-none cursor-text resize-none"
+                          style={{
+                            fontFamily: previewThemeStyles.fontFamily || 'Tahoma, sans-serif',
+                            fontSize: `${autoFitFontSize}px`,
+                            lineHeight: effectiveLineSpacing,
+                            color: previewThemeStyles.fontColor || '#FFFFFF',
+                          }}
+                        />
+                      ) : (
+                        <div
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setIsCanvasEditing(true);
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedCanvasElement('text');
+                          }}
+                          className="font-bold leading-snug whitespace-pre-line break-words [overflow-wrap:break-word] [word-break:normal] select-none cursor-pointer hover:ring-1 hover:ring-cyan-400/50 rounded p-1 transition-all max-w-full drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+                          style={{
+                            ...ThemeEngine.getTextStyle(previewThemeStyles, 1),
+                            fontSize: `${autoFitFontSize}px`,
+                            lineHeight: effectiveLineSpacing,
+                            fontFamily: previewThemeStyles.fontFamily || 'Tahoma, sans-serif',
+                            textAlign: (previewThemeStyles.textAlign as any) || 'center',
+                            color: previewThemeStyles.fontColor || '#FFFFFF',
+                            textTransform: isUppercase ? 'uppercase' : undefined,
+                            fontWeight: previewThemeStyles.fontWeight || (songOpts?.songFont?.bold ? '700' : '400'),
+                            fontStyle: previewThemeStyles.fontStyle || (songOpts?.songFont?.italic ? 'italic' : 'normal'),
+                            textDecoration: previewThemeStyles.textDecoration || (songOpts?.songFont?.underline ? 'underline' : 'none'),
+                            wordBreak: 'normal',
+                            overflowWrap: 'break-word',
+                          }}
+                          title="Double-click to edit text directly on slide"
+                        >
+                          {activeSlide.text || 'Double click to edit text'}
+                        </div>
+                      )}
+
+                      {/* Floating Quick Formatting Controls on Hover */}
+                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/85 backdrop-blur-md px-2.5 py-1 rounded-md border border-white/20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs shadow-xl z-30">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setFontSize(prev => Math.min(160, (prev || previewThemeStyles.fontSize || 90) + 4)); }}
+                          className="px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 rounded font-bold"
+                          title="Increase Font Size"
+                        >
+                          A+
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setFontSize(prev => Math.max(12, (prev || previewThemeStyles.fontSize || 90) - 4)); }}
+                          className="px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 rounded font-bold"
+                          title="Decrease Font Size"
+                        >
+                          A-
+                        </button>
+                        <div className="w-px h-4 bg-gray-600"></div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPositionX(undefined);
+                            setPositionY(undefined);
+                          }}
+                          className="px-1.5 py-0.5 bg-gray-700 hover:bg-gray-600 rounded text-[10px] flex items-center gap-1 text-amber-300"
+                          title="Reset custom drag position to center alignment"
+                        >
+                          <RotateCcw size={10} />
+                          <span>Center</span>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setBoxStyle(prev => prev === 'none' ? 'glass' : prev === 'glass' ? 'solid' : prev === 'solid' ? 'border' : 'none'); }}
+                          className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 rounded text-[10px] font-bold"
+                          title="Cycle Box Style"
+                        >
+                          Backdrop
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Bottom Slide Copyright Banner */}
-                <div className="relative z-10 px-4 py-1.5 text-[9px] text-gray-300 font-sans opacity-80 truncate bg-black/50 backdrop-blur-xs border-t border-white/5">
-                  {title} {author ? `• ${author}` : ''} {copyright ? `• © ${copyright}` : ''} {ccliNumber ? `• CCLI #${ccliNumber}` : ''}
+                  {/* Bottom Slide Copyright Banner */}
+                  <div className="relative z-10 px-8 py-3 text-xs text-gray-300 font-sans opacity-80 truncate bg-black/50 backdrop-blur-xs border-t border-white/5">
+                    {title} {author ? `• ${author}` : ''} {copyright ? `• © ${copyright}` : ''} {ccliNumber ? `• CCLI #${ccliNumber}` : ''}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1622,12 +2120,14 @@ function SongEditorModal({
           {/* Left Actions */}
           <div className="flex items-center space-x-3">
             <button
-              onClick={() => handleInsertTag(`Verse ${parsedSlides.length + 1}`)}
-              className="p-1 hover:bg-[#343a4a] rounded text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1"
-              title="Add New Slide"
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleInsertTag(smartSuggestions.nextVerse || `Verse ${parsedSlides.length + 1}`)}
+              className="p-1 hover:bg-[#343a4a] rounded text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 transition-colors"
+              title={`Add New Slide (${smartSuggestions.nextVerse || `Verse ${parsedSlides.length + 1}`}) at cursor`}
             >
               <Plus size={14} />
-              <span className="text-[11px]">Add Slide</span>
+              <span className="text-[11px]">Add Slide ({smartSuggestions.nextVerse || `Verse ${parsedSlides.length + 1}`})</span>
             </button>
 
             {mode === 'schedule-item' ? (
@@ -1665,14 +2165,14 @@ function SongEditorModal({
               <ZoomOut size={12} />
               <input
                 type="range"
-                min="20"
-                max="60"
+                min="50"
+                max="150"
                 value={zoomPercent}
                 onChange={(e) => setZoomPercent(Number(e.target.value))}
                 className="w-20 h-1 bg-[#141519] rounded appearance-none cursor-pointer accent-indigo-500"
               />
               <ZoomIn size={12} />
-              <span className="w-8 text-right text-gray-300 font-semibold">{zoomPercent}%</span>
+              <span className="w-9 text-right text-gray-300 font-semibold">{zoomPercent}%</span>
             </div>
 
             <div className="h-4 w-px bg-[#3a3f50]"></div>
@@ -1701,9 +2201,194 @@ function SongEditorModal({
           </div>
         </div>
 
-      </div>
+      {/* Corner Resize Handle on bottom right (when not maximized and not in popout) */}
+      {!isMaximized && !inPopout && (
+        <div
+          onMouseDown={(e) => handleResizeStart('se', e)}
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize flex items-end justify-end p-0.5 z-40 text-gray-500 hover:text-cyan-400 group"
+          title="Drag corner to resize editor window"
+        >
+          <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-cyan-400/80 group-hover:border-cyan-300 transition-colors" />
+        </div>
+      )}
     </div>
-    
+  );
+
+  // 1. If detached into separate browser window
+  if (isPoppedOut && popoutRef.current && !popoutRef.current.closed) {
+    return (
+      <>
+        {createPortal(renderWindowContent(true), popoutRef.current.document.body)}
+
+        {/* Main Application Detached Companion Banner */}
+        <div className="fixed bottom-12 right-6 z-[999999] bg-[#1a1e28] border-2 border-cyan-500 shadow-2xl rounded-xl p-4 max-w-sm text-gray-200 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+              <span className="font-bold text-xs text-cyan-300">Editor Active in External Window</span>
+            </div>
+            <button 
+              onClick={() => {
+                if (popoutRef.current && !popoutRef.current.closed) popoutRef.current.close();
+                setIsPoppedOut(false);
+              }}
+              className="text-gray-400 hover:text-white"
+            >
+              <X size={13} />
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-300 leading-relaxed mb-3">
+            Universal Song & Template Editor is currently running in an independent external window. You can drag it to any monitor or move it freely outside the browser.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (popoutRef.current && !popoutRef.current.closed) {
+                  popoutRef.current.focus();
+                }
+              }}
+              className="flex-1 py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-xs font-bold transition-colors shadow"
+            >
+              Bring to Front
+            </button>
+            <button
+              onClick={() => {
+                if (popoutRef.current && !popoutRef.current.closed) {
+                  popoutRef.current.close();
+                }
+                setIsPoppedOut(false);
+              }}
+              className="py-1.5 px-3 bg-[#2a2f3f] hover:bg-[#393f55] text-gray-300 hover:text-white rounded text-xs font-medium transition-colors"
+            >
+              Dock Back
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // 2. If minimized
+  if (isMinimized) {
+    return (
+      <div 
+        onClick={() => setIsMinimized(false)}
+        className="fixed bottom-4 right-4 z-[999999] bg-[#1f2229] border border-cyan-500/60 shadow-[0_10px_30px_rgba(0,0,0,0.8)] rounded-lg px-3.5 py-2 flex items-center gap-3 text-gray-200 animate-in slide-in-from-bottom-5 cursor-pointer hover:border-cyan-400 transition-all group"
+      >
+        <div className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 group-hover:animate-ping" />
+          <span className="text-xs font-bold text-cyan-300">Song Editor Minimized:</span>
+          <span className="text-xs text-gray-200 font-semibold truncate max-w-[200px]">{title || 'Untitled'}</span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsMinimized(false);
+          }}
+          className="px-2.5 py-1 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded font-medium transition-colors"
+        >
+          Restore
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="p-1 hover:bg-rose-600 rounded text-gray-400 hover:text-white transition-colors"
+          title="Close Editor"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    );
+  }
+
+  // 3. Normal Floating & Movable Window
+  return (
+    <>
+      {/* Movable Non-blocking Floating Backdrop: allows viewing workspace behind while editing */}
+      <div 
+        className="fixed inset-0 z-[99998] bg-black/45 backdrop-blur-[2px] transition-opacity duration-150"
+        onClick={() => setIsActiveWindow(false)}
+      />
+
+      {/* Freely Draggable & 8-Direction Resizable Floating Window */}
+      <div
+        id="universal-song-editor-window"
+        onMouseDown={() => setIsActiveWindow(true)}
+        className={`fixed z-[99999] bg-[#1f2229] border shadow-[0_24px_64px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden text-gray-200 select-none transition-shadow ${
+          isActiveWindow ? 'border-cyan-500/80 ring-1 ring-cyan-500/40 shadow-cyan-950/40' : 'border-[#363a47]'
+        } ${isMaximized ? 'inset-0 w-full h-full rounded-none' : 'rounded-lg'}`}
+        style={
+          isMaximized
+            ? { left: 0, top: 0, width: '100vw', height: '100vh' }
+            : {
+                left: `${windowPos?.x ?? 20}px`,
+                top: `${windowPos?.y ?? 20}px`,
+                width: `${windowSize.width}px`,
+                height: `${windowSize.height}px`,
+              }
+        }
+      >
+        {renderWindowContent(false)}
+
+        {/* 8-Directional Window Resizing Edge & Corner Handles */}
+        {!isMaximized && (
+          <>
+            {/* Top Border */}
+            <div
+              onMouseDown={(e) => handleResizeStart('n', e)}
+              className="absolute top-0 left-2 right-2 h-2 cursor-ns-resize z-50 hover:bg-cyan-500/30 transition-colors"
+              title="Resize window top"
+            />
+            {/* Bottom Border */}
+            <div
+              onMouseDown={(e) => handleResizeStart('s', e)}
+              className="absolute bottom-0 left-2 right-2 h-2 cursor-ns-resize z-50 hover:bg-cyan-500/30 transition-colors"
+              title="Resize window bottom"
+            />
+            {/* Left Border */}
+            <div
+              onMouseDown={(e) => handleResizeStart('w', e)}
+              className="absolute top-2 bottom-2 left-0 w-2 cursor-ew-resize z-50 hover:bg-cyan-500/30 transition-colors"
+              title="Resize window left"
+            />
+            {/* Right Border */}
+            <div
+              onMouseDown={(e) => handleResizeStart('e', e)}
+              className="absolute top-2 bottom-2 right-0 w-2 cursor-ew-resize z-50 hover:bg-cyan-500/30 transition-colors"
+              title="Resize window right"
+            />
+            {/* Top-Left Corner */}
+            <div
+              onMouseDown={(e) => handleResizeStart('nw', e)}
+              className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize z-50"
+              title="Resize window corner"
+            />
+            {/* Top-Right Corner */}
+            <div
+              onMouseDown={(e) => handleResizeStart('ne', e)}
+              className="absolute top-0 right-0 w-3 h-3 cursor-nesw-resize z-50"
+              title="Resize window corner"
+            />
+            {/* Bottom-Left Corner */}
+            <div
+              onMouseDown={(e) => handleResizeStart('sw', e)}
+              className="absolute bottom-0 left-0 w-3 h-3 cursor-nesw-resize z-50"
+              title="Resize window corner"
+            />
+            {/* Bottom-Right Corner Grip */}
+            <div
+              onMouseDown={(e) => handleResizeStart('se', e)}
+              className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50 flex items-end justify-end p-0.5 text-gray-500 hover:text-cyan-400 group"
+              title="Drag corner to resize window"
+            >
+              <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-cyan-400/80 group-hover:border-cyan-300 transition-colors" />
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 

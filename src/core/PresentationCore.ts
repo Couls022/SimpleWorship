@@ -99,78 +99,38 @@ export class PresentationCore {
         }
       }
 
-      if (!automaticallyFlow) {
-        // No auto-flow: keep whole stanza on one slide
-        resultSlides.push({
-          id: `${slideIdPrefix}-${resultSlides.length}`,
-          title: stanzaTitle,
-          text: stanzaText,
-          backgroundUrl,
-          isVideo: PresentationContentResolver.isVideoUrl(backgroundUrl) || undefined,
-        });
-        return;
-      }
-
       // Split stanza into lines
       const rawLines = stanzaText.split('\n').map(l => l.trim()).filter(Boolean);
-      
-      // If stanza has very few lines but any line is exceptionally long (> 120 chars), wrap them
-      const lines: string[] = [];
-      for (const line of rawLines) {
-        if (line.length > 120) {
-          const half = Math.floor(line.length / 2);
-          const spaceIdx = line.indexOf(' ', half);
-          if (spaceIdx !== -1 && spaceIdx < line.length - 20) {
-            lines.push(line.slice(0, spaceIdx).trim());
-            lines.push(line.slice(spaceIdx).trim());
-          } else {
-            lines.push(line);
-          }
-        } else {
-          lines.push(line);
-        }
-      }
 
-      // If line count <= maxLines and text is not overly dense (< 280 chars), keep as single slide
-      if (lines.length <= maxLines && stanzaText.length < 280) {
+      if (!automaticallyFlow || rawLines.length <= maxLines) {
+        // Keep stanza intact on a single slide; Dynamic Auto-Fit Font Scaling scales to fit
         resultSlides.push({
           id: `${slideIdPrefix}-${resultSlides.length}`,
           title: stanzaTitle,
-          text: lines.join('\n'),
+          text: rawLines.join('\n'),
           backgroundUrl,
           isVideo: PresentationContentResolver.isVideoUrl(backgroundUrl) || undefined,
         });
         return;
       }
 
-      // Chunk lines with maxLines limit
+      // If lines genuinely exceed maxLines and automaticallyFlow is enabled,
+      // partition lines evenly across slides so text stays legible without cramping
+      const totalLines = rawLines.length;
+      const numSlides = Math.ceil(totalLines / maxLines);
+      const baseSize = Math.floor(totalLines / numSlides);
+      const remainder = totalLines % numSlides;
+
       const lineChunks: string[][] = [];
-      let currentChunk: string[] = [];
+      let startIndex = 0;
 
-      for (let i = 0; i < lines.length; i++) {
-        currentChunk.push(lines[i]);
-        if (currentChunk.length >= maxLines) {
-          lineChunks.push(currentChunk);
-          currentChunk = [];
-        }
-      }
-      if (currentChunk.length > 0) {
-        lineChunks.push(currentChunk);
+      for (let i = 0; i < numSlides; i++) {
+        const chunkSize = baseSize + (i < remainder ? 1 : 0);
+        lineChunks.push(rawLines.slice(startIndex, startIndex + chunkSize));
+        startIndex += chunkSize;
       }
 
-      // Orphan line prevention: If last chunk has only 1 line and previous chunk has >= 3 lines,
-      // balance them (e.g. 4 + 1 -> 3 + 2, or 6 + 1 -> 4 + 3)
-      if (lineChunks.length >= 2) {
-        const lastIdx = lineChunks.length - 1;
-        if (lineChunks[lastIdx].length === 1 && lineChunks[lastIdx - 1].length >= 3) {
-          const popped = lineChunks[lastIdx - 1].pop();
-          if (popped) {
-            lineChunks[lastIdx].unshift(popped);
-          }
-        }
-      }
-
-      // Generate slides from chunks
+      // Generate slides from balanced chunks
       lineChunks.forEach((chunk, chunkIdx) => {
         let slideTitle = stanzaTitle;
         if (splitLongSections && lineChunks.length > 1) {
@@ -598,6 +558,12 @@ export class PresentationCore {
         }
         return slide;
       });
+    }
+
+    // LRU eviction cap: prevent unbounded memory consumption during marathon worship services
+    if (PresentationCore.slideCache.size >= 250) {
+      const oldestKey = PresentationCore.slideCache.keys().next().value;
+      if (oldestKey) PresentationCore.slideCache.delete(oldestKey);
     }
 
     PresentationCore.slideCache.set(item.id, { cacheKey, slides: finalSlides });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useStore } from '../store/useStore';
+import { useStore, safeStorage } from '../store/useStore';
 import { useScreens } from '../hooks/useScreens';
 import { DisplayManager } from '../core/DisplayManager';
 import { OutputGroup } from '../types';
@@ -14,6 +14,8 @@ interface RouteConfigModalProps {
 export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalProps) {
   const outputGroups = useStore(state => state.outputGroups);
   const updateOutputGroup = useStore(state => state.updateOutputGroup);
+  const updateRouterPanel = useStore(state => state.updateRouterPanel);
+  const routerPanels = useStore(state => state.routerPanels);
   const themesList = useStore(state => state.themesList);
   const moveOutputGroup = useStore(state => state.moveOutputGroup);
   const updateSystemOptions = useStore(state => state.updateSystemOptions);
@@ -103,6 +105,11 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       customResolution: { width: targetW, height: targetH }
     });
 
+    const matchedPanel = routerPanels.find(p => p.targetOutputGroupId === groupId);
+    if (matchedPanel && name) {
+      updateRouterPanel(matchedPanel.routerId, { name });
+    }
+
     // 2. Sync legacy systemOptions if it maps to a standard legacy route
     updateSystemOptions((prev) => {
       const next = { ...prev };
@@ -122,7 +129,7 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       } else if (groupId === 'group-stage') {
         const hasDisplays = selectedDisplayIds.length > 0;
         try {
-          localStorage.setItem('simpleworship_foldback_explicit_v1', hasDisplays ? 'true' : 'false');
+          safeStorage.setItem('simpleworship_foldback_explicit_v1', hasDisplays ? 'true' : 'false');
         } catch (e) {}
         next.foldback = {
           ...next.foldback,
@@ -137,6 +144,17 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
       }
       return next;
     });
+
+    // 3. Immediately synchronize physical displays to reflect new target monitor bindings
+    setTimeout(() => {
+      const state = useStore.getState();
+      DisplayManager.syncPhysicalDisplays(
+        state.outputGroups,
+        state.groupStates,
+        state.activeControlGroupId,
+        state.routeActivationStack
+      ).catch(() => {});
+    }, 50);
 
     onClose();
   };

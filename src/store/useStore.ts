@@ -20,6 +20,8 @@ import {
   LaserPointerState
 } from '../types';
 import { dbApi, registerAsset } from '../db';
+import { isMediaLibraryAsset } from '../db/assets';
+import { PptxRenderCacheManager } from '../utils/pptxBackend/cacheManager';
 import { defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultAssets, defaultScriptures } from '../db/seedData';
 import { defaultSystemOptions } from '../db/defaultOptions';
 import { DEFAULT_SIMPLEWORSHIP_MAPPINGS } from '../utils/keyboardShortcuts';
@@ -30,6 +32,32 @@ import { v4 as uuidv4 } from 'uuid';
 import { broadcastStateChange, sanitizeForSync } from '../utils/broadcastSync';
 import { DisplayManager } from '../core/DisplayManager';
 import { buildRenderFrame } from '../core/RenderFrameBuilder';
+import { slideRenderCache } from '../utils/SlideRenderCache';
+
+export const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        return window.localStorage.getItem(key);
+      }
+    } catch (_) {}
+    return null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.setItem(key, value);
+      }
+    } catch (_) {}
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+        window.localStorage.removeItem(key);
+      }
+    } catch (_) {}
+  }
+};
 
 let saveGroupStatesTimer: any = null;
 const scheduleGroupStatesSave = (updatedGroupStates: Record<string, any>) => {
@@ -37,7 +65,7 @@ const scheduleGroupStatesSave = (updatedGroupStates: Record<string, any>) => {
   saveGroupStatesTimer = setTimeout(() => {
     try {
       const sanitized = sanitizeForSync(updatedGroupStates);
-      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
+      safeStorage.setItem('simpleworship_group_states_v1', JSON.stringify(sanitized));
     } catch (e) {}
   }, 1000);
 };
@@ -64,7 +92,7 @@ const defaultShortcutSettings: ShortcutSettings = {
 
 const getStoredProfiles = () => {
   try {
-    const saved = localStorage.getItem('simpleworship_profiles_v1');
+    const saved = safeStorage.getItem('simpleworship_profiles_v1');
     if (saved) return JSON.parse(saved);
   } catch (e) {
     console.error('Error loading profiles', e);
@@ -74,7 +102,7 @@ const getStoredProfiles = () => {
 
 const getStoredActiveProfile = () => {
   try {
-    const saved = localStorage.getItem('simpleworship_active_profile_v1');
+    const saved = safeStorage.getItem('simpleworship_active_profile_v1');
     if (saved) return saved;
   } catch (e) {}
   return 'default';
@@ -82,7 +110,7 @@ const getStoredActiveProfile = () => {
 
 const getStoredShortcuts = (): ShortcutSettings => {
   try {
-    const saved = localStorage.getItem('simpleworship_shortcuts_v1');
+    const saved = safeStorage.getItem('simpleworship_shortcuts_v1');
     if (saved) {
       const parsed = JSON.parse(saved);
       return { 
@@ -102,10 +130,10 @@ const getStoredShortcuts = (): ShortcutSettings => {
 
 const getStoredOptions = (): SystemOptions => {
   try {
-    const saved = localStorage.getItem('simpleworship_system_options_v1');
+    const saved = safeStorage.getItem('simpleworship_system_options_v1');
     if (saved) {
       const parsed = JSON.parse(saved);
-      const isFoldbackExplicitlyActive = localStorage.getItem('simpleworship_foldback_explicit_v1') === 'true';
+      const isFoldbackExplicitlyActive = safeStorage.getItem('simpleworship_foldback_explicit_v1') === 'true';
       return {
         ...defaultSystemOptions,
         ...parsed,
@@ -131,7 +159,7 @@ const ALERT_PRESETS_STORAGE_KEY = 'simpleworship_alert_presets_v2';
 
 const getStoredAlertPresets = (): AlertPreset[] => {
   try {
-    const saved = localStorage.getItem(ALERT_PRESETS_STORAGE_KEY);
+    const saved = safeStorage.getItem(ALERT_PRESETS_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
@@ -146,7 +174,7 @@ const getStoredAlertPresets = (): AlertPreset[] => {
 
 const saveStoredAlertPresets = (presets: AlertPreset[]) => {
   try {
-    localStorage.setItem(ALERT_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+    safeStorage.setItem(ALERT_PRESETS_STORAGE_KEY, JSON.stringify(presets));
   } catch (e) {
     console.error('Error persisting alert presets', e);
   }
@@ -316,7 +344,7 @@ interface AppState {
   deleteTheme: (id: string) => Promise<void>;
   addAsset: (asset: Asset) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
-  setDefaultBackground: (assetUrl: string, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers', isVideo?: boolean) => void;
+  setDefaultBackground: (assetUrl: string, scope: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers', isVideo?: boolean, action?: 'lock' | 'unlock') => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -694,7 +722,7 @@ export const useStore = create<AppState>((set, get) => ({
       const prev = state.routeActivationStack || [];
       const next = [groupId, ...prev.filter(id => id !== groupId)];
       try {
-        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(next));
+        safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(next));
       } catch (e) {}
       return { routeActivationStack: next };
     });
@@ -730,14 +758,13 @@ export const useStore = create<AppState>((set, get) => ({
         createdGroupId = `group-r${suffix}`;
       }
 
-      const defaultDisplayIds = state.outputGroups[0]?.displayIds || [];
       const cleanRouteName = panel.name || `Route ${count}`;
       const newGroup: OutputGroup = {
         id: createdGroupId,
         name: cleanRouteName,
         role: 'broadcast',
         themeId: count % 2 === 0 ? 'theme-scripture' : 'theme-global',
-        displayIds: defaultDisplayIds.length > 0 ? [...defaultDisplayIds] : [],
+        displayIds: [],
         targetDisplayId: '',
         isBlack: false,
         isClear: false,
@@ -887,7 +914,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     scheduleGroupStatesSave(newGroupStates);
     try {
-      localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+      safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
     } catch (e) {}
 
     // Immediately synchronize physical displays to close or re-route displays without leaving ghost routes
@@ -974,7 +1001,7 @@ export const useStore = create<AppState>((set, get) => ({
       if (newActiveTarget) {
         nextStack = [newActiveTarget, ...nextStack.filter(g => g !== newActiveTarget)];
         try {
-          localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+          safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
         } catch (e) {}
       }
       
@@ -1421,7 +1448,7 @@ export const useStore = create<AppState>((set, get) => ({
           const prevStack = get().routeActivationStack || [];
           const nextStack = [groupId, ...prevStack.filter(id => id !== groupId)];
           try {
-            localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+            safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
           } catch (e) {}
           set({ routeActivationStack: nextStack });
         }
@@ -1485,11 +1512,12 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     const currentStack = get().routeActivationStack || [];
-    const nextStack = activeControlGroupId 
-      ? [activeControlGroupId, ...currentStack.filter(id => id !== activeControlGroupId)] 
+    const activeRouteId = (groupId && groupId !== 'ALL') ? groupId : activeControlGroupId;
+    const nextStack = activeRouteId 
+      ? [activeRouteId, ...currentStack.filter(id => id !== activeRouteId)] 
       : currentStack;
     try {
-      localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+      safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
     } catch (e) {}
     set({ groupStates: updatedStates, routeActivationStack: nextStack });
 
@@ -1516,15 +1544,23 @@ export const useStore = create<AppState>((set, get) => ({
     if (id) {
       nextStack = [id, ...nextStack.filter(g => g !== id)];
       try {
-        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+        safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
       } catch (e) {}
     }
     set((state) => {
       const matchedPanel = state.routerPanels.find(p => p.targetOutputGroupId === id);
+      const panels = state.routerPanels.map(p => ({
+        ...p,
+        active: matchedPanel ? p.routerId === matchedPanel.routerId : p.active,
+        focused: matchedPanel ? p.routerId === matchedPanel.routerId : p.focused
+      }));
       return { 
         activeControlGroupId: id,
+        routerPanels: panels,
         routeActivationStack: nextStack,
-        activeRouterId: matchedPanel ? matchedPanel.routerId : state.activeRouterId
+        activeRouterId: matchedPanel ? matchedPanel.routerId : state.activeRouterId,
+        previewItemId: matchedPanel?.previewItemId ?? state.previewItemId,
+        previewSlideIndex: matchedPanel?.previewSlideIndex ?? state.previewSlideIndex
       };
     });
     const { outputGroups, groupStates, routerPanels, routeActivationStack } = get();
@@ -1777,12 +1813,17 @@ export const useStore = create<AppState>((set, get) => ({
 
   goLiveItem: (itemId, slideIndex = 0, targetGroupId, directItem, routerId) => {
     const { activeControlGroupId, setStagedGroupState, outputGroups, activeSchedule, songsList, routerPanels, activeRouterId } = get();
-    const routerIdToUse = routerId || activeRouterId || routerPanels[0]?.routerId || 'router-1';
-    const routerPanel = routerPanels.find(p => p.routerId === routerIdToUse);
-    const groupToUpdate = targetGroupId || routerPanel?.targetOutputGroupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : undefined);
+    
+    // Resolve matching panel accurately based on targetGroupId or routerId
+    const matchingPanel = targetGroupId 
+      ? routerPanels.find(p => p.targetOutputGroupId === targetGroupId)
+      : (routerId ? routerPanels.find(p => p.routerId === routerId) : undefined);
+
+    const routerIdToUse = routerId || matchingPanel?.routerId || activeRouterId || routerPanels[0]?.routerId || 'router-1';
+    const groupToUpdate = targetGroupId || matchingPanel?.targetOutputGroupId || routerPanels.find(p => p.routerId === routerIdToUse)?.targetOutputGroupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : undefined);
 
     const updatedPanels = routerPanels.map(p => {
-      if (p.routerId === routerIdToUse) {
+      if (p.routerId === routerIdToUse || (matchingPanel && p.routerId === matchingPanel.routerId)) {
         return { ...p, previewItemId: itemId, previewSlideIndex: slideIndex };
       }
       return p;
@@ -1825,7 +1866,15 @@ export const useStore = create<AppState>((set, get) => ({
         isVideoPlaying: true,
       });
       if (routerIdToUse !== activeRouterId || groupToUpdate !== activeControlGroupId) {
-        set({ activeControlGroupId: groupToUpdate, activeRouterId: routerIdToUse });
+        set({ 
+          activeControlGroupId: groupToUpdate, 
+          activeRouterId: routerIdToUse,
+          routerPanels: updatedPanels.map(p => ({
+            ...p,
+            active: p.routerId === routerIdToUse,
+            focused: p.routerId === routerIdToUse
+          }))
+        });
       }
       get().bringRouteToTop(groupToUpdate);
     } else if (outputGroups.length > 0) {
@@ -2062,7 +2111,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (groupId && nextLive) {
       nextStack = [groupId, ...nextStack.filter(id => id !== groupId)];
       try {
-        localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+        safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
       } catch (e) {}
     }
 
@@ -2566,6 +2615,9 @@ export const useStore = create<AppState>((set, get) => ({
   setAvailableCameras: (cameras) => set({ availableCameras: cameras }),
 
   loadAllData: async () => {
+    // Purge any legacy pptx rendered cache entries previously written to the assets table
+    await PptxRenderCacheManager.purgeLegacyCacheFromAssets().catch(() => {});
+
     // 1. Fetch and register assets first so assetUrlMap and objectUrlCache are fully ready
     const assets = await dbApi.getAllAssets();
     assets.forEach(a => registerAsset(a));
@@ -2694,6 +2746,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     let hydratedAssets = assets;
     if (assets.length > 0) {
+      // Filter out cache artifacts and presentation documents from assetsList
+      const mediaOnlyAssets = assets.filter(isMediaLibraryAsset);
+
       // Cross-check default themes / systemOptions to populate isDefaultScope if not already set
       const logoUrl = storedOptions?.general?.defaultLogoUrl || storedOptions?.mainOutput?.general?.defaultLogoUrl || mergedThemes.find(t => t.type === 'logo' || t.id === 'theme-logo')?.styles?.logoUrl;
       const songBgUrl = mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'song' || t.id === 'theme-song')?.styles?.backgroundVideoUrl || storedOptions?.mainOutput?.song?.backdropAssetUrl;
@@ -2702,18 +2757,47 @@ export const useStore = create<AppState>((set, get) => ({
       const annBgUrl = mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'announcement' || t.id === 'theme-announcement')?.styles?.backgroundVideoUrl;
       const timerBgUrl = storedOptions?.serviceIntervals?.backgroundAssetId || (storedOptions?.serviceIntervals as any)?.backgroundAssetUrl || mergedThemes.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundImageUrl || mergedThemes.find(t => t.type === 'timer' || t.id === 'theme-timer')?.styles?.backgroundVideoUrl;
 
-      hydratedAssets = assets.map(a => {
+      const scopesList: Array<'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers'> = [
+        'songs', 'scriptures', 'presentations', 'announcements', 'logo', 'timers'
+      ];
+
+      const scopeFallbacks: Record<string, string | undefined> = {
+        logo: logoUrl,
+        songs: songBgUrl,
+        scriptures: bibleBgUrl,
+        presentations: pptBgUrl,
+        announcements: annBgUrl,
+        timers: timerBgUrl,
+      };
+
+      // Ensure EXACTLY 1 winner per scope (strict single-file default lock)
+      const winningAssetIdPerScope: Partial<Record<string, string>> = {};
+      for (const sc of scopesList) {
+        // 1. Direct priority: look for existing explicit default
+        const existingExplicit = mediaOnlyAssets.find(a => a.isDefaultScope?.[sc] === true);
+        if (existingExplicit) {
+          winningAssetIdPerScope[sc] = existingExplicit.id;
+        } else {
+          // 2. Fallback to matching URL or ID from saved settings
+          const fallback = scopeFallbacks[sc];
+          if (fallback) {
+            const match = mediaOnlyAssets.find(a => a.url === fallback || a.id === fallback);
+            if (match) {
+              winningAssetIdPerScope[sc] = match.id;
+            }
+          }
+        }
+      }
+
+      hydratedAssets = mediaOnlyAssets.map(a => {
         const scopes = { ...(a.isDefaultScope || {}) };
-        if (logoUrl && (a.url === logoUrl || a.id === logoUrl)) scopes.logo = true;
-        if (songBgUrl && (a.url === songBgUrl || a.id === songBgUrl)) scopes.songs = true;
-        if (bibleBgUrl && (a.url === bibleBgUrl || a.id === bibleBgUrl)) scopes.scriptures = true;
-        if (pptBgUrl && (a.url === pptBgUrl || a.id === pptBgUrl)) scopes.presentations = true;
-        if (annBgUrl && (a.url === annBgUrl || a.id === annBgUrl)) scopes.announcements = true;
-        if (timerBgUrl && (a.url === timerBgUrl || a.id === timerBgUrl)) scopes.timers = true;
+        for (const sc of scopesList) {
+          scopes[sc] = winningAssetIdPerScope[sc] === a.id;
+        }
         return { ...a, isDefaultScope: scopes };
       });
 
-      set({ assetsList: hydratedAssets });
+      set({ assetsList: hydratedAssets.length > 0 ? hydratedAssets : defaultAssets });
     }
     
     // Ensure scriptures
@@ -2857,9 +2941,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Overwrite localStorage with pristine clean states
     try {
-      localStorage.setItem('simpleworship_group_states_v1', JSON.stringify(cleanGroupStates));
-      localStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(cleanRouteStack));
-      localStorage.setItem('simpleworship_output_groups_order', JSON.stringify(finalOutputGroups.map(g => g.id)));
+      safeStorage.setItem('simpleworship_group_states_v1', JSON.stringify(cleanGroupStates));
+      safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(cleanRouteStack));
+      safeStorage.setItem('simpleworship_output_groups_order', JSON.stringify(finalOutputGroups.map(g => g.id)));
     } catch (e) {}
 
     set({ 
@@ -2951,27 +3035,32 @@ export const useStore = create<AppState>((set, get) => ({
   addAsset: async (asset) => {
     await dbApi.addAsset(asset);
     const { blob, ...assetWithoutBlob } = asset;
-    set((state) => ({ assetsList: [...state.assetsList.filter(a => a.id !== asset.id), assetWithoutBlob as any] }));
+    if (isMediaLibraryAsset(asset)) {
+      set((state) => ({ assetsList: [...state.assetsList.filter(a => a.id !== asset.id), assetWithoutBlob as any] }));
+    }
   },
 
   deleteAsset: async (id) => {
     await dbApi.deleteAsset(id);
     set((state) => ({ assetsList: state.assetsList.filter(a => a.id !== id) }));
   },
-  setDefaultBackground: (assetUrl, scope, isVideo = false) => {
+  setDefaultBackground: (assetUrl, scope, isVideo = false, action = 'lock') => {
     set((state) => {
       const targetType = scope === 'scriptures' ? 'bible' : (scope === 'songs' ? 'song' : (scope === 'presentations' ? 'presentation' : (scope === 'announcements' ? 'announcement' : (scope === 'timers' ? 'timer' : 'logo'))));
 
-      // Check if target asset is currently the active default for this scope to support toggle-off
       const targetAsset = state.assetsList.find(a => a.url === assetUrl || a.id === assetUrl);
-      const isCurrentlyActiveDefault = targetAsset?.isDefaultScope?.[scope] === true;
-      const isTogglingOff = isCurrentlyActiveDefault;
+      if (!targetAsset && action !== 'unlock') {
+        return state;
+      }
+
+      // Explicit lock vs unlock: When setting default ('lock'), it firmly locks to this file and NEVER accidentally toggles off!
+      const isTogglingOff = action === 'unlock';
 
       const finalAssetId = isTogglingOff ? undefined : (targetAsset?.id || assetUrl);
       const finalAssetBlobUrl = isTogglingOff ? undefined : (targetAsset?.url || assetUrl);
 
       // Register asset in memory cache
-      if (targetAsset) {
+      if (targetAsset && !isTogglingOff) {
         registerAsset(targetAsset);
       }
 
@@ -2983,30 +3072,41 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
       
-      // 1. Update assetsList so ONLY target asset is marked default for this scope (automatic replacement)
-      const updatedAssetsList = state.assetsList.map(a => {
-        const isMatch = a.url === assetUrl || a.id === assetUrl;
-        const currentScopes = a.isDefaultScope || {};
-        
-        let newScopeState = false;
-        if (isMatch) {
-          newScopeState = !isCurrentlyActiveDefault;
-        }
+      // 1. Identify previous default asset for this scope to cleanly transfer lock
+      const prevDefaultAsset = state.assetsList.find(a => (!targetAsset || a.id !== targetAsset.id) && a.isDefaultScope?.[scope] === true);
 
-        const nextScopes = {
-          ...currentScopes,
-          [scope]: newScopeState,
-        };
+      // 2. Update assetsList so ONLY target asset is marked default for this scope (strict 1-file exclusivity)
+      const updatedAssetsList = state.assetsList.map(a => {
+        const isMatch = targetAsset ? (a.id === targetAsset.id || a.url === assetUrl) : false;
+        const currentScopes = { ...(a.isDefaultScope || {}) };
+        
+        if (isMatch) {
+          currentScopes[scope] = !isTogglingOff;
+        } else {
+          // Strictly unlock all other files for this scope
+          currentScopes[scope] = false;
+        }
 
         const updated = {
           ...a,
-          isDefaultScope: nextScopes,
+          isDefaultScope: currentScopes,
         };
 
-        registerAsset(updated);
-        dbApi.addAsset(updated).catch(() => {});
+        if (isMatch && !isTogglingOff) {
+          registerAsset(updated);
+        }
         return updated;
       });
+
+      // Save only the changed assets to DB to prevent UI freezing or race conditions
+      if (targetAsset) {
+        const updatedTarget = updatedAssetsList.find(a => a.id === targetAsset.id);
+        if (updatedTarget) dbApi.addAsset(updatedTarget).catch(() => {});
+      }
+      if (prevDefaultAsset) {
+        const updatedPrev = updatedAssetsList.find(a => a.id === prevDefaultAsset.id);
+        if (updatedPrev) dbApi.addAsset(updatedPrev).catch(() => {});
+      }
 
       // 2. Persist in SystemOptions depending on scope
       let nextSystemOptions = { ...state.systemOptions };
@@ -3173,6 +3273,7 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Clear slide cache so existing slides immediately resolve the new background
       PresentationCore.clearSlideCache();
+      slideRenderCache.clear();
 
       // Trigger timestamp refresh across all group states and staged group states so Live cards, monitors, and projector view re-render
       const updatedGroupStates = { ...state.groupStates };

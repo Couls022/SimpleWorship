@@ -101,8 +101,6 @@ export class SlideRenderCache {
   ): Promise<OffscreenSlideFrame | null> {
     if (!presKey || typeof document === 'undefined') return null;
     const key = this.buildKey(presKey, slideIndex);
-    
-    console.log('[SlideRenderCache] 🎬 Capture started for', { presKey, slideIndex, key, width, height });
 
     try {
       const offscreenCanvas = document.createElement('canvas');

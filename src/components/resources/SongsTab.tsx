@@ -6,7 +6,6 @@ import {
   Music,
   Edit3,
   Trash2,
-  GripVertical,
   Copy,
   Tag,
   PlusCircle,
@@ -18,6 +17,8 @@ import {
   FolderDown,
   Check,
   RefreshCw,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useStore } from "../../store/useStore";
 import { Song, PresentationItem } from "../../types";
@@ -382,13 +383,26 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
     return counts;
   }, [songsList]);
 
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleToggleTitleSort = () => {
+    setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+  };
+
   const filteredSongs = useMemo(() => {
-    return OfflineSearchEngine.filterSongs(
+    const list = OfflineSearchEngine.filterSongs(
       songsList,
       searchQuery,
       activeCategory,
     );
-  }, [songsList, activeCategory, searchQuery]);
+    if (!searchQuery.trim()) {
+      return [...list].sort((a, b) => {
+        const cmp = OfflineSearchEngine.compareTitles(a.title, b.title);
+        return sortOrder === "asc" ? cmp : -cmp;
+      });
+    }
+    return list;
+  }, [songsList, activeCategory, searchQuery, sortOrder]);
 
   const handleAddToSchedule = (song: Song) => {
     addScheduleItem({
@@ -799,20 +813,32 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
         <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar relative">
           {/* Table Header - Sticky at the top */}
           <div className="sticky top-0 flex h-8 bg-[#20232a] border-b border-[#282b34] text-[11px] font-bold text-gray-400 items-center shrink-0 select-none z-30">
-            {/* Index Column */}
-            <div className="w-[46px] shrink-0 h-full flex items-center justify-center text-[10px] text-gray-400">
-              #
-            </div>
-
             {/* Title Column */}
-            <div className="relative flex-1 min-w-[180px] h-full flex items-center px-3">
+            <div
+              onClick={handleToggleTitleSort}
+              className="relative flex-1 min-w-[180px] h-full flex items-center px-3 cursor-pointer hover:text-cyan-300 transition-colors group select-none"
+              title="Click to toggle Title Sort (Natural numeric sort: 1-9 < 10-99 < 100-999 < A-Z)"
+            >
               <span className="truncate">Title (Drag to Schedule)</span>
+              <span className="ml-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                {sortOrder === "asc" ? (
+                  <ArrowUp size={11} className="inline text-cyan-400" />
+                ) : (
+                  <ArrowDown size={11} className="inline text-cyan-400" />
+                )}
+              </span>
 
               {/* Invisible Resizer 1 (Between Title and Category) */}
               <div
                 className="absolute right-0 top-0 bottom-0 w-3 -mr-1.5 cursor-col-resize z-20"
-                onMouseDown={handleCategoryResize}
-                onDoubleClick={() => setCategoryWidth(140)}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  handleCategoryResize(e);
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  setCategoryWidth(140);
+                }}
                 title="Drag to resize Category"
               />
             </div>
@@ -861,7 +887,7 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                 </button>
               </div>
             ) : (
-              filteredSongs.map((song, idx) => {
+              filteredSongs.map((song) => {
                 const isSelected = selectedSongIds.includes(song.id);
                 const normalizedCat = getNormalizedCategory(song);
 
@@ -879,17 +905,6 @@ export default function SongsTab({ onOpenNewSong, onEditSong }: SongsTabProps) {
                         : "hover:bg-[#1c1e25] text-gray-300"
                     }`}
                   >
-                    {/* Grip & Index */}
-                    <div className="w-[46px] shrink-0 h-full flex items-center justify-center gap-1 text-gray-500 group-hover:text-gray-300">
-                      <GripVertical
-                        size={12}
-                        className="shrink-0 opacity-60 group-hover:opacity-100"
-                      />
-                      <span className="font-mono text-[10px] text-gray-400">
-                        {idx + 1}
-                      </span>
-                    </div>
-
                     {/* Title */}
                     <div
                       className="flex-1 min-w-[180px] h-full flex items-center gap-2 font-semibold text-cyan-200 truncate px-3"

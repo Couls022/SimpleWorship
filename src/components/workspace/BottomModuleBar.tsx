@@ -46,6 +46,62 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
   const [editingRouterId, setEditingRouterId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
 
+  // Active Windows & Floating Modals Tracking for System Taskbar
+  const [activeWindows, setActiveWindows] = useState<Array<{ id: string; title: string; type: string; isMinimized?: boolean }>>([]);
+
+  useEffect(() => {
+    const handleWindowOpened = (e: any) => {
+      if (!e.detail?.id) return;
+      setActiveWindows(prev => {
+        const existing = prev.find(w => w.id === e.detail.id);
+        if (existing) {
+          return prev.map(w => w.id === e.detail.id ? { ...w, title: e.detail.title || w.title, isMinimized: Boolean(e.detail.isMinimized) } : w);
+        }
+        return [...prev, { id: e.detail.id, title: e.detail.title || 'Untitled', type: e.detail.type || 'window', isMinimized: Boolean(e.detail.isMinimized) }];
+      });
+    };
+
+    const handleWindowClosed = (e: any) => {
+      if (!e.detail?.id) return;
+      setActiveWindows(prev => prev.filter(w => w.id !== e.detail.id));
+    };
+
+    const handleWindowMinimized = (e: any) => {
+      if (!e.detail?.id) return;
+      setActiveWindows(prev => prev.map(w => w.id === e.detail.id ? { ...w, isMinimized: Boolean(e.detail.isMinimized), title: e.detail.title || w.title } : w));
+    };
+
+    window.addEventListener('simpleworship:window-opened' as any, handleWindowOpened);
+    window.addEventListener('simpleworship:window-closed' as any, handleWindowClosed);
+    window.addEventListener('simpleworship:window-minimized' as any, handleWindowMinimized);
+
+    return () => {
+      window.removeEventListener('simpleworship:window-opened' as any, handleWindowOpened);
+      window.removeEventListener('simpleworship:window-closed' as any, handleWindowClosed);
+      window.removeEventListener('simpleworship:window-minimized' as any, handleWindowMinimized);
+    };
+  }, []);
+
+  const handleFocusEntireSystem = () => {
+    try {
+      window.focus();
+    } catch (e) {}
+
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      try {
+        if (typeof (window as any).electronAPI.focusWindow === 'function') {
+          (window as any).electronAPI.focusWindow();
+        }
+      } catch (e) {}
+    }
+
+    // Bring open active window or all modals to front overlay
+    window.dispatchEvent(new CustomEvent('simpleworship:focus-active-window'));
+    window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+      detail: 'SimpleWorship Active System — Overlaid on Top'
+    }));
+  };
+
   const handleSelectRouter = (routerId: string, routeLabel: string) => {
     setActiveRouterId(routerId);
     const router = routerPanels.find(p => p.routerId === routerId);
@@ -232,8 +288,50 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
         </div>
       </div>
 
-      {/* Right: Master Screen Quick Toggles & Clock */}
-      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+      {/* Right: Active System Taskbar & Open Window Chips & Clock */}
+      <div className="flex items-center gap-2 shrink-0 ml-2">
+        {/* Open Windows / Modal Chips */}
+        {activeWindows.length > 0 && (
+          <div className="flex items-center gap-1 border-r border-[#262c3e] pr-2">
+            {activeWindows.map((win) => (
+              <div
+                key={win.id}
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent('simpleworship:focus-active-window', {
+                    detail: { id: win.id }
+                  }));
+                  window.dispatchEvent(new CustomEvent(`simpleworship:restore-${win.id}`));
+                }}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold border transition-all cursor-pointer shadow-xs select-none ${
+                  win.isMinimized
+                    ? 'bg-[#181a24] hover:bg-[#232737] text-gray-400 border-dashed border-[#3a4155]'
+                    : 'bg-cyan-950/80 hover:bg-cyan-900 text-cyan-200 border-cyan-500/70 ring-1 ring-cyan-500/30'
+                }`}
+                title={win.isMinimized ? `Restore ${win.title} to front` : `Active window: ${win.title} (Click to bring to front)`}
+              >
+                <span className="text-cyan-400 text-[10px]">▶</span>
+                <span className="truncate max-w-[120px] md:max-w-[180px]">{win.title}</span>
+                {win.isMinimized ? (
+                  <span className="text-[9px] text-amber-300 font-mono bg-amber-950/80 px-1 rounded">MIN</span>
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Active System Overlay Button: Brings entire system to front overlay */}
+        <button
+          onClick={handleFocusEntireSystem}
+          className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-sky-950/90 hover:bg-sky-900 border border-sky-500/70 text-sky-200 text-[11px] font-bold transition-all shadow-sm active:scale-95 group cursor-pointer"
+          title="SimpleWorship Active System — Click to overlay and bring to front across all apps"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-125 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+          <span className="tracking-wide hidden xs:inline">SimpleWorship</span>
+          <span className="text-[9px] bg-sky-900/90 text-sky-300 px-1 py-0.2 rounded font-mono uppercase">ACTIVE</span>
+        </button>
+
         {/* Real-time Clock */}
         <ClockDisplay />
       </div>

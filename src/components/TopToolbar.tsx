@@ -1052,6 +1052,9 @@ export default function TopToolbar({
                         onClick={() => {
                           const routeLabel = router.name || targetGroup?.name || `Route ${index + 1}`;
                           useStore.getState().setActiveRouterId(router.routerId);
+                          if (router.targetOutputGroupId) {
+                            useStore.getState().setActiveControlGroupId(router.targetOutputGroupId);
+                          }
                           workspace.setPanelVisibility('live', true);
                           window.dispatchEvent(
                             new CustomEvent('simpleworship:notify', { 
@@ -1295,37 +1298,6 @@ export default function TopToolbar({
                     <span>Backend Engine & System Diagnostics...</span>
                   </span>
                   <span className="text-[10px] text-cyan-400 font-mono">Hub</span>
-                </button>
-                <button 
-                  onClick={() => {
-                    window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
-                      detail: {
-                        presentationName: 'All Presentations & System Library',
-                        autoTriggered: false
-                      }
-                    }));
-                    setActiveMenu(null);
-                  }} 
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-amber-300"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Type size={12} className="text-amber-400" />
-                    <span>Font Scanner & Downloader...</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Scan</span>
-                </button>
-                <button 
-                  onClick={() => {
-                    window.dispatchEvent(new CustomEvent('simpleworship:open-diagnostics', { detail: { tab: 'fonts' } }));
-                    setActiveMenu(null);
-                  }} 
-                  className="w-full text-left px-3 py-1.5 hover:bg-[#323744] hover:text-white flex items-center justify-between text-gray-300"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles size={12} className="text-gray-400" />
-                    <span>Font Auto-Adapt & Dev Simulator...</span>
-                  </span>
-                  <span className="text-[10px] text-gray-400 font-mono">Dev</span>
                 </button>
 
                 <div className="border-t border-[#313540] my-1"></div>

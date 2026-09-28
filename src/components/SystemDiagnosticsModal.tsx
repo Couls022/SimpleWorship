@@ -88,6 +88,17 @@ function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiag
       setServerHealth(healthRes);
       setServerStatus(statusRes);
       if (hardwareRes) {
+        if (statusRes?.hardware) {
+          const sysHw = statusRes.hardware;
+          if (sysHw.isDualGpu || (Array.isArray(sysHw.gpus) && sysHw.gpus.length > 1)) {
+            hardwareRes.isDualGpu = true;
+            if (sysHw.discreteGpu) hardwareRes.discreteGpu = sysHw.discreteGpu;
+            if (sysHw.integratedGpu) hardwareRes.integratedGpu = sysHw.integratedGpu;
+            if (Array.isArray(sysHw.gpus) && (!hardwareRes.gpus || sysHw.gpus.length > hardwareRes.gpus.length)) {
+              hardwareRes.gpus = sysHw.gpus;
+            }
+          }
+        }
         setHwInfo(hardwareRes);
       }
     } catch (e) {
@@ -407,19 +418,56 @@ function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiag
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
                   <div className="bg-[#1a1d26] p-3 rounded-lg border border-[#272d3b] space-y-2">
-                    <div className="font-bold text-white text-xs flex items-center gap-1.5">
-                      <Monitor size={13} className="text-cyan-400" />
-                      <span>Graphics Card & Driver Pipeline</span>
+                    <div className="font-bold text-white text-xs flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Monitor size={13} className="text-cyan-400" />
+                        <span>Graphics Card & Driver Pipeline</span>
+                      </div>
+                      {hwInfo.isDualGpu && (
+                        <span className="text-[10px] bg-cyan-950/90 text-cyan-300 border border-cyan-500/50 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                          Dual GPU Detected
+                        </span>
+                      )}
                     </div>
                     <div className="space-y-1 text-gray-300 font-mono">
-                      <div className="flex justify-between py-1 border-b border-[#252b38]">
-                        <span className="text-gray-400 font-sans">GPU Adapter:</span>
-                        <span className="text-cyan-300 truncate max-w-[240px]">{hwInfo.gpuRenderer}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-[#252b38]">
-                        <span className="text-gray-400 font-sans">Driver Vendor:</span>
-                        <span className="text-white">{hwInfo.gpuVendor}</span>
-                      </div>
+                      {hwInfo.isDualGpu && hwInfo.discreteGpu ? (
+                        <>
+                          <div className="flex justify-between py-1 border-b border-[#252b38]">
+                            <span className="text-gray-400 font-sans flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                              Dedicated GPU:
+                            </span>
+                            <span className="text-cyan-300 font-bold truncate max-w-[210px]" title={hwInfo.discreteGpu.name}>
+                              {hwInfo.discreteGpu.name}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-[#252b38]">
+                            <span className="text-gray-400 font-sans flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                              Integrated GPU:
+                            </span>
+                            <span className="text-blue-200 truncate max-w-[210px]" title={hwInfo.integratedGpu?.name || 'Built-in Display Adapter'}>
+                              {hwInfo.integratedGpu?.name || 'Built-in Display Adapter'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-[#252b38]">
+                            <span className="text-gray-400 font-sans">Graphics Architecture:</span>
+                            <span className="text-white">{hwInfo.gpuVendor} (Dual Graphics)</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between py-1 border-b border-[#252b38]">
+                            <span className="text-gray-400 font-sans">GPU Adapter:</span>
+                            <span className="text-cyan-300 truncate max-w-[240px]" title={hwInfo.gpuRenderer}>{hwInfo.gpuRenderer}</span>
+                          </div>
+                          <div className="flex justify-between py-1 border-b border-[#252b38]">
+                            <span className="text-gray-400 font-sans">Driver Vendor:</span>
+                            <span className="text-white">{hwInfo.gpuVendor}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between py-1 border-b border-[#252b38]">
                         <span className="text-gray-400 font-sans">Zero-Copy GPU Buffer:</span>
                         <span className="text-emerald-400">Enabled (Direct VRAM Write)</span>
@@ -509,10 +557,12 @@ function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiag
                     <span>GPU Vendor</span>
                     <Cpu size={13} className="text-cyan-400" />
                   </div>
-                  <div className="text-sm font-bold text-cyan-300 truncate">
+                  <div className="text-sm font-bold text-cyan-300 truncate" title={hwInfo.gpuDiagnostics?.gpuVendor || hwInfo.gpuVendor}>
                     {hwInfo.gpuDiagnostics?.gpuVendor || hwInfo.gpuVendor}
                   </div>
-                  <div className="text-[10px] text-gray-500">Graphics Hardware Manufacturer</div>
+                  <div className="text-[10px] text-gray-500">
+                    {hwInfo.isDualGpu ? 'Dual Graphics Manufacturers' : 'Graphics Hardware Manufacturer'}
+                  </div>
                 </div>
 
                 <div className="bg-[#14161c] p-3.5 rounded-lg border border-[#2b303e] space-y-1.5">
@@ -523,7 +573,9 @@ function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiag
                   <div className="text-xs font-bold text-white truncate" title={hwInfo.gpuDiagnostics?.gpuDevice || hwInfo.gpuRenderer}>
                     {hwInfo.gpuDiagnostics?.gpuDevice || hwInfo.gpuRenderer}
                   </div>
-                  <div className="text-[10px] text-gray-500">Detected Display Adapter</div>
+                  <div className="text-[10px] text-gray-500">
+                    {hwInfo.isDualGpu ? 'Hybrid Dedicated + Integrated Active' : 'Detected Display Adapter'}
+                  </div>
                 </div>
 
                 <div className="bg-[#14161c] p-3.5 rounded-lg border border-[#2b303e] space-y-1.5">
@@ -575,6 +627,193 @@ function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiag
                 </div>
               </div>
 
+              {/* DUAL GRAPHICS ARCHITECTURE SHOWCASE */}
+              {(hwInfo.isDualGpu || (hwInfo.gpus && hwInfo.gpus.length > 1)) && (
+                <div className="bg-[#14161c] p-4 rounded-lg border border-cyan-500/40 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="text-cyan-400" size={16} />
+                      <h4 className="font-bold text-white text-xs">Dual Graphics Architecture (Multi-GPU System)</h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        Both Dedicated & Integrated GPUs Detected
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* GPU Switcher Mode Selector */}
+                  <div className="bg-[#181b24] p-2 rounded-lg border border-[#272d3b] flex items-center justify-between flex-wrap gap-2">
+                    <div className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                      <Layers size={13} className="text-cyan-400" />
+                      <span>Active Rendering Engine:</span>
+                      <span className="text-emerald-400 font-mono font-bold">
+                        {hwInfo.activeGpu?.name || hwInfo.discreteGpu?.name || hwInfo.gpuRenderer}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          const updated = hardwareProfile.switchGpu('discrete');
+                          setHwInfo({ ...updated });
+                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                            detail: `Switched rendering engine to High-Performance Dedicated GPU!`
+                          }));
+                        }}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
+                          hwInfo.preferredGpuMode === 'discrete' || (!hwInfo.preferredGpuMode && hwInfo.activeGpu?.type === 'discrete')
+                            ? 'bg-amber-500 text-black shadow-md'
+                            : 'bg-[#222736] text-gray-300 hover:text-white hover:bg-[#2b3245]'
+                        }`}
+                        title="Prioritize High-Performance Dedicated GPU for slide rendering and shaders"
+                      >
+                        <Zap size={11} />
+                        <span>Dedicated (High-Performance)</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const updated = hardwareProfile.switchGpu('integrated');
+                          setHwInfo({ ...updated });
+                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                            detail: `Switched rendering engine to Built-in Integrated GPU.`
+                          }));
+                        }}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1 transition-all ${
+                          hwInfo.preferredGpuMode === 'integrated'
+                            ? 'bg-blue-500 text-white shadow-md'
+                            : 'bg-[#222736] text-gray-300 hover:text-white hover:bg-[#2b3245]'
+                        }`}
+                        title="Switch to Power-Saving Built-in Integrated GPU"
+                      >
+                        <Monitor size={11} />
+                        <span>Built-in (Power-Saving)</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const updated = hardwareProfile.switchGpu('auto');
+                          setHwInfo({ ...updated });
+                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                            detail: `GPU preference set to Auto (preferring Dedicated GPU).`
+                          }));
+                        }}
+                        className={`px-2 py-1 rounded text-[11px] font-medium transition-all ${
+                          hwInfo.preferredGpuMode === 'auto'
+                            ? 'bg-cyan-600 text-white font-bold'
+                            : 'bg-[#222736] text-gray-400 hover:text-gray-200'
+                        }`}
+                        title="Automatic mode (prefers Dedicated GPU when available)"
+                      >
+                        Auto
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {/* CARD 1: DEDICATED / DISCRETE GPU */}
+                    <div className={`p-3 rounded-lg border space-y-2 transition-all ${
+                      (hwInfo.activeGpu?.type === 'discrete' || (!hwInfo.activeGpu && hwInfo.discreteGpu))
+                        ? 'bg-[#1e202a] border-amber-500/70 shadow-[0_0_12px_rgba(245,158,11,0.15)] ring-1 ring-amber-500/30'
+                        : 'bg-[#1a1d26] border-amber-500/20 opacity-85'
+                    }`}>
+                      <div className="flex items-center justify-between border-b border-[#2a3040] pb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Zap size={13} className="text-amber-400" />
+                          <span className="text-xs font-bold text-white">Dedicated GPU (High-Performance)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {(hwInfo.activeGpu?.type === 'discrete' || (!hwInfo.activeGpu && hwInfo.discreteGpu)) && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500 text-black font-extrabold uppercase tracking-wider flex items-center gap-0.5">
+                              <CheckCircle2 size={9} /> Active
+                            </span>
+                          )}
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-600/40 font-mono font-bold">
+                            Discrete Adapter
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-1 text-gray-300 font-mono text-[11px]">
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-gray-400 font-sans">Graphics Model:</span>
+                          <span className="text-cyan-300 font-bold truncate max-w-[200px]" title={hwInfo.discreteGpu?.name || 'Dedicated Graphics Adapter'}>
+                            {hwInfo.discreteGpu?.name || 'Dedicated GPU'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-gray-400 font-sans">Manufacturer:</span>
+                          <span className="text-white">{hwInfo.discreteGpu?.vendor || 'NVIDIA / AMD'}</span>
+                        </div>
+                        {hwInfo.discreteGpu?.driverVersion && (
+                          <div className="flex justify-between py-0.5">
+                            <span className="text-gray-400 font-sans">Driver Version:</span>
+                            <span className="text-gray-300">{hwInfo.discreteGpu.driverVersion}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-gray-400 font-sans">Workload Allocation:</span>
+                          <span className="text-emerald-400 font-sans">3D Shaders, Video Decoding & Presentation Core</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 2: INTEGRATED / BUILT-IN GPU */}
+                    <div className={`p-3 rounded-lg border space-y-2 transition-all ${
+                      hwInfo.activeGpu?.type === 'integrated'
+                        ? 'bg-[#1a2332] border-blue-500/70 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
+                        : 'bg-[#1a1d26] border-blue-500/20 opacity-85'
+                    }`}>
+                      <div className="flex items-center justify-between border-b border-[#2a3040] pb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Monitor size={13} className="text-blue-400" />
+                          <span className="text-xs font-bold text-white">Built-in GPU (Integrated Display)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {hwInfo.activeGpu?.type === 'integrated' && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500 text-white font-extrabold uppercase tracking-wider flex items-center gap-0.5">
+                              <CheckCircle2 size={9} /> Active
+                            </span>
+                          )}
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-600/40 font-mono font-bold">
+                            Integrated Adapter
+                          </span>
+                        </div>
+                      </div>
+                      <div className="space-y-1 text-gray-300 font-mono text-[11px]">
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-gray-400 font-sans">Graphics Model:</span>
+                          <span className="text-blue-200 font-semibold truncate max-w-[200px]" title={hwInfo.integratedGpu?.name || 'Integrated Graphics Adapter'}>
+                            {hwInfo.integratedGpu?.name || 'Intel UHD / AMD APU'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-gray-400 font-sans">Manufacturer:</span>
+                          <span className="text-white">{hwInfo.integratedGpu?.vendor || 'Intel / AMD'}</span>
+                        </div>
+                        {hwInfo.integratedGpu?.driverVersion && (
+                          <div className="flex justify-between py-0.5">
+                            <span className="text-gray-400 font-sans">Driver Version:</span>
+                            <span className="text-gray-300">{hwInfo.integratedGpu.driverVersion}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-gray-400 font-sans">Workload Allocation:</span>
+                          <span className="text-cyan-300 font-sans">Windows DWM Compositing & Display Output</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-gray-300 bg-[#161922] p-2.5 rounded border border-[#272d3b] flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                    <span>
+                      Dual graphics detected successfully. SimpleWorship utilizes hardware acceleration across both GPUs: intensive presentation rendering is accelerated by your dedicated GPU, while your built-in graphics handles auxiliary desktop window compositing.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Detailed Technical GPU Diagnostic Table */}
               <div className="bg-[#14161c] p-4 rounded-lg border border-[#2b303e] space-y-4">
                 <h4 className="font-bold text-white text-xs flex items-center gap-2">
@@ -591,6 +830,12 @@ function SystemDiagnosticsModal({ onClose, initialTab = 'hardware' }: SystemDiag
                       <span className="text-gray-400 font-sans">Canvas Acceleration:</span>
                       <span className="text-emerald-400 font-bold">{hwInfo.gpuDiagnostics?.canvasAccelerationStatus || 'GPU Accelerated'}</span>
                     </div>
+                    {hwInfo.isDualGpu && (
+                      <div className="flex justify-between py-1 border-b border-[#252b38]">
+                        <span className="text-gray-400 font-sans">Multi-GPU Configuration:</span>
+                        <span className="text-emerald-400 font-bold">Dual GPU Active (Hybrid)</span>
+                      </div>
+                    )}
                     <div className="flex justify-between py-1 border-b border-[#252b38]">
                       <span className="text-gray-400 font-sans">Current Renderer / Backend:</span>
                       <span className="text-cyan-300 truncate max-w-[220px]" title={hwInfo.gpuDiagnostics?.currentRendererBackend}>

@@ -103,12 +103,14 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
 
         {/* Main Text */}
         <div 
-          className="whitespace-pre-line font-bold max-w-full leading-snug drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]"
+          className="whitespace-pre-line font-bold max-w-full leading-snug drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)] break-words [overflow-wrap:break-word] [word-break:normal]"
           style={{
             ...ThemeEngine.getTextStyle(resolvedStyles, 1),
             fontSize: `${autoFitFontSize}px`,
             textTransform: isUpper ? 'uppercase' : undefined,
             lineHeight: lineSpacing,
+            wordBreak: 'normal',
+            overflowWrap: 'break-word',
           }}
         >
           {isBible && activeSlide.verses && activeSlide.verses.length > 0 ? (

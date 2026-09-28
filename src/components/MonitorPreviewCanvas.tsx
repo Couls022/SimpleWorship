@@ -1009,11 +1009,11 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
           <AnimatePresence>
             {!presentationState.isClear && !presentationState.showLogo && currentSlide && (contentType === 'pptx' || activeItem?.type === 'presentation' || activeItem?.type === 'ppt') && !activeItem?.data?.isNativeRasterized && (
               <motion.div 
-                key={`preview-pptx-deck-${activeItem?.id || activeItem?.contentId || 'deck'}`}
+                key={`preview-pptx-deck-${activeItem?.contentId || activeItem?.id || 'deck'}`}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
                 className="absolute inset-0 z-10 w-full h-full overflow-hidden"
               >
                   <PptxRenderOverlay
@@ -1269,14 +1269,14 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
           {/* Service Interval Countdown Timer for Main Displays */}
           <MainDisplayCountdownOverlay isBlack={presentationState.isBlack} />
 
-          {/* Master Blackout & Standby Overlay (z-50) */}
+          {/* Master Blackout Overlay (z-50) */}
           <AnimatePresence>
-            {(presentationState.isBlack || (isProjectorMode && !presentationState.isLiveEnabled)) && (
+            {presentationState.isBlack && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
                 className="absolute inset-0 z-50 bg-black" 
               />
             )}

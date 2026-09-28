@@ -44,6 +44,11 @@ class PptxErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.warn('[PptxRenderOverlay] Caught rendering error gracefully:', error, errorInfo);
   }
+  override componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.setState({ hasError: false });
+    }
+  }
   override render() {
     if (this.state.hasError) {
       return this.props.fallback || null;
@@ -508,6 +513,12 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
     return { ...blocks.canvasProps.zoom, editorScale: scale };
   }, [blocks.canvasProps?.zoom, effectiveContainerW, effectiveContainerH, canvasWidth, canvasHeight]);
 
+  const lastGoodCanvasPropsRef = useRef<any>(null);
+  if (blocks.canvasProps && !blocks.loading && !blocks.error) {
+    lastGoodCanvasPropsRef.current = blocks.canvasProps;
+  }
+  const effectiveCanvasProps = (blocks.canvasProps && !blocks.error) ? blocks.canvasProps : lastGoodCanvasPropsRef.current;
+
   return (
     <div 
       ref={containerCallbackRef} 
@@ -546,10 +557,10 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
           );
         }
 
-        if (blocks.canvasProps && !blocks.loading && !blocks.error) {
+        if (effectiveCanvasProps && effectiveActiveSlide) {
           return (
             <SlideCanvas 
-              {...blocks.canvasProps} 
+              {...effectiveCanvasProps} 
               activeSlide={effectiveActiveSlide}
               presentationElementStates={!isThumbnail ? mergedElementStates : undefined}
               presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
@@ -592,7 +603,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
 }, (prevProps, nextProps) => {
   return (
     prevProps.activeSlideIndex === nextProps.activeSlideIndex && 
-    prevProps.bytes === nextProps.bytes &&
+    (prevProps.bytes === nextProps.bytes || (prevProps.bytes?.byteLength === nextProps.bytes?.byteLength && prevProps.contentId === nextProps.contentId)) &&
     prevProps.contentId === nextProps.contentId &&
     prevProps.isThumbnail === nextProps.isThumbnail &&
     prevProps.isProjectorMode === nextProps.isProjectorMode &&
@@ -941,8 +952,21 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
   }
 
   if (!localBytes) {
+    if (cachedDeck && cachedDeck.canvasProps) {
+      return (
+        <PptxDirectThumbnail
+          cachedDeck={cachedDeck}
+          slideIndex={activeSlideIndex}
+          contentId={contentId}
+          targetWidth={targetWidth}
+          targetHeight={targetHeight}
+          currentSlide={currentSlide}
+          themeStyles={themeStyles}
+        />
+      );
+    }
     // Only fall back to PresentationSlideView if rich elements/objects exist
-    if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl)) {
+    if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl || currentSlide.text)) {
       return (
         <PresentationSlideView 
           slide={currentSlide} 

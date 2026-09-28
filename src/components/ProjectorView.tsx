@@ -141,10 +141,10 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     };
     window.addEventListener('storage', handleStorage);
 
-    // Electron IPC route update listener
+    // Electron IPC route update listener (only active for unrouted generic display windows)
     if ((window.electronAPI as any)?.onProjectorRouteChanged) {
       (window.electronAPI as any).onProjectorRouteChanged((data: any) => {
-        if (data?.groupId) {
+        if (!routedGroupId && data?.groupId) {
           setCurrentRouteGroupId(data.groupId);
         }
       });
@@ -152,6 +152,9 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
 
     // In-browser custom event listener for route changed
     const handleRouteChanged = (e: any) => {
+      // STRICT ISOLATION: If this window is dedicated to a specific route (e.g. ?groupId=group-r2), never allow route hijacking
+      if (routedGroupId) return;
+
       const targetDisplay = e?.detail?.displayId;
       if (!displayId || !targetDisplay || targetDisplay === displayId) {
         if (e?.detail?.groupId) {
@@ -248,8 +251,16 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       return ['group-stage'];
     }
 
+    // 1. DEDICATED ROUTE WINDOW: If an explicit route was requested for this window (e.g. ?groupId=group-r2)
+    // Strictly isolate this window to ONLY render its designated route!
+    const targetGid = routedGroupId || currentRouteGroupId;
+    if (targetGid && outputGroups.some(g => g.id === targetGid && g.role !== 'confidence' && g.id !== 'group-stage')) {
+      return [targetGid];
+    }
+
     const candidateSet = new Set<string>();
 
+    // 2. If a physical displayId is present, find all routes that explicitly target THIS display
     if (displayId) {
       outputGroups.forEach(g => {
         if (g.role === 'confidence' || g.id === 'group-stage') return;
@@ -259,31 +270,12 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       });
     }
 
-    // Fallback 1: If an explicit route was requested in URL / prop
-    if (currentRouteGroupId || routedGroupId) {
-      const targetGid = currentRouteGroupId || routedGroupId;
-      if (outputGroups.some(g => g.id === targetGid && g.role !== 'confidence' && g.id !== 'group-stage')) {
-        candidateSet.add(targetGid);
-      }
-    }
-
-    // Fallback 2: Any broadcast route without an explicit target assignment can target presentation display
-    outputGroups.forEach(g => {
-      if (g.role !== 'confidence' && g.id !== 'group-stage') {
-        const hasExplicit = (g.displayIds && g.displayIds.length > 0) || Boolean(g.targetDisplayId);
-        if (!hasExplicit) {
-          candidateSet.add(g.id);
-        }
-      }
-    });
-
-    // Fallback 3: Default all broadcast groups
+    // 3. Fallback: If still no candidate, default strictly to Route 1 (group-congregation)
     if (candidateSet.size === 0) {
-      outputGroups.forEach(g => {
-        if (g.role !== 'confidence' && g.id !== 'group-stage') {
-          candidateSet.add(g.id);
-        }
-      });
+      const defaultGroup = outputGroups.find(g => g.id === 'group-congregation') || outputGroups[0];
+      if (defaultGroup && defaultGroup.role !== 'confidence' && defaultGroup.id !== 'group-stage') {
+        candidateSet.add(defaultGroup.id);
+      }
     }
 
     return Array.from(candidateSet);
@@ -291,40 +283,30 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
 
   const groupStates = useStore(state => state.groupStates);
 
-  // Determine all candidate routes currently LIVE on this display
+  // Determine all candidate routes currently LIVE on THIS display
+  // STRICT PIPELINE ISOLATION: Only candidates assigned to this monitor are checked.
+  // Never bleed or display content from unrelated routes across other screens.
   const liveCandidateGroupIds = useMemo(() => {
     if (isStageWindow) {
       return Boolean(groupStates['group-stage']?.isLiveEnabled) ? ['group-stage'] : [];
     }
+    return candidateGroupIds.filter(gid => Boolean(groupStates[gid]?.isLiveEnabled));
+  }, [candidateGroupIds, isStageWindow, groupStates]);
 
-    // 1. Check live state of candidate routes
-    const liveFromCandidates = candidateGroupIds.filter(gid => Boolean(groupStates[gid]?.isLiveEnabled));
-    if (liveFromCandidates.length > 0) return liveFromCandidates;
-
-    // 2. Resilient fallback: If any broadcast group is marked live in groupStates, show it immediately
-    const liveBroadcasts = outputGroups
-      .filter(g => g.role !== 'confidence' && g.id !== 'group-stage' && Boolean(groupStates[g.id]?.isLiveEnabled))
-      .map(g => g.id);
-    if (liveBroadcasts.length > 0) return liveBroadcasts;
-
-    // 3. Any key in groupStates marked live
-    return Object.keys(groupStates || {}).filter(k => k !== 'group-stage' && Boolean(groupStates[k]?.isLiveEnabled));
-  }, [candidateGroupIds, isStageWindow, groupStates, outputGroups]);
-
+  // A display is LIVE only if at least one route belonging to THIS display is currently Live ON
   const isLive = useMemo(() => {
     if (isStageWindow) {
       return Boolean(groupStates['group-stage']?.isLiveEnabled);
     }
-    if (liveCandidateGroupIds.length > 0) return true;
-    return Object.values(groupStates || {}).some(st => Boolean((st as any)?.isLiveEnabled));
-  }, [isStageWindow, liveCandidateGroupIds, groupStates]);
+    return liveCandidateGroupIds.length > 0;
+  }, [isStageWindow, liveCandidateGroupIds]);
 
   // Stacking Resolution:
   // Render live layers in ascending z-index order (bottom to top).
-  // The active control route (activeControlGroupId) must ALWAYS be at the top of the stack (highest z-index),
-  // ensuring the route the operator is actively selecting overlays on top cleanly.
+  // The active control route (activeControlGroupId) or topmost active overlay
+  // must ALWAYS be at the top of the stack (highest z-index).
   const stackedLayers = useMemo(() => {
-    const designatedDefaultId = candidateGroupIds[0] || currentRouteGroupId || routedGroupId || outputGroups[0]?.id || 'group-congregation';
+    const designatedDefaultId = currentRouteGroupId || routedGroupId || candidateGroupIds[0] || 'group-congregation';
 
     if (liveCandidateGroupIds.length === 0) {
       return [{
@@ -345,14 +327,16 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     }
 
     // When 2+ routes are live on this projector display:
-    // Sort so inactive routes come first (lower z-index) and the active control route comes LAST (highest z-index, on top)
+    // Sort so lower priority routes come first (lower z-index)
+    // and the active/most recent route comes LAST (highest z-index, on top)
     const sorted = [...liveCandidateGroupIds].sort((a, b) => {
       if (a === activeControlGroupId) return 1;
       if (b === activeControlGroupId) return -1;
-      // MRU activation stack fallback
       const idxA = routeActivationStack.indexOf(a);
       const idxB = routeActivationStack.indexOf(b);
-      return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+      const rankA = idxA !== -1 ? idxA : 999;
+      const rankB = idxB !== -1 ? idxB : 999;
+      return rankB - rankA;
     });
 
     // The bottom-most layer provides the foundational presentation canvas/background
@@ -363,7 +347,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       isOverlay: idx > 0,
       zIndex: 10 + idx * 10
     }));
-  }, [liveCandidateGroupIds, candidateGroupIds, currentRouteGroupId, routedGroupId, outputGroups, activeControlGroupId, routeActivationStack]);
+  }, [liveCandidateGroupIds, candidateGroupIds, currentRouteGroupId, routedGroupId, activeControlGroupId, routeActivationStack]);
 
   return (
     <div 

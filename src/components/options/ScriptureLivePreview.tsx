@@ -342,88 +342,105 @@ export default function ScriptureLivePreview({
               </>
             )}
 
-            {showReference && refLocation === 'Before Each Slide' && referenceTitle && (
-              <div 
-                className="relative z-10 text-center font-bold uppercase tracking-wider mb-4 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
-                style={{
-                  ...ThemeEngine.getTextStyle(referenceThemeStyles, 1),
-                  fontSize: referenceThemeStyles.fontSize ? `${referenceThemeStyles.fontSize}px` : '36px',
-                  color: referenceThemeStyles.fontColor || '#67E8F9',
-                  textAlign: (referenceThemeStyles.textAlign as any) || 'center',
-                }}
-              >
-                {referenceTitle}
-              </div>
-            )}
-
             {(() => {
               const rawCombinedText = selectedPassage.verses.map(v => v.text).join(' ');
-              const autoFitSize = ThemeEngine.calculateAutoFitFontSize({
-                text: rawCombinedText,
-                baseFontSize: ThemeEngine.normalizeFontSize(scriptureThemeStyles.fontSize || scriptureOptions?.scriptureFont?.maxSize),
-                fontFamily: scriptureThemeStyles.fontFamily,
-                fontWeight: scriptureThemeStyles.fontWeight || (scriptureOptions?.scriptureFont?.bold ? '700' : '400'),
-                fontStyle: scriptureThemeStyles.fontStyle || (scriptureOptions?.scriptureFont?.italic ? 'italic' : 'normal'),
-                hasHeader: showReference && refLocation === 'Before Each Slide',
-                hasFooter: showReference && refLocation === 'After Each Slide',
-                scale: 1,
-                minFontSize: scriptureOptions?.minFontSize || 24,
-                maxFontSize: 160,
-                isUppercase: scriptureOptions?.scriptureFont?.casing === 'uppercase' || scriptureThemeStyles.textTransform === 'uppercase',
-                lineSpacing: scriptureOptions?.lineSpacing || scriptureOptions?.scriptureFont?.lineSpacing || scriptureThemeStyles.lineHeight || 1.35,
-                widthPercent: scriptureThemeStyles.widthPercent,
-                margins: margins,
-                containerWidth: width,
-                containerHeight: height,
-              });
+              const baseFontSize = ThemeEngine.normalizeFontSize(scriptureThemeStyles.fontSize || scriptureOptions?.scriptureFont?.maxSize);
+              const shouldAutoAdjust = scriptureOptions?.autoAdjust ?? true;
+              const hasHeader = showReference && refLocation === 'Before Each Slide' && Boolean(referenceTitle);
+              const hasFooter = showReference && refLocation === 'After Each Slide' && Boolean(referenceTitle);
+
+              const autoFitSize = shouldAutoAdjust 
+                ? ThemeEngine.calculateAutoFitFontSize({
+                    text: rawCombinedText,
+                    baseFontSize,
+                    fontFamily: scriptureThemeStyles.fontFamily,
+                    fontWeight: scriptureThemeStyles.fontWeight || (scriptureOptions?.scriptureFont?.bold ? '700' : '400'),
+                    fontStyle: scriptureThemeStyles.fontStyle || (scriptureOptions?.scriptureFont?.italic ? 'italic' : 'normal'),
+                    hasHeader,
+                    hasFooter,
+                    scale: 1,
+                    minFontSize: scriptureOptions?.minFontSize || 24,
+                    maxFontSize: baseFontSize,
+                    isUppercase: scriptureOptions?.scriptureFont?.casing === 'uppercase' || scriptureThemeStyles.textTransform === 'uppercase',
+                    lineSpacing: scriptureOptions?.lineSpacing || scriptureOptions?.scriptureFont?.lineSpacing || scriptureThemeStyles.lineHeight || 1.35,
+                    widthPercent: scriptureThemeStyles.widthPercent || 90,
+                    margins: margins,
+                    containerWidth: width,
+                    containerHeight: height,
+                  })
+                : baseFontSize;
+
+              const containerAlignmentStyle = ThemeEngine.getContainerAlignmentStyle(scriptureThemeStyles, margins);
+              const cardStyle = ThemeEngine.getCardStyle(scriptureThemeStyles);
 
               return (
-                <div className="relative z-10 my-auto flex flex-col justify-center items-center w-full px-6 py-2 overflow-hidden">
-                  <div 
-                    className="font-bold leading-snug max-w-full drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] whitespace-pre-line"
-                    style={{
-                      ...ThemeEngine.getTextStyle(scriptureThemeStyles, 1),
-                      fontSize: `${autoFitSize}px`,
-                      lineHeight: scriptureOptions?.lineSpacing || scriptureOptions?.scriptureFont?.lineSpacing || 1.35,
-                      fontFamily: scriptureThemeStyles.fontFamily || 'Tahoma, sans-serif',
-                      textAlign: (scriptureThemeStyles.textAlign as any) || 'center',
-                      color: scriptureThemeStyles.fontColor || '#FFFFFF',
-                      textTransform: scriptureOptions?.scriptureFont?.casing === 'uppercase' ? 'uppercase' : undefined,
-                      fontWeight: scriptureThemeStyles.fontWeight || (scriptureOptions?.scriptureFont?.bold ? '700' : '400'),
-                      fontStyle: scriptureThemeStyles.fontStyle || (scriptureOptions?.scriptureFont?.italic ? 'italic' : 'normal'),
-                      textDecoration: scriptureThemeStyles.textDecoration || (scriptureOptions?.scriptureFont?.underline ? 'underline' : 'none'),
-                    }}
+                <div 
+                  className="relative z-10 flex-1 w-full h-full overflow-hidden"
+                  style={containerAlignmentStyle}
+                >
+                  <div
+                    className={cardStyle.className}
+                    style={cardStyle.style}
                   >
-                    {selectedPassage.verses.map((v, idx) => {
-                      const isSuper = verseNumberStyle === 'superscript';
-                      return (
-                        <span key={v.verse} className="inline">
-                          {showVerseNumbers && (
-                            <span 
-                              className={`inline-block select-none transition-colors ${isSuper ? 'mr-1.5 align-super' : 'mr-2.5'}`}
-                              style={{ 
-                                color: verseColor,
-                                fontFamily: scriptureOptions?.verseFont?.family || scriptureOptions?.scriptureFont?.family || 'Tahoma, sans-serif',
-                                fontSize: verseThemeStyles?.fontSize 
-                                  ? `${verseThemeStyles.fontSize}px` 
-                                  : isSuper 
-                                    ? `${Math.max(12, Math.round(autoFitSize * 0.72))}px` 
-                                    : `${Math.max(14, Math.round(autoFitSize * 0.85))}px`,
-                                fontWeight: verseThemeStyles?.fontWeight || (scriptureOptions?.verseFont?.bold ? '700' : '400'),
-                                fontStyle: verseThemeStyles?.fontStyle || (scriptureOptions?.verseFont?.italic ? 'italic' : 'normal'),
-                                textDecoration: verseThemeStyles?.textDecoration || (scriptureOptions?.verseFont?.underline ? 'underline' : 'none'),
-                                verticalAlign: isSuper ? 'super' : 'baseline',
-                                lineHeight: 1,
-                              }}
-                            >
-                              {formatVerseNumber(v.verse, verseNumberStyle)}
-                            </span>
-                          )}
-                          <span>{v.text}</span>
-                          {idx < selectedPassage.verses.length - 1 && ' '}
-                        </span>
-                      );
-                    })}
+                    {hasHeader && (
+                      <h2 
+                        className="text-center font-bold uppercase tracking-wider mb-4 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
+                        style={{
+                          ...ThemeEngine.getTextStyle(referenceThemeStyles, 1),
+                          fontSize: referenceThemeStyles.fontSize ? `${referenceThemeStyles.fontSize}px` : '36px',
+                          color: referenceThemeStyles.fontColor || '#67E8F9',
+                          textAlign: (referenceThemeStyles.textAlign as any) || 'center',
+                        }}
+                      >
+                        {referenceTitle}
+                      </h2>
+                    )}
+                    <div 
+                      className="font-bold leading-snug max-w-full drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] whitespace-pre-line"
+                      style={{
+                        ...ThemeEngine.getTextStyle(scriptureThemeStyles, 1),
+                        fontSize: `${autoFitSize}px`,
+                        lineHeight: scriptureOptions?.lineSpacing || scriptureOptions?.scriptureFont?.lineSpacing || 1.35,
+                        fontFamily: scriptureThemeStyles.fontFamily || 'Tahoma, sans-serif',
+                        textAlign: (scriptureThemeStyles.textAlign as any) || 'center',
+                        color: scriptureThemeStyles.fontColor || '#FFFFFF',
+                        textTransform: scriptureOptions?.scriptureFont?.casing === 'uppercase' ? 'uppercase' : undefined,
+                        fontWeight: scriptureThemeStyles.fontWeight || (scriptureOptions?.scriptureFont?.bold ? '700' : '400'),
+                        fontStyle: scriptureThemeStyles.fontStyle || (scriptureOptions?.scriptureFont?.italic ? 'italic' : 'normal'),
+                        textDecoration: scriptureThemeStyles.textDecoration || (scriptureOptions?.scriptureFont?.underline ? 'underline' : 'none'),
+                      }}
+                    >
+                      {selectedPassage.verses.map((v, idx) => {
+                        const isSuper = verseNumberStyle === 'superscript';
+                        return (
+                          <span key={v.verse} className="inline">
+                            {showVerseNumbers && (
+                              <span 
+                                className={`inline-block select-none transition-colors ${isSuper ? 'mr-1.5 align-super' : 'mr-2.5'}`}
+                                style={{ 
+                                  color: verseColor,
+                                  fontFamily: scriptureOptions?.verseFont?.family || scriptureOptions?.scriptureFont?.family || 'Tahoma, sans-serif',
+                                  fontSize: verseThemeStyles?.fontSize 
+                                    ? `${verseThemeStyles.fontSize}px` 
+                                    : isSuper 
+                                      ? `${Math.max(12, Math.round(autoFitSize * 0.72))}px` 
+                                      : `${Math.max(14, Math.round(autoFitSize * 0.85))}px`,
+                                  fontWeight: verseThemeStyles?.fontWeight || (scriptureOptions?.verseFont?.bold ? '700' : '400'),
+                                  fontStyle: verseThemeStyles?.fontStyle || (scriptureOptions?.verseFont?.italic ? 'italic' : 'normal'),
+                                  textDecoration: verseThemeStyles?.textDecoration || (scriptureOptions?.verseFont?.underline ? 'underline' : 'none'),
+                                  verticalAlign: isSuper ? 'super' : 'baseline',
+                                  lineHeight: 1,
+                                }}
+                              >
+                                {formatVerseNumber(v.verse, verseNumberStyle)}
+                              </span>
+                            )}
+                            <span>{v.text}</span>
+                            {idx < selectedPassage.verses.length - 1 && ' '}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               );

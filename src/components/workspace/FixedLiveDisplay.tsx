@@ -23,12 +23,10 @@ import { useMediaProgressStore } from '../../store/useMediaProgressStore';
 import MonitorPreviewCanvas from '../MonitorPreviewCanvas';
 import { resolveGroupResolution } from '../../core/RenderFrameBuilder';
 import { DisplayManager } from '../../core/DisplayManager';
-import RouteConfigModal from '../RouteConfigModal';
 import { PresentationCore } from '../../core/PresentationCore';
 import { ThemeEngine } from '../../core/ThemeEngine';
 import { PresentationContentResolver } from '../../core/PresentationContentResolver';
 import { processDroppedFileList } from '../../utils/fileDropHandler';
-import { Settings } from 'lucide-react';
 
 interface FixedLiveDisplayProps {
   forcedGroupId?: string;
@@ -47,7 +45,6 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
   
   const [displayTargetId, setDisplayTargetId] = useState<string>('follow-target');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   // Determine which groupId to actually display
@@ -195,29 +192,7 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             {isBlack ? '• BLACKOUT' : isClear ? '• CLEARED' : isLogo ? '• LOGO' : isLive ? '• MIRRORING CANVAS' : '• STANDBY'}
           </span>
         </div>
-
-        {/* Right: Aspect Tag, Settings */}
-        <div className="flex items-center gap-1.5 shrink-0 overflow-visible">
-          {/* Aspect ratio tag */}
-          <span 
-            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1b1e29] text-gray-300 border border-[#2b3042] shrink-0 hidden min-[600px]:inline-block"
-            title={`Resolution Aspect: ${resInfo.aspectLabel} (${resInfo.width}×${resInfo.height})`}
-          >
-            {resInfo.aspectLabel}
-          </span>
-
-          {/* Configure Route Settings button */}
-          <button
-            onClick={() => setIsConfigOpen(true)}
-            className="p-1.5 rounded hover:bg-[#252937] text-gray-400 hover:text-white transition-colors cursor-pointer"
-            title="Configure Output Route"
-          >
-            <Settings size={13} />
-          </button>
-        </div>
       </div>
-
-      {isConfigOpen && <RouteConfigModal groupId={effectiveGroupId} onClose={() => setIsConfigOpen(false)} />}
 
       {/* Main Screen Canvas Frame */}
       <div 

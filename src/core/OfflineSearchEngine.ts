@@ -158,6 +158,48 @@ export class OfflineSearchEngine {
   }
 
   /**
+   * Natural alphanumeric comparator for song titles:
+   * 1. Titles starting with numbers ALWAYS precede letters (0-9 before A-Z).
+   * 2. Single digit numbers (1-9) ALWAYS precede double digits (10-99), which precede triple digits (100-999).
+   * 3. Uses standard natural numeric collation for the rest of the string.
+   */
+  static compareTitles(a?: string | null, b?: string | null): number {
+    const strA = (a || '').trim();
+    const strB = (b || '').trim();
+
+    if (!strA && !strB) return 0;
+    if (!strA) return 1;
+    if (!strB) return -1;
+
+    // Strip leading decorations/symbols like #, (, [, ', ", `, <, >, -, .
+    const cleanA = strA.replace(/^[#(\[\x27"`<>\-.\s]+/, '');
+    const cleanB = strB.replace(/^[#(\[\x27"`<>\-.\s]+/, '');
+
+    const aStartsWithNum = /^\d/.test(cleanA);
+    const bStartsWithNum = /^\d/.test(cleanB);
+
+    // Rule 1: Numbers always come BEFORE letters/words
+    if (aStartsWithNum && !bStartsWithNum) return -1;
+    if (!aStartsWithNum && bStartsWithNum) return 1;
+
+    // Rule 2: If both start with numbers, compare the leading numeric values:
+    // This guarantees single digits (1..9) < double digits (10..99) < triple digits (100..999)
+    if (aStartsWithNum && bStartsWithNum) {
+      const matchA = cleanA.match(/^(\d+)/);
+      const matchB = cleanB.match(/^(\d+)/);
+      const numA = matchA ? parseInt(matchA[1], 10) : 0;
+      const numB = matchB ? parseInt(matchB[1], 10) : 0;
+
+      if (numA !== numB) {
+        return numA - numB;
+      }
+    }
+
+    // Rule 3: Use Intl.Collator natural numeric comparison
+    return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  /**
    * Search songs with tiered ranking, partial token matching, lyrics & metadata inspection.
    */
   static searchSongs(
@@ -184,9 +226,10 @@ export class OfflineSearchEngine {
       candidateSongs = songs.filter(s => this.getNormalizedCategory(s) === categoryFilter);
     }
 
-    // Empty query returns all candidate songs in natural order
+    // Empty query returns all candidate songs in natural title order (numbers first, single < double < triple digits, then letters A-Z)
     if (!qNorm || qTokens.length === 0) {
-      return candidateSongs.map(song => ({
+      const sortedCandidates = [...candidateSongs].sort((a, b) => this.compareTitles(a.title, b.title));
+      return sortedCandidates.map(song => ({
         song,
         score: 0,
         matchReasons: ['default']
@@ -214,90 +257,105 @@ export class OfflineSearchEngine {
       const ccliStr = idx.ccliStr;
       const tagsStr = idx.tagsStr;
 
-      // 1. Song Number Match (Tier 1: 1000 - 1500)
-      if (queryNum !== null && songNumber !== null) {
+      if (isNumericQuery && queryNum !== null) {
+        // --- 1. ACCURATE NUMERIC SEARCH ---
+        // A. Exact Song Number Match (Tier 1: 2000)
         if (songNumber === queryNum) {
-          score += 1500;
+          score += 2000;
           matchReasons.push(`Song #${songNumber} exact number match`);
-        } else if (songNumber.toString().startsWith(queryNum.toString())) {
-          score += 600;
-          matchReasons.push(`Song #${songNumber} starts with ${queryNum}`);
         }
-      }
 
-      // 2. Exact Title Match (Tier 2: 500)
-      if (titleNorm === qNorm || titleCleanedNorm === qNorm) {
-        score += 500;
-        matchReasons.push('Exact title match');
-      } else if (titleNorm.startsWith(qNorm) || titleCleanedNorm.startsWith(qNorm)) {
-        // 3. Title starts with query (Tier 3: 400)
-        score += 400;
-        matchReasons.push('Title starts with query');
-      } else if (titleNorm.includes(qNorm) || titleCleanedNorm.includes(qNorm)) {
-        // 4. Title contains entire query phrase (Tier 4: 300)
-        score += 300;
-        matchReasons.push('Title contains phrase');
-      }
+        // B. Title starts with this exact number prefix (e.g., "1. Amazing Grace", "#1 Song", but NOT "11" or "10,000")
+        const titleNumMatch = (song.title || '').trim().match(/^#?(\d+)(?:\D|$)/);
+        if (titleNumMatch && parseInt(titleNumMatch[1], 10) === queryNum) {
+          score += 1800;
+          matchReasons.push(`Title starts with song number ${queryNum}`);
+        }
 
-      // 5. Title contains all tokens (Tier 5: 200)
-      if (qTokens.length > 1 && (
-        qTokens.every(t => titleTokens.includes(t) || titleNorm.includes(t)) ||
-        qTokens.every(t => titleCleanedTokens.includes(t) || titleCleanedNorm.includes(t))
-      )) {
-        score += 220;
-        matchReasons.push('All words present in title');
-      }
+        // C. Distinct standalone number token in title (e.g. "Psalm 23" when searching 23)
+        if (titleTokens.includes(queryNum.toString()) || titleCleanedTokens.includes(queryNum.toString())) {
+          score += 1500;
+          matchReasons.push(`Title contains number ${queryNum}`);
+        }
 
-      // 6. Exact Lyric Phrase Match (Tier 6: 150)
-      if (lyricsNorm.includes(qNorm)) {
-        score += 150;
-        matchReasons.push('Exact lyric phrase match');
-      }
+        // D. Comma-separated or clean numeric equivalence (e.g. searching "10000" matches "10,000 Reasons")
+        const cleanTitleDigits = (song.title || '').replace(/[^\d]/g, '');
+        if (cleanTitleDigits && parseInt(cleanTitleDigits, 10) === queryNum) {
+          score += 1200;
+          matchReasons.push(`Number match ${queryNum}`);
+        }
+      } else {
+        // --- 2. ACCURATE TITLE, WORDS, AND LYRICS SEARCH ---
+        // A. Exact Title Match
+        if (titleNorm === qNorm || titleCleanedNorm === qNorm) {
+          score += 1500;
+          matchReasons.push('Exact title match');
+        } else if (titleNorm.startsWith(qNorm) || titleCleanedNorm.startsWith(qNorm)) {
+          // B. Title starts with query phrase
+          score += 1200;
+          matchReasons.push('Title starts with query');
+        } else if (titleNorm.includes(qNorm) || titleCleanedNorm.includes(qNorm)) {
+          // C. Title contains entire query phrase
+          score += 1000;
+          matchReasons.push('Title contains phrase');
+        } else if (
+          qTokens.length > 1 &&
+          (qTokens.every((t) => titleTokens.some((tt) => tt.startsWith(t) || tt === t) || titleNorm.includes(t)) ||
+            qTokens.every((t) => titleCleanedTokens.some((tt) => tt.startsWith(t) || tt === t) || titleCleanedNorm.includes(t)))
+        ) {
+          // D. All search words present in title
+          score += 800;
+          matchReasons.push('All query words in title');
+        }
 
-      // 7. Multi-word lyrics / sections token match (Tier 7: 100)
-      const allTokensInLyrics = qTokens.every(t => 
-        lyricsTokens.includes(t) || 
-        lyricsNorm.includes(t) || 
-        titleTokens.includes(t)
-      );
+        // E. Exact Lyric Phrase Match
+        if (qNorm.length >= 3 && lyricsNorm.includes(qNorm)) {
+          score += 600;
+          matchReasons.push('Exact lyric phrase match');
+        } else if (
+          qTokens.length > 1 &&
+          qTokens.every((t) => lyricsNorm.includes(t) || lyricsTokens.includes(t))
+        ) {
+          // F. All search words present in lyrics
+          score += 400;
+          matchReasons.push('All query words present in lyrics');
+        } else if (
+          qTokens.length === 1 &&
+          qNorm.length >= 3 &&
+          lyricsTokens.includes(qNorm)
+        ) {
+          // G. Exact whole word match in lyrics
+          score += 300;
+          matchReasons.push('Exact word found in lyrics');
+        }
 
-      if (allTokensInLyrics && qTokens.length > 1) {
-        score += 100;
-        matchReasons.push('All query words in lyrics/content');
-      }
+        // H. Author / Composer Match
+        if (authorNorm.includes(qNorm)) {
+          score += 250;
+          matchReasons.push('Author/composer match');
+        } else if (qTokens.length > 1 && qTokens.every((t) => authorNorm.includes(t))) {
+          score += 180;
+          matchReasons.push('Author token match');
+        }
 
-      // 8. Author / Composer Match (Tier 8: 80)
-      if (authorNorm.includes(qNorm)) {
-        score += 80;
-        matchReasons.push('Author/composer match');
-      } else if (qTokens.length > 1 && qTokens.every(t => authorNorm.includes(t))) {
-        score += 60;
-        matchReasons.push('Author token match');
-      }
+        // I. CCLI Match
+        if (ccliStr && (ccliStr === qNorm || ccliStr.includes(qNorm))) {
+          score += 200;
+          matchReasons.push(`CCLI #${ccliStr} match`);
+        }
 
-      // 9. CCLI match
-      if (ccliStr && (ccliStr === qNorm || ccliStr.includes(qNorm))) {
-        score += 90;
-        matchReasons.push(`CCLI #${ccliStr} match`);
-      }
+        // J. Tags or Category Match
+        if (tagsStr.includes(qNorm) || (song.category && song.category.toLowerCase().includes(qNorm))) {
+          score += 150;
+          matchReasons.push('Category / Tag match');
+        }
 
-      // 10. Tags or Category match
-      if (tagsStr.includes(qNorm) || (song.category && song.category.toLowerCase().includes(qNorm))) {
-        score += 50;
-        matchReasons.push('Category / Tag match');
-      }
-
-      // 11. Partial token match fallback (if single token matches start of words)
-      if (score === 0) {
-        const anyTitleTokenPartial = qTokens.some(qt => titleTokens.some(tt => tt.startsWith(qt) || tt.includes(qt)));
-        const anyLyricTokenPartial = qTokens.some(qt => lyricsTokens.some(lt => lt.startsWith(qt)));
-
-        if (anyTitleTokenPartial) {
-          score += 40;
-          matchReasons.push('Partial title match');
-        } else if (anyLyricTokenPartial) {
-          score += 20;
-          matchReasons.push('Partial lyric match');
+        // K. Prefix match on title words only (for fast typing in search box, e.g. "vic" matches "Victory")
+        if (score === 0 && qNorm.length >= 2) {
+          if (qTokens.every((qt) => titleTokens.some((tt) => tt.startsWith(qt)) || titleCleanedTokens.some((tt) => tt.startsWith(qt)))) {
+            score += 100;
+            matchReasons.push('Title prefix match');
+          }
         }
       }
 
@@ -306,12 +364,12 @@ export class OfflineSearchEngine {
       }
     }
 
-    // Sort descending by score, then ascending by song title
+    // Sort descending by score, then ascending by song title with natural title comparison
     scoredResults.sort((a, b) => {
       if (b.score !== a.score) {
         return b.score - a.score;
       }
-      return a.song.title.localeCompare(b.song.title);
+      return this.compareTitles(a.song.title, b.song.title);
     });
 
     return scoredResults;

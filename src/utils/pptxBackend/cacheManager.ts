@@ -93,6 +93,10 @@ export class PptxRenderCacheManager {
 
         for (const key of allKeys) {
           if (!key) continue;
+          if (this.canonicalFrames.size > 300) {
+            const oldest = this.canonicalFrames.keys().next().value;
+            if (oldest) this.canonicalFrames.delete(oldest);
+          }
           this.canonicalFrames.set(`${key}_slide_${slide.slideIndex}`, canonical);
         }
       });
@@ -145,7 +149,12 @@ export class PptxRenderCacheManager {
       const mem = this.getSessionFromMemory(cacheKey);
       if (mem) return mem;
       const db = await getDB();
-      const cached = await db.get('assets', `pptx_rendered_${cacheKey}`);
+      // Try settings store first (clean isolation from media library assets)
+      let cached = await db.get('settings', `pptx_rendered_${cacheKey}`).catch(() => null);
+      if (!cached) {
+        // Fallback to check if it was stored in assets in older sessions
+        cached = await db.get('assets', `pptx_rendered_${cacheKey}`).catch(() => null);
+      }
       if (cached && cached.data?.session) {
         this.setSessionInMemory(cacheKey, cached.data.session);
         return cached.data.session;
@@ -158,14 +167,26 @@ export class PptxRenderCacheManager {
     this.setSessionInMemory(cacheKey, session);
     try {
       const db = await getDB();
-      await db.put('assets', {
+      // Store in 'settings' table to ensure zero pollution of the user's Media Library
+      await db.put('settings', {
         id: `pptx_rendered_${cacheKey}`,
-        name: `PPTX Rendered Cache ${cacheKey}`,
-        type: 'image',
-        url: session.slides[0]?.dataUrl || '',
         createdAt: Date.now(),
         data: { session }
       });
+      // If an old copy existed in 'assets', remove it immediately
+      await db.delete('assets', `pptx_rendered_${cacheKey}`).catch(() => {});
+    } catch (e) {}
+  }
+
+  public static async purgeLegacyCacheFromAssets(): Promise<void> {
+    try {
+      const db = await getDB();
+      const keys = await db.getAllKeys('assets');
+      for (const k of keys) {
+        if (typeof k === 'string' && (k.startsWith('pptx_rendered_') || k.startsWith('cache_'))) {
+          await db.delete('assets', k).catch(() => {});
+        }
+      }
     } catch (e) {}
   }
 
@@ -181,7 +202,8 @@ export class PptxRenderCacheManager {
       }
       try {
         const db = await getDB();
-        await db.delete('assets', `pptx_rendered_${cacheKey}`);
+        await db.delete('settings', `pptx_rendered_${cacheKey}`).catch(() => {});
+        await db.delete('assets', `pptx_rendered_${cacheKey}`).catch(() => {});
       } catch (e) {}
     } else {
       this.memoryCache.clear();

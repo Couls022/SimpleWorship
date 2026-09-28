@@ -147,8 +147,11 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
       return false;
     }
 
-    // Otherwise, broadcast routes target standard presentation screens
-    return true;
+    // Pipeline Isolation: Only the primary default route (Route 1 / group-congregation)
+    // targets standard presentation screens by default when no displays are explicitly locked.
+    // Secondary routes (Route 2, Route 3...) must be explicitly configured to target displays,
+    // preventing unconfigured routes from bleeding onto main auditorium screens.
+    return group.id === 'group-congregation';
   }
 
   const displays = cachedDisplays || 

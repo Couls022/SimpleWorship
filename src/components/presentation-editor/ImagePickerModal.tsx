@@ -15,6 +15,7 @@ import {
 import { Asset } from '../../types';
 import { dbApi } from '../../db';
 import { defaultAssets } from '../../db/seedData';
+import { isMediaLibraryAsset } from '../../db/assets';
 import { useStore } from '../../store/useStore';
 
 interface ImagePickerModalProps {
@@ -59,7 +60,7 @@ const ImagePickerModalBase = ({
       dbApi.getAllAssets()
         .then((assets) => {
           const imageAssets = (assets && assets.length > 0 ? assets : defaultAssets).filter(
-            (a) => a.type === 'image' || a.type === 'motion' || a.thumbnail
+            (a) => isMediaLibraryAsset(a) && (a.type === 'image' || a.type === 'motion' || (a as any).thumbnail)
           );
           setLibraryAssets(imageAssets);
         })

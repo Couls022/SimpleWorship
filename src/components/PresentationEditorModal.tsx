@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { withPortal } from './common/withPortal';
 import {
   X,
+  Minus,
+  ExternalLink,
   Plus,
   Trash2,
   Copy,
@@ -218,7 +222,7 @@ function ensureObjectsOnSlide(slide: Slide): Slide {
   };
 }
 
-export function PresentationEditorModal({
+export function PresentationEditorModalInner({
   presentation,
   onClose,
   onSaved,
@@ -227,6 +231,7 @@ export function PresentationEditorModal({
   const goLiveItem = useStore(state => state.goLiveItem);
 
   const [deckName, setDeckName] = useState(presentation?.name || 'New Presentation Deck');
+  const [currentPresentationId, setCurrentPresentationId] = useState<string | undefined>(presentation?.id);
   const [activeRibbonTab, setActiveRibbonTab] = useState<RibbonTab>('home');
   const [inspectorTab, setInspectorTab] = useState<'format' | 'animations' | 'transition' | 'theme'>('format');
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -244,6 +249,38 @@ export function PresentationEditorModal({
   const pptxImportFileInputRef = useRef<HTMLInputElement>(null);
   const [isImportingPptx, setIsImportingPptx] = useState(false);
 
+  // Floating Window Drag, 8-Directional Resize, Pop-Out & Window Management
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isActiveWindow, setIsActiveWindow] = useState(true);
+  const [isPoppedOut, setIsPoppedOut] = useState(false);
+  const [isSlideshowActive, setIsSlideshowActive] = useState(false); // Slideshow preview mode (F5)
+  const popoutRef = useRef<Window | null>(null);
+
+  const [windowPos, setWindowPos] = useState<{ x: number; y: number } | null>(null);
+  const [windowSize, setWindowSize] = useState<{ width: number; height: number }>({
+    width: typeof window !== 'undefined' ? Math.min(1360, Math.max(900, window.innerWidth - 40)) : 1280,
+    height: typeof window !== 'undefined' ? Math.min(880, Math.max(600, window.innerHeight - 50)) : 800,
+  });
+  const [isDraggingWindow, setIsDraggingWindow] = useState(false);
+  const [resizeDirection, setResizeDirection] = useState<'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null>(null);
+
+  const windowDragStartRef = useRef<{
+    mouseX: number;
+    mouseY: number;
+    initialX: number;
+    initialY: number;
+    initialW: number;
+    initialH: number;
+  }>({
+    mouseX: 0,
+    mouseY: 0,
+    initialX: 0,
+    initialY: 0,
+    initialW: 1280,
+    initialH: 800,
+  });
+
   // Resizable & Collapsible Panels State
   const [leftWidth, setLeftWidth] = useState<number>(260); // Left thumbnail deck width
   const [rightWidth, setRightWidth] = useState<number>(300); // Right inspector width
@@ -251,6 +288,218 @@ export function PresentationEditorModal({
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
   const [isDraggingLeftDivider, setIsDraggingLeftDivider] = useState(false);
   const [isDraggingRightDivider, setIsDraggingRightDivider] = useState(false);
+
+  // Center window on initial load
+  useEffect(() => {
+    if (windowPos === null && typeof window !== 'undefined') {
+      const x = Math.max(10, Math.round((window.innerWidth - windowSize.width) / 2));
+      const y = Math.max(10, Math.round((window.innerHeight - windowSize.height) / 2));
+      setWindowPos({ x, y });
+    }
+  }, [windowPos, windowSize.width, windowSize.height]);
+
+  // Handle Dragging and 8-Directional Resizing
+  useEffect(() => {
+    if (!isDraggingWindow && !resizeDirection) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingWindow) {
+        const dx = e.clientX - windowDragStartRef.current.mouseX;
+        const dy = e.clientY - windowDragStartRef.current.mouseY;
+        const newX = windowDragStartRef.current.initialX + dx;
+        const newY = windowDragStartRef.current.initialY + dy;
+        const minX = -(windowSize.width - 120);
+        const maxX = window.innerWidth - 120;
+        const minY = 0;
+        const maxY = window.innerHeight - 50;
+        setWindowPos({
+          x: Math.min(maxX, Math.max(minX, newX)),
+          y: Math.min(maxY, Math.max(minY, newY)),
+        });
+      } else if (resizeDirection) {
+        const dx = e.clientX - windowDragStartRef.current.mouseX;
+        const dy = e.clientY - windowDragStartRef.current.mouseY;
+        const { initialX, initialY, initialW, initialH } = windowDragStartRef.current;
+
+        let newW = initialW;
+        let newH = initialH;
+        let newX = initialX;
+        let newY = initialY;
+
+        // East (Right)
+        if (resizeDirection.includes('e')) {
+          newW = Math.max(680, Math.min(window.innerWidth - 8, initialW + dx));
+        }
+        // South (Bottom)
+        if (resizeDirection.includes('s')) {
+          newH = Math.max(480, Math.min(window.innerHeight - 8, initialH + dy));
+        }
+        // West (Left)
+        if (resizeDirection.includes('w')) {
+          const maxDeltaW = initialW - 680;
+          const clampedDx = Math.min(maxDeltaW, dx);
+          newW = initialW - clampedDx;
+          newX = initialX + clampedDx;
+        }
+        // North (Top)
+        if (resizeDirection.includes('n')) {
+          const maxDeltaH = initialH - 480;
+          const clampedDy = Math.min(maxDeltaH, dy);
+          newH = initialH - clampedDy;
+          newY = initialY + clampedDy;
+        }
+
+        setWindowSize({ width: newW, height: newH });
+        setWindowPos({ x: newX, y: newY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingWindow(false);
+      setResizeDirection(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingWindow, resizeDirection, windowSize.width, windowSize.height]);
+
+  // Handle External Popout Window (Detach to separate monitor or native window)
+  const handlePopOutWindow = () => {
+    if (isPoppedOut && popoutRef.current && !popoutRef.current.closed) {
+      popoutRef.current.focus();
+      return;
+    }
+
+    const w = Math.min(1400, window.screen.availWidth - 80);
+    const h = Math.min(900, window.screen.availHeight - 80);
+    const left = Math.max(40, window.screenX + 40);
+    const top = Math.max(40, window.screenY + 40);
+
+    const popout = window.open(
+      '',
+      'SimpleWorshipPresentationEditor',
+      `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no,resizable=yes`
+    );
+
+    if (popout) {
+      popout.document.title = `Presentation Deck Editor - [${deckName || 'Untitled'}] - SimpleWorship`;
+
+      Array.from(document.querySelectorAll('link[rel="stylesheet"], style')).forEach((node) => {
+        popout.document.head.appendChild(node.cloneNode(true));
+      });
+
+      popout.document.body.style.margin = '0';
+      popout.document.body.style.backgroundColor = '#0b0f19';
+      popout.document.body.style.overflow = 'hidden';
+      popout.document.body.className = 'dark select-none';
+
+      popoutRef.current = popout;
+      setIsPoppedOut(true);
+
+      const handlePopoutClose = () => {
+        setIsPoppedOut(false);
+        popoutRef.current = null;
+      };
+
+      popout.addEventListener('beforeunload', handlePopoutClose);
+      popout.focus();
+    }
+  };
+
+  // Close external popup when unmounting
+  useEffect(() => {
+    return () => {
+      if (popoutRef.current && !popoutRef.current.closed) {
+        popoutRef.current.close();
+      }
+    };
+  }, []);
+
+  // Broadcast window state to System Taskbar & Listen for Focus / Restore
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('simpleworship:window-opened', {
+      detail: { id: 'presentation-editor', title: deckName || 'Presentation Editor', type: 'presentation-editor', isMinimized }
+    }));
+
+    const handleFocusActiveWindow = (e: any) => {
+      if (!e?.detail?.id || e.detail.id === 'presentation-editor') {
+        setIsMinimized(false);
+        setIsActiveWindow(true);
+        if (isPoppedOut && popoutRef.current && !popoutRef.current.closed) {
+          popoutRef.current.focus();
+        }
+      }
+    };
+
+    const handleRestorePresentation = () => {
+      setIsMinimized(false);
+      setIsActiveWindow(true);
+      if (isPoppedOut && popoutRef.current && !popoutRef.current.closed) {
+        popoutRef.current.focus();
+      }
+    };
+
+    const handleToggleMinimize = () => {
+      setIsMinimized(prev => !prev);
+    };
+
+    window.addEventListener('simpleworship:focus-active-window', handleFocusActiveWindow);
+    window.addEventListener('simpleworship:restore-presentation-editor', handleRestorePresentation);
+    window.addEventListener('simpleworship:toggle-minimize-presentation-editor', handleToggleMinimize);
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('simpleworship:window-closed', {
+        detail: { id: 'presentation-editor' }
+      }));
+      window.removeEventListener('simpleworship:focus-active-window', handleFocusActiveWindow);
+      window.removeEventListener('simpleworship:restore-presentation-editor', handleRestorePresentation);
+      window.removeEventListener('simpleworship:toggle-minimize-presentation-editor', handleToggleMinimize);
+    };
+  }, [deckName, isMinimized, isPoppedOut]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('simpleworship:window-minimized', {
+      detail: { id: 'presentation-editor', isMinimized, title: deckName || 'Presentation Editor' }
+    }));
+  }, [isMinimized, deckName]);
+
+  const handleTitleBarMouseDown = (e: React.MouseEvent) => {
+    if (isMaximized) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('input') || target.closest('select')) {
+      return;
+    }
+    e.preventDefault();
+    setIsActiveWindow(true);
+    setIsDraggingWindow(true);
+    windowDragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      initialX: windowPos?.x ?? 20,
+      initialY: windowPos?.y ?? 20,
+      initialW: windowSize.width,
+      initialH: windowSize.height,
+    };
+  };
+
+  const handleResizeStart = (direction: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsActiveWindow(true);
+    setResizeDirection(direction);
+    windowDragStartRef.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      initialX: windowPos?.x ?? 20,
+      initialY: windowPos?.y ?? 20,
+      initialW: windowSize.width,
+      initialH: windowSize.height,
+    };
+  };
 
   // Initialize Slides
   const [slides, setSlides] = useState<Slide[]>(() => {
@@ -1194,13 +1443,22 @@ export function PresentationEditorModal({
         deckName,
         slides as any,
         undefined,
-        presentation?.id,
+        currentPresentationId,
         presentation?.data?.fileBytes
       );
+      if (savedAsset?.id) {
+        setCurrentPresentationId(savedAsset.id);
+      }
       onSaved?.(savedAsset);
+      window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+        detail: `✓ "${deckName}" saved successfully!`
+      }));
       return savedAsset;
     } catch (err) {
       console.error('Failed to save presentation:', err);
+      window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+        detail: `❌ Error saving presentation deck: ${String(err)}`
+      }));
       return null;
     } finally {
       setIsSaving(false);
@@ -1218,7 +1476,9 @@ export function PresentationEditorModal({
         contentId: saved.id,
         data: saved.data,
       });
-      alert(`"${saved.name}" has been saved and added to the active schedule!`);
+      window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+        detail: `✓ "${saved.name}" has been saved and added to the active schedule!`
+      }));
     }
   };
 
@@ -1241,27 +1501,161 @@ export function PresentationEditorModal({
     }
   };
 
-  return (
+  // Global Keyboard Shortcuts (PowerPoint / EasyWorship Grade)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput = ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName) || (e.target as HTMLElement)?.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+        return;
+      }
+
+      if (isInput) return;
+
+      // Undo / Redo
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      // Duplicate
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
+
+      // Select All
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        if (activeSlide?.objects && activeSlide.objects.length > 0) {
+          setSelectedObjectIds(activeSlide.objects.map(o => o.id));
+        }
+        return;
+      }
+
+      // Delete
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedObjectIds.length > 0) {
+          e.preventDefault();
+          deleteSelected();
+        }
+        return;
+      }
+
+      // Slideshow / Present mode toggle with F5
+      if (e.key === 'F5') {
+        e.preventDefault();
+        setIsSlideshowActive(prev => !prev);
+        return;
+      }
+
+      // Esc exits slideshow or clears selection
+      if (e.key === 'Escape') {
+        if (isSlideshowActive) {
+          setIsSlideshowActive(false);
+          return;
+        }
+        setSelectedObjectIds([]);
+        return;
+      }
+
+      // Arrow keys navigation for Slideshow
+      if (isSlideshowActive) {
+        if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          setActiveSlideIndex(prev => Math.min(slides.length - 1, prev + 1));
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          setActiveSlideIndex(prev => Math.max(0, prev - 1));
+        }
+        return;
+      }
+
+      // Nudge selected object with Arrow keys
+      if (selectedObjectIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        let dx = 0;
+        let dy = 0;
+        if (e.key === 'ArrowLeft') dx = -step;
+        if (e.key === 'ArrowRight') dx = step;
+        if (e.key === 'ArrowUp') dy = -step;
+        if (e.key === 'ArrowDown') dy = step;
+        updateSelectedTransform({
+          x: (primaryObject?.x || 0) + dx,
+          y: (primaryObject?.y || 0) + dy,
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyIndex, history, selectedObjectIds, isSlideshowActive, activeSlideIndex, slides.length, primaryObject]);
+
+  const renderWindowContent = (inPopout = false) => (
     <div
-      className="fixed inset-0 z-[99999] bg-slate-950/90 backdrop-blur-md flex flex-col select-none overflow-hidden"
+      className={`bg-slate-950 flex flex-col select-none overflow-hidden relative ${
+        inPopout || isMaximized ? 'w-full h-full rounded-none' : 'w-full h-full rounded-xl shadow-2xl'
+      }`}
       onMouseMove={handleContainerMouseMove}
       onMouseUp={handleContainerMouseUp}
     >
-      {/* TOP HEADER / TITLE BAR */}
-      <div className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 text-slate-200">
-        <div className="flex items-center gap-3">
-          <button className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors" onClick={onClose} title="Close Editor">
-            <X size={18} />
-          </button>
-          <div className="h-4 w-px bg-slate-800" />
+      {/* TOP HEADER / DRAGGABLE TITLE BAR */}
+      <div
+        onMouseDown={handleTitleBarMouseDown}
+        onDoubleClick={() => !inPopout && setIsMaximized(!isMaximized)}
+        className={`h-11 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 text-slate-200 ${
+          !inPopout && !isMaximized ? 'cursor-move' : ''
+        }`}
+      >
+        {/* Left: Window identity, Drag Grip, Deck Name & Layout Actions */}
+        <div className="flex items-center gap-2.5 overflow-hidden">
+          {!inPopout && !isMaximized && (
+            <div className="text-slate-500 hover:text-slate-300 p-0.5" title="Drag to move presentation deck window">
+              <GripVertical size={14} />
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5 shrink-0 text-sky-400 font-semibold text-xs">
+            <Monitor size={15} />
+            <span className="hidden sm:inline font-bold tracking-tight text-white">Deck:</span>
+          </div>
+
+          <input
+            type="text"
+            className="bg-slate-950 hover:bg-slate-900 focus:bg-slate-950 border border-slate-800 focus:border-sky-500 rounded px-2 py-0.5 font-bold text-xs text-slate-100 outline-none w-48 sm:w-60 transition-colors truncate"
+            value={deckName}
+            onChange={(e) => setDeckName(e.target.value)}
+            placeholder="Presentation Name..."
+            title="Double click or edit presentation deck name"
+          />
+
+          <span className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-800/80 text-sky-300 border border-slate-700/60 shrink-0">
+            {activeSlide.aspectRatioLabel || '16:9'} • {slides.length} {slides.length === 1 ? 'Slide' : 'Slides'}
+          </span>
+
+          <div className="h-4 w-px bg-slate-800 shrink-0" />
 
           <button
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors border border-slate-700/60"
+            className="px-2 py-1 bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors border border-slate-700/60 shrink-0"
             onClick={() => setShowTemplateGallery(true)}
             title="Browse Layout & Template Gallery"
           >
-            <Sparkles size={14} className="text-amber-400" />
-            <span>Template Gallery</span>
+            <Sparkles size={13} className="text-amber-400" />
+            <span className="hidden lg:inline">Templates</span>
           </button>
 
           <input
@@ -1272,51 +1666,101 @@ export function PresentationEditorModal({
             onChange={handleImportPptxSlides}
           />
           <button
-            className="px-2.5 py-1 bg-amber-600/80 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors border border-amber-500/60 shadow-sm"
+            className="px-2 py-1 bg-amber-600/80 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold rounded flex items-center gap-1.5 transition-colors border border-amber-500/60 shadow-xs shrink-0"
             onClick={() => pptxImportFileInputRef.current?.click()}
             disabled={isImportingPptx}
             title="Import & Adopt PPTX presentation slides into this deck"
           >
-            <FileUp size={14} />
-            <span>{isImportingPptx ? 'Importing PPTX...' : 'Import PPTX'}</span>
+            <FileUp size={13} />
+            <span className="hidden lg:inline">{isImportingPptx ? 'Importing...' : 'Import PPTX'}</span>
           </button>
-
-          <div className="h-4 w-px bg-slate-800" />
-
-          <input
-            type="text"
-            className="bg-transparent hover:bg-slate-800/60 focus:bg-slate-800 border border-transparent focus:border-sky-500 rounded px-2 py-1 font-bold text-sm text-slate-100 outline-none w-64 transition-colors"
-            value={deckName}
-            onChange={(e) => setDeckName(e.target.value)}
-            placeholder="Presentation Name..."
-          />
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        {/* Right: Save, Schedule, Go Live, Preview, and Window Windowing Controls */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
           <button
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors"
+            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors border border-slate-700"
             onClick={handleSave}
             disabled={isSaving}
+            title="Save Presentation Deck (Ctrl+S)"
           >
-            <Save size={14} className="text-sky-400" />
-            <span>{isSaving ? 'Saving...' : 'Save'}</span>
+            <Save size={13} className={isSaving ? 'animate-spin text-sky-400' : 'text-sky-400'} />
+            <span className="hidden sm:inline">{isSaving ? 'Saving...' : 'Save'}</span>
           </button>
 
           <button
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors"
+            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded flex items-center gap-1.5 transition-colors border border-slate-700"
             onClick={handleSaveAndAddToSchedule}
+            title="Save and insert presentation into active Schedule"
           >
-            <Calendar size={14} className="text-amber-400" />
-            <span>Add to Schedule</span>
+            <Calendar size={13} className="text-amber-400" />
+            <span className="hidden md:inline">Schedule</span>
           </button>
 
           <button
-            className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-md flex items-center gap-1.5 shadow-lg shadow-rose-900/30 transition-all hover:scale-105"
+            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded flex items-center gap-1 shadow-md shadow-rose-950 transition-all hover:scale-105"
             onClick={handleSaveAndGoLive}
+            title="Save and immediately present Live on output screen"
           >
-            <Radio size={14} className="animate-pulse" />
+            <Radio size={13} className="animate-pulse" />
             <span>GO LIVE</span>
+          </button>
+
+          <button
+            className="px-2 py-1 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/70 text-emerald-300 text-xs font-semibold rounded flex items-center gap-1 transition-colors"
+            onClick={() => setIsSlideshowActive(true)}
+            title="Preview Slideshow Presentation Fullscreen (F5)"
+          >
+            <PlayCircle size={13} />
+            <span className="hidden sm:inline">Preview</span>
+          </button>
+
+          <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
+
+          {/* Pop Out Window Button (Move outside system / Detach) */}
+          {!inPopout && (
+            <button
+              onClick={handlePopOutWindow}
+              className={`p-1.5 rounded transition-colors ${
+                isPoppedOut
+                  ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/50'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-cyan-300'
+              }`}
+              title="Pop Out Window (Move Outside System / Detach to separate monitor)"
+            >
+              <ExternalLink size={14} />
+            </button>
+          )}
+
+          {/* Minimize Window Button */}
+          {!inPopout && (
+            <button
+              onClick={() => setIsMinimized(true)}
+              className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors"
+              title="Minimize to System Taskbar"
+            >
+              <Minus size={14} />
+            </button>
+          )}
+
+          {/* Maximize / Restore Window Button */}
+          {!inPopout && (
+            <button
+              onClick={() => setIsMaximized(!isMaximized)}
+              className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors"
+              title={isMaximized ? 'Restore Window Size' : 'Maximize Window'}
+            >
+              {isMaximized ? <Copy size={13} /> : <Square size={13} />}
+            </button>
+          )}
+
+          {/* Close Window Button */}
+          <button
+            onClick={onClose}
+            className="p-1.5 hover:bg-rose-600 rounded text-slate-400 hover:text-white transition-colors"
+            title="Close Editor"
+          >
+            <X size={15} />
           </button>
         </div>
       </div>
@@ -2153,6 +2597,233 @@ export function PresentationEditorModal({
         onSelectImage={handleSelectImageFromPicker}
         title={imagePickerMode === 'background' ? 'Select Slide Background Image' : 'Insert Image Object'}
       />
+
+      {/* FULLSCREEN SLIDESHOW PRESENTATION PREVIEW (F5) */}
+      {isSlideshowActive && (
+        <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center select-none animate-in fade-in duration-200">
+          {/* Top Floating Control Bar */}
+          <div className="absolute top-3 right-4 z-50 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-700 shadow-2xl text-xs text-slate-200">
+            <span className="font-mono text-sky-400 font-bold">
+              Slide {activeSlideIndex + 1} / {slides.length}
+            </span>
+            <div className="h-4 w-px bg-slate-700 mx-1" />
+            <button
+              onClick={() => setActiveSlideIndex(prev => Math.max(0, prev - 1))}
+              disabled={activeSlideIndex <= 0}
+              className="p-1 hover:bg-slate-800 rounded disabled:opacity-40"
+              title="Previous Slide (Left Arrow)"
+            >
+              <ArrowUp size={14} className="-rotate-90" />
+            </button>
+            <button
+              onClick={() => setActiveSlideIndex(prev => Math.min(slides.length - 1, prev + 1))}
+              disabled={activeSlideIndex >= slides.length - 1}
+              className="p-1 hover:bg-slate-800 rounded disabled:opacity-40"
+              title="Next Slide (Right Arrow / Space)"
+            >
+              <ArrowDown size={14} className="-rotate-90" />
+            </button>
+            <div className="h-4 w-px bg-slate-700 mx-1" />
+            <button
+              onClick={() => setIsSlideshowActive(false)}
+              className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-semibold flex items-center gap-1 text-[11px]"
+              title="Exit Slideshow (Esc)"
+            >
+              <X size={12} />
+              <span>Exit (Esc)</span>
+            </button>
+          </div>
+
+          {/* Presentation Slide View on Stage */}
+          <div
+            className="w-full h-full flex items-center justify-center p-4 cursor-pointer"
+            onClick={() => setActiveSlideIndex(prev => (prev < slides.length - 1 ? prev + 1 : 0))}
+          >
+            <div className="w-full max-w-6xl aspect-video shadow-2xl relative overflow-hidden rounded bg-black">
+              <SlideCanvas
+                slide={activeSlide}
+                selectedObjectIds={[]}
+                onSelectObjects={() => {}}
+                onUpdateObjects={() => {}}
+                zoom={1}
+                showSafeMargins={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // 1. Minimized View: Compact Floating Dock Chip in bottom right
+  if (isMinimized) {
+    return (
+      <div
+        className="fixed bottom-4 right-4 z-[999999] bg-[#181a24] border border-cyan-500/70 shadow-2xl rounded-lg px-4 py-2 flex items-center gap-3 text-slate-200 animate-in slide-in-from-bottom-5 cursor-pointer hover:border-cyan-400 select-none"
+        onClick={() => setIsMinimized(false)}
+      >
+        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+        <span className="text-xs font-semibold text-white">Presentation: {deckName || 'Untitled'}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsMinimized(false);
+          }}
+          className="p-1 hover:bg-[#282d3f] text-cyan-400 rounded"
+          title="Restore Presentation Editor"
+        >
+          <Maximize2 size={13} />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="p-1 hover:bg-rose-600 text-slate-400 hover:text-white rounded"
+          title="Close Presentation Editor"
+        >
+          <X size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  // 2. Popped Out Mode (Detached Outside System Window)
+  if (isPoppedOut && popoutRef.current) {
+    return (
+      <>
+        {/* Portal into detached browser window document body */}
+        {createPortal(renderWindowContent(true), popoutRef.current.document.body)}
+
+        {/* Docked Status Banner in the Main App UI */}
+        <div className="fixed bottom-14 right-6 z-[99999] bg-slate-900/95 border border-cyan-500/60 shadow-2xl rounded-xl p-4 max-w-sm text-slate-200 animate-in fade-in select-none backdrop-blur-md">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">Detached Window Active</span>
+          </div>
+          <p className="text-xs text-slate-300 mb-3 leading-relaxed">
+            The presentation deck <strong>"{deckName}"</strong> is currently open in a detached desktop window outside the system.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setIsPoppedOut(false);
+                if (popoutRef.current && !popoutRef.current.closed) {
+                  popoutRef.current.close();
+                }
+              }}
+              className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+              title="Return presentation editor inside the main application window"
+            >
+              <span>Bring Back / Dock to App</span>
+            </button>
+            <button
+              onClick={() => {
+                if (popoutRef.current && !popoutRef.current.closed) {
+                  popoutRef.current.focus();
+                }
+              }}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors"
+              title="Bring detached window to front focus"
+            >
+              <span>Focus Window</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="px-2 py-1.5 hover:bg-rose-900/40 text-rose-400 hover:text-rose-200 rounded text-xs transition-colors ml-auto"
+              title="Close Editor"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // 3. Normal / Floating Movable Window Mode
+  return (
+    <div
+      id="presentation-editor-window"
+      onMouseDown={() => setIsActiveWindow(true)}
+      className={`fixed transition-shadow select-none ${
+        isMaximized
+          ? 'inset-0 z-[999999] rounded-none'
+          : isActiveWindow
+          ? 'z-[999999] border border-sky-500/80 ring-2 ring-sky-500/30 rounded-xl shadow-[0_25px_70px_rgba(0,0,0,0.9)]'
+          : 'z-[99999] border border-slate-700/80 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] opacity-95'
+      }`}
+      style={
+        isMaximized
+          ? { top: 0, left: 0, width: '100vw', height: '100vh' }
+          : {
+              left: `${windowPos?.x ?? 20}px`,
+              top: `${windowPos?.y ?? 20}px`,
+              width: `${windowSize.width}px`,
+              height: `${windowSize.height}px`,
+            }
+      }
+    >
+      {renderWindowContent(false)}
+
+      {/* 8-Directional Window Resizing Edge & Corner Handles */}
+      {!isMaximized && (
+        <>
+          {/* Top Border */}
+          <div
+            onMouseDown={(e) => handleResizeStart('n', e)}
+            className="absolute top-0 left-2 right-2 h-2 cursor-ns-resize z-50 hover:bg-sky-500/30 transition-colors"
+            title="Resize window top"
+          />
+          {/* Bottom Border */}
+          <div
+            onMouseDown={(e) => handleResizeStart('s', e)}
+            className="absolute bottom-0 left-2 right-2 h-2 cursor-ns-resize z-50 hover:bg-sky-500/30 transition-colors"
+            title="Resize window bottom"
+          />
+          {/* Left Border */}
+          <div
+            onMouseDown={(e) => handleResizeStart('w', e)}
+            className="absolute top-2 bottom-2 left-0 w-2 cursor-ew-resize z-50 hover:bg-sky-500/30 transition-colors"
+            title="Resize window left"
+          />
+          {/* Right Border */}
+          <div
+            onMouseDown={(e) => handleResizeStart('e', e)}
+            className="absolute top-2 bottom-2 right-0 w-2 cursor-ew-resize z-50 hover:bg-sky-500/30 transition-colors"
+            title="Resize window right"
+          />
+          {/* Top-Left Corner */}
+          <div
+            onMouseDown={(e) => handleResizeStart('nw', e)}
+            className="absolute top-0 left-0 w-3 h-3 cursor-nwse-resize z-50"
+            title="Resize window corner"
+          />
+          {/* Top-Right Corner */}
+          <div
+            onMouseDown={(e) => handleResizeStart('ne', e)}
+            className="absolute top-0 right-0 w-3 h-3 cursor-nesw-resize z-50"
+            title="Resize window corner"
+          />
+          {/* Bottom-Left Corner */}
+          <div
+            onMouseDown={(e) => handleResizeStart('sw', e)}
+            className="absolute bottom-0 left-0 w-3 h-3 cursor-nesw-resize z-50"
+            title="Resize window corner"
+          />
+          {/* Bottom-Right Corner Grip */}
+          <div
+            onMouseDown={(e) => handleResizeStart('se', e)}
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50 flex items-end justify-end p-0.5 text-slate-500 hover:text-sky-400 group"
+            title="Drag corner to resize window"
+          >
+            <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-sky-400/80 group-hover:border-sky-300 transition-colors" />
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
+export const PresentationEditorModal = withPortal(PresentationEditorModalInner);
+export default PresentationEditorModal;

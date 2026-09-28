@@ -258,7 +258,7 @@ export function buildRenderFrame(
         containerHeight: res.height,
         isUppercase: isUpper,
         lineSpacing: spacing,
-        widthPercent: resolvedStyles.widthPercent || 100,
+        widthPercent: resolvedStyles.widthPercent || 90,
         margins: effectiveMargins,
       })
     : baseSize;

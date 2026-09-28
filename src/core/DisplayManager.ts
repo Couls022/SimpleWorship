@@ -320,7 +320,7 @@ export class DisplayManager {
         g.displayIds.forEach(id => configuredTargetDisplayIds.add(id));
       } else if (g.targetDisplayId) {
         configuredTargetDisplayIds.add(g.targetDisplayId);
-      } else if (g.role === 'broadcast' || g.id === 'group-congregation' || g.id === 'group-r2') {
+      } else if (g.id === 'group-congregation') {
         hasUnconfiguredBroadcast = true;
       }
     });

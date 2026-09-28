@@ -89,7 +89,7 @@ export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayPr
 
     const timer = setInterval(() => {
       const nowRemaining = calculateRemaining();
-      setRemainingSecs(nowRemaining);
+      setRemainingSecs(prev => (prev === nowRemaining ? prev : nowRemaining));
       if (nowRemaining <= 0) {
         clearInterval(timer);
       }

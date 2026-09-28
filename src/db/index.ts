@@ -330,15 +330,25 @@ export const dbApi = {
     const db = await getDB();
     return db.getAll('scriptures');
   },
-  async searchScriptures(query: string, translation?: string) {
+  async searchScriptures(query: string, translation?: string, limit: number = 200) {
     const db = await getDB();
-    const all = await db.getAll('scriptures');
+    const effectiveTrans = translation && translation !== 'ALL' ? translation : undefined;
+    const records = effectiveTrans
+      ? await db.getAllFromIndex('scriptures', 'by-translation', effectiveTrans)
+      : await db.getAll('scriptures');
     const q = query.toLowerCase().trim();
-    return all.filter(s => {
-      const matchesTranslation = !translation || translation === 'ALL' || s.translation.toUpperCase() === translation.toUpperCase();
-      const matchesQuery = !q || s.reference.toLowerCase().includes(q) || s.text.toLowerCase().includes(q) || s.book.toLowerCase().includes(q);
-      return matchesTranslation && matchesQuery;
-    });
+    if (!q) {
+      return records.slice(0, limit);
+    }
+    const results: ScriptureVerse[] = [];
+    for (let i = 0; i < records.length; i++) {
+      const s = records[i];
+      if (s.reference.toLowerCase().includes(q) || s.text.toLowerCase().includes(q) || s.book.toLowerCase().includes(q)) {
+        results.push(s);
+        if (results.length >= limit) break;
+      }
+    }
+    return results;
   },
 
   // Schedules

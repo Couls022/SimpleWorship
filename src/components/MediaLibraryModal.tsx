@@ -16,10 +16,13 @@ import {
   Sparkles,
   GripVertical,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { Asset } from '../types';
+import { isMediaLibraryAsset, isDefaultBackgroundFor, getActiveDefaultBadges, DefaultMediaScope } from '../db/assets';
 import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 
 interface MediaLibraryModalProps {
@@ -37,48 +40,9 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
-  // Check if an asset URL is the currently active default background for a given category
-  const isDefaultBgFor = (url: string, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers') => {
-    if (!url) return false;
-    const foundAsset = assetsList.find(a => a.url === url || a.id === url);
-    if (foundAsset?.isDefaultScope?.[category] === true) return true;
-    const assetId = foundAsset?.id;
-    if (category === 'timers') {
-      return Boolean(assetId) && systemOptions?.serviceIntervals?.backgroundAssetId === assetId;
-    }
-    if (category === 'songs') {
-      const t = themesList.find(th => th.type === 'song' || th.id === 'theme-song');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
-    }
-    if (category === 'scriptures') {
-      const t = themesList.find(th => th.type === 'bible' || th.id === 'theme-scripture');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
-    }
-    if (category === 'presentations') {
-      const t = themesList.find(th => th.type === 'presentation' || (th.type as any) === 'ppt' || th.id === 'theme-presentation');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
-    }
-    if (category === 'announcements') {
-      const t = themesList.find(th => th.type === 'announcement' || th.id === 'theme-announcement');
-      return (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId));
-    }
-    if (category === 'logo') {
-      const sysLogo = systemOptions?.general?.defaultLogoUrl || systemOptions?.mainOutput?.general?.defaultLogoUrl;
-      const t = themesList.find(th => th.type === 'logo' || th.id === 'theme-logo');
-      return sysLogo === url || (Boolean(assetId) && sysLogo === assetId) || (Boolean(url) && (t?.styles?.backgroundImageUrl === url || t?.styles?.backgroundVideoUrl === url || t?.styles?.logoUrl === url)) || (Boolean(assetId) && (t?.styles?.backgroundImageUrl === assetId || t?.styles?.backgroundVideoUrl === assetId || t?.styles?.logoUrl === assetId));
-    }
-    return false;
-  };
-
-  const getActiveDefaultBadges = (asset: Asset) => {
-    const badges: { scope: string; label: string; color: string }[] = [];
-    if (isDefaultBgFor(asset.url, 'logo')) badges.push({ scope: 'logo', label: 'LOGO', color: 'bg-emerald-500/90 text-white border-emerald-400/50' });
-    if (isDefaultBgFor(asset.url, 'songs')) badges.push({ scope: 'songs', label: 'SONGS', color: 'bg-cyan-500/90 text-white border-cyan-400/50' });
-    if (isDefaultBgFor(asset.url, 'scriptures')) badges.push({ scope: 'scriptures', label: 'BIBLE', color: 'bg-amber-500/90 text-white border-amber-400/50' });
-    if (isDefaultBgFor(asset.url, 'presentations')) badges.push({ scope: 'presentations', label: 'PPT', color: 'bg-purple-500/90 text-white border-purple-400/50' });
-    if (isDefaultBgFor(asset.url, 'announcements')) badges.push({ scope: 'announcements', label: 'NOTICE', color: 'bg-rose-500/90 text-white border-rose-400/50' });
-    if (isDefaultBgFor(asset.url, 'timers')) badges.push({ scope: 'timers', label: 'TIMER', color: 'bg-orange-500/90 text-white border-orange-400/50' });
-    return badges;
+  // Check if an asset is the currently active locked default background for a given category
+  const isDefaultBgFor = (asset: Asset | null | undefined, category: DefaultMediaScope) => {
+    return isDefaultBackgroundFor(asset, category, assetsList);
   };
   
   // Context menu state for right-click on assets
@@ -134,7 +98,10 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
     { id: 'video', label: 'Videos' },
   ];
 
-  const filteredAssets = assetsList.filter(a => {
+  // Strictly filter out any cache items and documents to only show genuine images, audio, and videos
+  const mediaOnlyAssets = assetsList.filter(isMediaLibraryAsset);
+
+  const filteredAssets = mediaOnlyAssets.filter(a => {
     // Filter by type
     if (activeMediaFilter === 'image' && a.type !== 'image') return false;
     if (activeMediaFilter === 'audio' && a.type !== 'audio') return false;
@@ -253,15 +220,27 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
     setContextMenu({ x: Math.max(10, x), y: Math.max(10, y), asset });
   };
 
-  const handleSetDefaultBg = (asset: Asset, category: 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers', e?: React.MouseEvent) => {
+  const handleLockDefaultBg = (asset: Asset, category: DefaultMediaScope, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const isVideo = PresentationContentResolver.isAssetVideo(asset, asset.url, asset.name);
-    useStore.getState().setDefaultBackground(asset.url, category, isVideo);
+    useStore.getState().setDefaultBackground(asset.url, category, isVideo, 'lock');
     setContextMenu(null);
     const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
-        detail: `Set "${asset.name}" as default background for ${catLabel}!` 
+        detail: `Locked "${asset.name}" as Default Background for ${catLabel}!` 
+      })
+    );
+  };
+
+  const handleUnlockDefaultBg = (asset: Asset, category: DefaultMediaScope, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    useStore.getState().setDefaultBackground(asset.url, category, false, 'unlock');
+    setContextMenu(null);
+    const catLabel = category.charAt(0).toUpperCase() + category.slice(1);
+    window.dispatchEvent(
+      new CustomEvent('simpleworship:notify', { 
+        detail: `Unlocked Default Background for ${catLabel}.` 
       })
     );
   };
@@ -554,15 +533,19 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
 
                     {/* Bottom Row: Name and Set As Default BG Menu Button */}
                     <div className="relative z-10 flex flex-col gap-0.5">
-                      {getActiveDefaultBadges(asset).length > 0 && (
-                        <div className="flex flex-wrap gap-0.5">
-                          {getActiveDefaultBadges(asset).map(b => (
-                            <span key={b.scope} className={`text-[7px] font-extrabold px-1 py-0.2 rounded shadow-xs uppercase tracking-tight flex items-center gap-0.5 ${b.color}`}>
-                              <Check size={6} /> {b.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      {(() => {
+                        const badges = getActiveDefaultBadges(asset, assetsList);
+                        if (badges.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap gap-0.5">
+                            {badges.map(b => (
+                              <span key={b.scope} className={`text-[7px] font-extrabold px-1 py-0.2 rounded shadow-xs uppercase tracking-tight flex items-center gap-0.5 ${b.color}`}>
+                                <Lock size={6} /> {b.label}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       <div className="flex items-center justify-between gap-1">
                         <div className="text-[11px] font-semibold text-white truncate drop-shadow-sm flex-1" title={asset.name}>
                           {asset.name}
@@ -677,69 +660,232 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
 
           <div className="border-t border-[#272b3a] my-1"></div>
 
-          <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-            Set as Default Background:
+          <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+            <span>Set Default Lock</span>
+            <span className="text-[9px] text-gray-500 font-normal lowercase">1 file per category</span>
           </div>
 
-          <button
-            onClick={() => handleSetDefaultBg(contextMenu.asset, 'songs')}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-cyan-300 cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={11} className="text-cyan-400" />
-              <span>For Songs</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset.url, 'songs') && (
-              <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-semibold bg-cyan-950/60 px-1.5 py-0.5 rounded border border-cyan-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
+          {/* Scope: Songs */}
+          <div className="px-2 py-0.5">
+            <div className={`w-full px-2 py-1 rounded flex items-center justify-between transition-colors ${
+              isDefaultBgFor(contextMenu.asset, 'songs') ? 'bg-cyan-950/40 border border-cyan-500/40 text-cyan-300' : 'hover:bg-[#222738] text-gray-300'
+            }`}>
+              <button
+                onClick={() => handleLockDefaultBg(contextMenu.asset, 'songs')}
+                className="flex items-center gap-1.5 flex-1 text-left cursor-pointer"
+                title="Lock as Default Background for Songs"
+              >
+                <Sparkles size={11} className="text-cyan-400" />
+                <span className="font-medium text-[11px]">For Songs</span>
+              </button>
+              {isDefaultBgFor(contextMenu.asset, 'songs') ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5 text-[9px] text-cyan-400 font-bold bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-500/50">
+                    <Lock size={9} /> Locked
+                  </span>
+                  <button
+                    onClick={(e) => handleUnlockDefaultBg(contextMenu.asset, 'songs', e)}
+                    className="p-0.5 rounded text-gray-400 hover:text-rose-300 hover:bg-rose-950/50"
+                    title="Unlock Default"
+                  >
+                    <Unlock size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleLockDefaultBg(contextMenu.asset, 'songs')}
+                  className="text-[10px] text-gray-400 hover:text-cyan-300 font-semibold px-1 rounded hover:bg-cyan-950/50"
+                >
+                  Set Lock
+                </button>
+              )}
+            </div>
+          </div>
 
-          <button
-            onClick={() => handleSetDefaultBg(contextMenu.asset, 'scriptures')}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-amber-300 cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={11} className="text-amber-400" />
-              <span>For Scriptures</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset.url, 'scriptures') && (
-              <span className="flex items-center gap-1 text-[10px] text-amber-400 font-semibold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
+          {/* Scope: Scriptures */}
+          <div className="px-2 py-0.5">
+            <div className={`w-full px-2 py-1 rounded flex items-center justify-between transition-colors ${
+              isDefaultBgFor(contextMenu.asset, 'scriptures') ? 'bg-amber-950/40 border border-amber-500/40 text-amber-300' : 'hover:bg-[#222738] text-gray-300'
+            }`}>
+              <button
+                onClick={() => handleLockDefaultBg(contextMenu.asset, 'scriptures')}
+                className="flex items-center gap-1.5 flex-1 text-left cursor-pointer"
+                title="Lock as Default Background for Scriptures"
+              >
+                <Sparkles size={11} className="text-amber-400" />
+                <span className="font-medium text-[11px]">For Scriptures</span>
+              </button>
+              {isDefaultBgFor(contextMenu.asset, 'scriptures') ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5 text-[9px] text-amber-400 font-bold bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-500/50">
+                    <Lock size={9} /> Locked
+                  </span>
+                  <button
+                    onClick={(e) => handleUnlockDefaultBg(contextMenu.asset, 'scriptures', e)}
+                    className="p-0.5 rounded text-gray-400 hover:text-rose-300 hover:bg-rose-950/50"
+                    title="Unlock Default"
+                  >
+                    <Unlock size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleLockDefaultBg(contextMenu.asset, 'scriptures')}
+                  className="text-[10px] text-gray-400 hover:text-amber-300 font-semibold px-1 rounded hover:bg-amber-950/50"
+                >
+                  Set Lock
+                </button>
+              )}
+            </div>
+          </div>
 
-          <button
-            onClick={() => handleSetDefaultBg(contextMenu.asset, 'logo')}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-emerald-300 cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={11} className="text-emerald-400" />
-              <span>For Logo</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset.url, 'logo') && (
-              <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
+          {/* Scope: Logo */}
+          <div className="px-2 py-0.5">
+            <div className={`w-full px-2 py-1 rounded flex items-center justify-between transition-colors ${
+              isDefaultBgFor(contextMenu.asset, 'logo') ? 'bg-emerald-950/40 border border-emerald-500/40 text-emerald-300' : 'hover:bg-[#222738] text-gray-300'
+            }`}>
+              <button
+                onClick={() => handleLockDefaultBg(contextMenu.asset, 'logo')}
+                className="flex items-center gap-1.5 flex-1 text-left cursor-pointer"
+                title="Lock as Default Logo"
+              >
+                <Sparkles size={11} className="text-emerald-400" />
+                <span className="font-medium text-[11px]">For Logo</span>
+              </button>
+              {isDefaultBgFor(contextMenu.asset, 'logo') ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5 text-[9px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/50">
+                    <Lock size={9} /> Locked
+                  </span>
+                  <button
+                    onClick={(e) => handleUnlockDefaultBg(contextMenu.asset, 'logo', e)}
+                    className="p-0.5 rounded text-gray-400 hover:text-rose-300 hover:bg-rose-950/50"
+                    title="Unlock Default"
+                  >
+                    <Unlock size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleLockDefaultBg(contextMenu.asset, 'logo')}
+                  className="text-[10px] text-gray-400 hover:text-emerald-300 font-semibold px-1 rounded hover:bg-emerald-950/50"
+                >
+                  Set Lock
+                </button>
+              )}
+            </div>
+          </div>
 
-          <button
-            onClick={() => handleSetDefaultBg(contextMenu.asset, 'timers')}
-            className="w-full px-3 py-1.5 text-left hover:bg-[#252b3d] flex items-center justify-between text-orange-300 cursor-pointer"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles size={11} className="text-orange-400" />
-              <span>For Timer</span>
-            </span>
-            {isDefaultBgFor(contextMenu.asset.url, 'timers') && (
-              <span className="flex items-center gap-1 text-[10px] text-orange-400 font-semibold bg-orange-950/60 px-1.5 py-0.5 rounded border border-orange-500/30">
-                <Check size={10} /> Active
-              </span>
-            )}
-          </button>
+          {/* Scope: Timers */}
+          <div className="px-2 py-0.5">
+            <div className={`w-full px-2 py-1 rounded flex items-center justify-between transition-colors ${
+              isDefaultBgFor(contextMenu.asset, 'timers') ? 'bg-teal-950/40 border border-teal-500/40 text-teal-300' : 'hover:bg-[#222738] text-gray-300'
+            }`}>
+              <button
+                onClick={() => handleLockDefaultBg(contextMenu.asset, 'timers')}
+                className="flex items-center gap-1.5 flex-1 text-left cursor-pointer"
+                title="Lock as Default Background for Timers"
+              >
+                <Sparkles size={11} className="text-teal-400" />
+                <span className="font-medium text-[11px]">For Timer</span>
+              </button>
+              {isDefaultBgFor(contextMenu.asset, 'timers') ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5 text-[9px] text-teal-400 font-bold bg-teal-950/80 px-1.5 py-0.2 rounded border border-teal-500/50">
+                    <Lock size={9} /> Locked
+                  </span>
+                  <button
+                    onClick={(e) => handleUnlockDefaultBg(contextMenu.asset, 'timers', e)}
+                    className="p-0.5 rounded text-gray-400 hover:text-rose-300 hover:bg-rose-950/50"
+                    title="Unlock Default"
+                  >
+                    <Unlock size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleLockDefaultBg(contextMenu.asset, 'timers')}
+                  className="text-[10px] text-gray-400 hover:text-teal-300 font-semibold px-1 rounded hover:bg-teal-950/50"
+                >
+                  Set Lock
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Scope: Presentations */}
+          <div className="px-2 py-0.5">
+            <div className={`w-full px-2 py-1 rounded flex items-center justify-between transition-colors ${
+              isDefaultBgFor(contextMenu.asset, 'presentations') ? 'bg-purple-950/40 border border-purple-500/40 text-purple-300' : 'hover:bg-[#222738] text-gray-300'
+            }`}>
+              <button
+                onClick={() => handleLockDefaultBg(contextMenu.asset, 'presentations')}
+                className="flex items-center gap-1.5 flex-1 text-left cursor-pointer"
+                title="Lock as Default Background for Presentations"
+              >
+                <Sparkles size={11} className="text-purple-400" />
+                <span className="font-medium text-[11px]">For PPT</span>
+              </button>
+              {isDefaultBgFor(contextMenu.asset, 'presentations') ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5 text-[9px] text-purple-400 font-bold bg-purple-950/80 px-1.5 py-0.2 rounded border border-purple-500/50">
+                    <Lock size={9} /> Locked
+                  </span>
+                  <button
+                    onClick={(e) => handleUnlockDefaultBg(contextMenu.asset, 'presentations', e)}
+                    className="p-0.5 rounded text-gray-400 hover:text-rose-300 hover:bg-rose-950/50"
+                    title="Unlock Default"
+                  >
+                    <Unlock size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleLockDefaultBg(contextMenu.asset, 'presentations')}
+                  className="text-[10px] text-gray-400 hover:text-purple-300 font-semibold px-1 rounded hover:bg-purple-950/50"
+                >
+                  Set Lock
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Scope: Announcements */}
+          <div className="px-2 py-0.5">
+            <div className={`w-full px-2 py-1 rounded flex items-center justify-between transition-colors ${
+              isDefaultBgFor(contextMenu.asset, 'announcements') ? 'bg-rose-950/40 border border-rose-500/40 text-rose-300' : 'hover:bg-[#222738] text-gray-300'
+            }`}>
+              <button
+                onClick={() => handleLockDefaultBg(contextMenu.asset, 'announcements')}
+                className="flex items-center gap-1.5 flex-1 text-left cursor-pointer"
+                title="Lock as Default Background for Notices"
+              >
+                <Sparkles size={11} className="text-rose-400" />
+                <span className="font-medium text-[11px]">For Notice</span>
+              </button>
+              {isDefaultBgFor(contextMenu.asset, 'announcements') ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-0.5 text-[9px] text-rose-400 font-bold bg-rose-950/80 px-1.5 py-0.2 rounded border border-rose-500/50">
+                    <Lock size={9} /> Locked
+                  </span>
+                  <button
+                    onClick={(e) => handleUnlockDefaultBg(contextMenu.asset, 'announcements', e)}
+                    className="p-0.5 rounded text-gray-400 hover:text-rose-300 hover:bg-rose-950/50"
+                    title="Unlock Default"
+                  >
+                    <Unlock size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleLockDefaultBg(contextMenu.asset, 'announcements')}
+                  className="text-[10px] text-gray-400 hover:text-rose-300 font-semibold px-1 rounded hover:bg-rose-950/50"
+                >
+                  Set Lock
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className="border-t border-[#272b3a] my-1"></div>
 
