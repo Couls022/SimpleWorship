@@ -138,27 +138,34 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
           }
         } catch (err) {}
       }
+      if (e.key === 'simpleworship_route_stack_v1' && e.newValue) {
+        try {
+          const parsedStack = JSON.parse(e.newValue);
+          if (Array.isArray(parsedStack)) {
+            useStore.setState({ routeActivationStack: parsedStack });
+          }
+        } catch (err) {}
+      }
     };
     window.addEventListener('storage', handleStorage);
 
-    // Electron IPC route update listener (only active for unrouted generic display windows)
+    // Electron IPC route update listener
     if ((window.electronAPI as any)?.onProjectorRouteChanged) {
       (window.electronAPI as any).onProjectorRouteChanged((data: any) => {
-        if (!routedGroupId && data?.groupId) {
+        if (data?.groupId) {
           setCurrentRouteGroupId(data.groupId);
+          useStore.getState().bringRouteToTop(data.groupId);
         }
       });
     }
 
     // In-browser custom event listener for route changed
     const handleRouteChanged = (e: any) => {
-      // STRICT ISOLATION: If this window is dedicated to a specific route (e.g. ?groupId=group-r2), never allow route hijacking
-      if (routedGroupId) return;
-
       const targetDisplay = e?.detail?.displayId;
       if (!displayId || !targetDisplay || targetDisplay === displayId) {
         if (e?.detail?.groupId) {
           setCurrentRouteGroupId(e.detail.groupId);
+          useStore.getState().bringRouteToTop(e.detail.groupId);
         }
       }
     };
@@ -244,44 +251,68 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
 
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
   const routeActivationStack = useStore(state => state.routeActivationStack || []);
+  const isSystemOverlayMode = useStore(state => state.isSystemOverlayMode);
+  const groupStates = useStore(state => state.groupStates);
+  const routerPanels = useStore(state => state.routerPanels);
+  const activeRouterId = useStore(state => state.activeRouterId);
 
   // Candidate Output Groups targeted to THIS physical display (recalculated only when display/groups topology changes)
+  // STRICT TARGET LOCK ENFORCEMENT: Only displays targeted/locked by a route receive that route's display
   const candidateGroupIds = useMemo<string[]>(() => {
     if (isStageWindow) {
       return ['group-stage'];
     }
 
-    // 1. DEDICATED ROUTE WINDOW: If an explicit route was requested for this window (e.g. ?groupId=group-r2)
-    // Strictly isolate this window to ONLY render its designated route!
-    const targetGid = routedGroupId || currentRouteGroupId;
-    if (targetGid && outputGroups.some(g => g.id === targetGid && g.role !== 'confidence' && g.id !== 'group-stage')) {
-      return [targetGid];
-    }
-
     const candidateSet = new Set<string>();
 
-    // 2. If a physical displayId is present, find all routes that explicitly target THIS display
     if (displayId) {
+      // 1. Strictly find all broadcast groups configured and targeted to THIS physical display
       outputGroups.forEach(g => {
         if (g.role === 'confidence' || g.id === 'group-stage') return;
         if (routeTargetsDisplay(g, displayId, screens)) {
           candidateSet.add(g.id);
         }
       });
-    }
 
-    // 3. Fallback: If still no candidate, default strictly to Route 1 (group-congregation)
-    if (candidateSet.size === 0) {
-      const defaultGroup = outputGroups.find(g => g.id === 'group-congregation') || outputGroups[0];
-      if (defaultGroup && defaultGroup.role !== 'confidence' && defaultGroup.id !== 'group-stage') {
-        candidateSet.add(defaultGroup.id);
+      // 2. Explicit designated route requested for this window if it targets this display
+      if (routedGroupId && outputGroups.some(g => g.id === routedGroupId && g.role !== 'confidence' && g.id !== 'group-stage')) {
+        const directGroup = outputGroups.find(g => g.id === routedGroupId);
+        if (directGroup && routeTargetsDisplay(directGroup, displayId, screens)) {
+          candidateSet.add(routedGroupId);
+        }
+      }
+    } else {
+      // When NO specific physical display ID is specified (e.g. standalone / single-window preview):
+      // 1. Explicit designated route requested via query (?groupId=...)
+      if (routedGroupId && outputGroups.some(g => g.id === routedGroupId && g.role !== 'confidence' && g.id !== 'group-stage')) {
+        candidateSet.add(routedGroupId);
+      }
+      if (currentRouteGroupId && outputGroups.some(g => g.id === currentRouteGroupId && g.role !== 'confidence' && g.id !== 'group-stage')) {
+        candidateSet.add(currentRouteGroupId);
+      }
+
+      // 2. Broadcast routes without target monitor locks, or all presentation routes
+      outputGroups.forEach(g => {
+        if (g.role === 'confidence' || g.id === 'group-stage') return;
+        const explicitDisplays = (g.displayIds && g.displayIds.length > 0)
+          ? g.displayIds
+          : (g.targetDisplayId ? [g.targetDisplayId] : []);
+        if (explicitDisplays.length === 0) {
+          candidateSet.add(g.id);
+        }
+      });
+
+      if (candidateSet.size === 0) {
+        outputGroups.forEach(g => {
+          if (g.role !== 'confidence' && g.id !== 'group-stage') {
+            candidateSet.add(g.id);
+          }
+        });
       }
     }
 
     return Array.from(candidateSet);
   }, [isStageWindow, displayId, currentRouteGroupId, routedGroupId, outputGroups, screens]);
-
-  const groupStates = useStore(state => state.groupStates);
 
   // Determine all candidate routes currently LIVE on THIS display
   // STRICT PIPELINE ISOLATION: Only candidates assigned to this monitor are checked.
@@ -303,8 +334,9 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
 
   // Stacking Resolution:
   // Render live layers in ascending z-index order (bottom to top).
-  // The active control route (activeControlGroupId) or topmost active overlay
-  // must ALWAYS be at the top of the stack (highest z-index).
+  // "kung sino ung mas active siya ung nasa top naka overlay sa lahat":
+  // The active router panel / active control route must ALWAYS be at the top of the stack (highest z-index),
+  // layered on top of all underlying routes.
   const stackedLayers = useMemo(() => {
     const designatedDefaultId = currentRouteGroupId || routedGroupId || candidateGroupIds[0] || 'group-congregation';
 
@@ -326,35 +358,66 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       }];
     }
 
+    // Resolve which output group is controlled by the currently active router panel
+    const activeRouterObj = routerPanels.find(p => p.routerId === activeRouterId);
+    const activeRouterTargetGid = activeRouterObj?.targetOutputGroupId;
+
     // When 2+ routes are live on this projector display:
     // Sort so lower priority routes come first (lower z-index)
-    // and the active/most recent route comes LAST (highest z-index, on top)
+    // and the MOST ACTIVE route comes LAST (highest z-index, ON TOP NAKA OVERLAY SA LAHAT)
     const sorted = [...liveCandidateGroupIds].sort((a, b) => {
-      if (a === activeControlGroupId) return 1;
-      if (b === activeControlGroupId) return -1;
+      // 1. Direct active focus check (activeControlGroupId or active router panel)
+      const aIsDirectActive = (a === activeControlGroupId || a === activeRouterTargetGid);
+      const bIsDirectActive = (b === activeControlGroupId || b === activeRouterTargetGid);
+      if (aIsDirectActive && !bIsDirectActive) return 1;
+      if (bIsDirectActive && !aIsDirectActive) return -1;
+
+      // 2. Ranking in routeActivationStack (index 0 is most active)
       const idxA = routeActivationStack.indexOf(a);
       const idxB = routeActivationStack.indexOf(b);
       const rankA = idxA !== -1 ? idxA : 999;
       const rankB = idxB !== -1 ? idxB : 999;
-      return rankB - rankA;
+      if (rankA !== rankB) {
+        return rankB - rankA; // smaller rank (more active) -> comes later (higher z-index, on top)
+      }
+
+      // 3. Fallback tiebreaker: most recently updated timestamp in groupStates
+      const timeA = (groupStates[a] as any)?.timestamp || 0;
+      const timeB = (groupStates[b] as any)?.timestamp || 0;
+      return timeA - timeB; // more recent -> comes later (higher z-index, on top)
     });
 
-    // The bottom-most layer provides the foundational presentation canvas/background
-    // All subsequent layers overlay transparently on top with increasing z-index
-    return sorted.map((gId, idx) => ({
-      groupId: gId,
-      isBase: idx === 0,
-      isOverlay: idx > 0,
-      zIndex: 10 + idx * 10
-    }));
-  }, [liveCandidateGroupIds, candidateGroupIds, currentRouteGroupId, routedGroupId, activeControlGroupId, routeActivationStack]);
+    // Determine the designated foundational base presentation group for THIS display.
+    // 'group-congregation' (or any group with role === 'primary') is always the base presentation canvas.
+    // If not present in candidateGroupIds, the first configured group for this display acts as base.
+    const designatedBaseGid = candidateGroupIds.find(id => {
+      const grp = outputGroups.find(g => g.id === id);
+      return id === 'group-congregation' || grp?.role === 'primary';
+    }) || candidateGroupIds[0] || sorted[0];
+
+    // The foundational presentation group provides the base presentation canvas/background (isOverlay: false).
+    // All auxiliary router panels act as transparent overlays (isOverlay: true).
+    // The active route is placed at the top of the stack (highest z-index, "naka overlay sa lahat").
+    // Crucially, isOverlay does NOT toggle when switching active focus, preventing background wipes or black screens!
+    return sorted.map((gId, idx) => {
+      const isBaseGroup = gId === designatedBaseGid;
+      return {
+        groupId: gId,
+        isBase: isBaseGroup,
+        isOverlay: !isBaseGroup,
+        zIndex: 10 + idx * 10
+      };
+    });
+  }, [liveCandidateGroupIds, candidateGroupIds, currentRouteGroupId, routedGroupId, activeControlGroupId, activeRouterId, routerPanels, routeActivationStack, groupStates, outputGroups]);
 
   return (
     <div 
       data-canvas-preview="true"
       onDoubleClick={toggleFullscreen}
       onContextMenu={e => e.preventDefault()}
-      className="w-screen h-screen overflow-hidden relative bg-black select-none flex items-center justify-center m-0 p-0"
+      className={`w-screen h-screen overflow-hidden relative select-none flex items-center justify-center m-0 p-0 ${
+        isSystemOverlayMode ? 'bg-transparent' : 'bg-black'
+      }`}
       style={{
         width: '100vw',
         height: '100vh',
@@ -363,6 +426,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         margin: 0,
         padding: 0,
         overflow: 'hidden',
+        backgroundColor: isSystemOverlayMode ? 'transparent' : '#000000',
         cursor: cursorVisible ? 'default' : 'none'
       }}
     >
@@ -381,20 +445,28 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         );
       })}
 
-      {/* Seamless Standby Veil: When no routes are live, fade smoothly to solid black without unmounting canvas */}
+      {/* Seamless Standby Veil: When no routes are live, fade smoothly to solid black (or transparent in overlay mode) without unmounting canvas */}
       <div 
-        className={`absolute inset-0 z-50 bg-black pointer-events-none transition-opacity duration-300 ease-in-out ${
+        className={`absolute inset-0 z-[100] pointer-events-none transition-opacity duration-300 ease-in-out ${
+          isSystemOverlayMode ? 'bg-transparent' : 'bg-black'
+        } ${
           isLive ? 'opacity-0' : 'opacity-100'
         }`} 
       />
 
       {/* Standby Diagnostics Pill: Visible only when in standby mode or moving mouse, giving instant feedback */}
       {!isLive && cursorVisible && (
-        <div className="absolute bottom-4 left-4 z-[60] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 border border-white/10 text-white/60 text-xs font-mono backdrop-blur-sm transition-opacity duration-300">
-          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        <div className="absolute bottom-4 left-4 z-[110] pointer-events-none flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/85 border border-white/10 text-white/70 text-xs font-mono backdrop-blur-sm transition-opacity duration-300 shadow-xl">
+          <span className={`w-2 h-2 rounded-full ${isSystemOverlayMode ? 'bg-cyan-400 animate-ping' : 'bg-amber-400 animate-pulse'}`} />
           <span>{displayId ? `Target: ${displayId}` : `Display ${displayIndex}`}</span>
           <span className="text-white/30">•</span>
-          <span>Standby Ready</span>
+          <span>{isSystemOverlayMode ? 'Overlay Standby' : 'Standby Ready'}</span>
+          {isSystemOverlayMode && (
+            <>
+              <span className="text-cyan-400/50">•</span>
+              <span className="text-cyan-300 font-semibold">Pinned on Top</span>
+            </>
+          )}
           <span className="text-white/30">•</span>
           <span className="text-white/40">Double-click for Fullscreen</span>
         </div>

@@ -192,6 +192,10 @@ export class DisplayManager {
         const result = await window.electronAPI.openProjector(groupId, displayId);
         if (result.success) {
           this.localStatuses[groupId] = result.status;
+          // Ensure projector window overlays above other Windows applications
+          if (typeof (window as any).electronAPI?.setProjectorAlwaysOnTop === 'function') {
+            (window as any).electronAPI.setProjectorAlwaysOnTop({ displayId, alwaysOnTop: true }).catch(() => {});
+          }
         }
         return result;
       } catch (err: any) {
@@ -205,7 +209,8 @@ export class DisplayManager {
       this.localStatuses[groupId] = 'CONNECTED';
 
       // Attempt to open an actual popup window that can be dragged to a secondary monitor
-      const popupUrl = `${window.location.origin}${window.location.pathname}?projector=true&groupId=${groupId}${displayId ? `&displayId=${displayId}` : ''}`;
+      const safeOrigin = (!window.location.origin || window.location.origin === 'null') ? 'app://localhost' : window.location.origin;
+      const popupUrl = `${safeOrigin}${window.location.pathname}?projector=true&groupId=${groupId}${displayId ? `&displayId=${displayId}` : ''}`;
       const existingPopup = this.browserPopups.get(groupId);
       if (existingPopup && !existingPopup.closed) {
         existingPopup.focus();
@@ -320,7 +325,7 @@ export class DisplayManager {
         g.displayIds.forEach(id => configuredTargetDisplayIds.add(id));
       } else if (g.targetDisplayId) {
         configuredTargetDisplayIds.add(g.targetDisplayId);
-      } else if (g.id === 'group-congregation') {
+      } else if (g.id === 'group-congregation' || g.role === 'primary') {
         hasUnconfiguredBroadcast = true;
       }
     });

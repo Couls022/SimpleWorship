@@ -46,8 +46,8 @@ function RemoteControlModal({ onClose }: RemoteControlModalProps) {
   
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // If running on localhost or file:// (desktop app), try to use actual local network IP for the QR code
-    if ((hostname === 'localhost' || hostname === '127.0.0.1' || window.location.protocol === 'file:') && localIps.length > 0) {
+    // If running on localhost or desktop app (file:// or app://), try to use actual local network IP for the QR code
+    if ((hostname === 'localhost' || hostname === '127.0.0.1' || window.location.protocol === 'file:' || window.location.protocol === 'app:') && localIps.length > 0) {
       // Pick the first non-internal IPv4 address
       baseUrl = `http://${localIps[0]}:3000`;
     }

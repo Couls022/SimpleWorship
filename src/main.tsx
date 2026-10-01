@@ -22,8 +22,34 @@ window.addEventListener('unhandledrejection', function (event) {
   console.error('[Unhandled Promise Rejection]', event.reason);
 });
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+function mountApp() {
+  try {
+    const container = document.getElementById('root');
+    if (container) {
+      const root = createRoot(container);
+      root.render(
+        <StrictMode>
+          <App />
+        </StrictMode>,
+      );
+    }
+  } catch (err: any) {
+    console.error('[Fatal Mount Error]', err);
+    const rootEl = document.getElementById('root');
+    if (rootEl) {
+      rootEl.innerHTML = `
+        <div style="background:#0c0d10;color:#f87171;padding:32px;font-family:system-ui,sans-serif;height:100vh;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+          <h2 style="color:#ffffff;margin-bottom:8px;font-size:20px;">SimpleWorship Engine Recovery</h2>
+          <p style="color:#94a3b8;max-width:500px;font-size:14px;margin-bottom:20px;">${err?.message || 'Failed to mount application.'}</p>
+          <button onclick="window.location.reload()" style="background:#2563eb;color:#ffffff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-weight:600;">Restart Engine</button>
+        </div>
+      `;
+    }
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mountApp);
+} else {
+  mountApp();
+}

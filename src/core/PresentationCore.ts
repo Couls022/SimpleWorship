@@ -2,8 +2,70 @@ import { PresentationState, Schedule, PresentationItem, Slide, Song, ScriptureVe
 import { defaultSongs } from '../db/seedData';
 import { formatScriptureReference, formatScriptureText } from '../utils/scriptureFormatter';
 import { PresentationContentResolver } from './PresentationContentResolver';
+import { getCachedPptxSlides, getOrParsePptxSlides, cacheParsedPptxSlides } from '../utils/pptxParser';
+import { PptxRenderCacheManager } from '../utils/pptxBackend';
+import { pptxDeckSharedCache } from '../components/PptxRenderOverlay';
 
 export class PresentationCore {
+  private static presentationSlidesRegistry = new Map<string, any[]>();
+  private static pendingSlideFetches = new Set<string>();
+
+  public static registerPresentationSlides(idOrContentId: string, slides: any[]): void {
+    if (!idOrContentId || !Array.isArray(slides) || slides.length === 0) return;
+    const cleanId = idOrContentId.replace(/^(sched-item-|live-item-|pres-drag-)/, '');
+    this.presentationSlidesRegistry.set(idOrContentId, slides);
+    this.presentationSlidesRegistry.set(cleanId, slides);
+    this.presentationSlidesRegistry.set(`pres-${cleanId}`, slides);
+    this.presentationSlidesRegistry.set(`asset-${cleanId}`, slides);
+    try {
+      cacheParsedPptxSlides(idOrContentId, slides);
+      cacheParsedPptxSlides(cleanId, slides);
+    } catch {}
+  }
+
+  public static getRegisteredPresentationSlides(idOrContentId: string): any[] | undefined {
+    if (!idOrContentId) return undefined;
+    const cleanId = idOrContentId.replace(/^(sched-item-|live-item-|pres-drag-)/, '');
+    return (
+      this.presentationSlidesRegistry.get(idOrContentId) ||
+      this.presentationSlidesRegistry.get(cleanId) ||
+      this.presentationSlidesRegistry.get(`pres-${cleanId}`) ||
+      this.presentationSlidesRegistry.get(`asset-${cleanId}`) ||
+      this.presentationSlidesRegistry.get(idOrContentId.replace(/^asset-/, '')) ||
+      this.presentationSlidesRegistry.get(idOrContentId.replace(/^pres-/, ''))
+    );
+  }
+
+  private static triggerBackgroundPresentationLoad(contentIdOrId: string): void {
+    if (!contentIdOrId || this.pendingSlideFetches.has(contentIdOrId)) return;
+    this.pendingSlideFetches.add(contentIdOrId);
+
+    setTimeout(async () => {
+      try {
+        const { getPresentationById, getPptxFileBytes } = await import('../db/presentations');
+        const asset = await getPresentationById(contentIdOrId);
+        if (asset?.data?.slides && Array.isArray(asset.data.slides) && asset.data.slides.length > 0) {
+          PresentationCore.registerPresentationSlides(contentIdOrId, asset.data.slides);
+          if (asset.id) PresentationCore.registerPresentationSlides(asset.id, asset.data.slides);
+          window.dispatchEvent(new CustomEvent('simpleworship:slides-loaded', { detail: { contentId: contentIdOrId } }));
+          return;
+        }
+
+        const bytes = await getPptxFileBytes(contentIdOrId);
+        if (bytes) {
+          const parsed = await getOrParsePptxSlides(contentIdOrId, bytes);
+          if (parsed && parsed.length > 0) {
+            PresentationCore.registerPresentationSlides(contentIdOrId, parsed);
+            window.dispatchEvent(new CustomEvent('simpleworship:slides-loaded', { detail: { contentId: contentIdOrId } }));
+          }
+        }
+      } catch (err) {
+        console.warn('[PresentationCore] Background presentation load warning:', err);
+      } finally {
+        PresentationCore.pendingSlideFetches.delete(contentIdOrId);
+      }
+    }, 10);
+  }
   static getActiveContent(
     schedule: Schedule | null, 
     state: PresentationState | null | undefined,
@@ -424,8 +486,42 @@ export class PresentationCore {
         ];
       }
     } else if (item.type === 'ppt' || item.type === 'presentation' || (item.type as any) === 'pptx') {
-      if (item.data && Array.isArray(item.data.slides) && item.data.slides.length > 0) {
-        generated = item.data.slides.map((s: any, idx: number) => ({
+      const contentId = item.contentId || item.id;
+      
+      // 1. Direct item.data.slides
+      let rawSlides = (item.data && Array.isArray(item.data.slides) && item.data.slides.length > 0)
+        ? item.data.slides
+        : undefined;
+
+      // 2. In-memory registered presentation slides
+      if (!rawSlides && contentId) {
+        rawSlides = PresentationCore.getRegisteredPresentationSlides(contentId);
+      }
+
+      // 3. Parser resolved cache
+      if (!rawSlides && contentId) {
+        rawSlides = getCachedPptxSlides(contentId);
+      }
+
+      // 4. PowerPoint / Native backend canonical session
+      if (!rawSlides && contentId) {
+        const canonicalSession = PptxRenderCacheManager.getCanonicalSession(contentId);
+        if (canonicalSession?.slides && canonicalSession.slides.length > 0) {
+          rawSlides = canonicalSession.slides;
+        }
+      }
+
+      // 5. Shared deck cache from PPTX React Viewer
+      if (!rawSlides && contentId) {
+        const sharedDeck = pptxDeckSharedCache.get(contentId);
+        if (sharedDeck?.slides && sharedDeck.slides.length > 0) {
+          rawSlides = sharedDeck.slides;
+        }
+      }
+
+      if (rawSlides && Array.isArray(rawSlides) && rawSlides.length > 0) {
+        PresentationCore.registerPresentationSlides(contentId, rawSlides);
+        generated = rawSlides.map((s: any, idx: number) => ({
           id: s.id || `p-slide-${idx}`,
           title: s.title || `Slide ${idx + 1}`,
           text: s.text || '',
@@ -442,7 +538,7 @@ export class PresentationCore {
           titleFontSize: s.titleFontSize,
           accentColor: s.accentColor,
           headerBarColor: s.headerBarColor,
-          isTitleSlide: s.isTitleSlide,
+          isTitleSlide: s.isTitleSlide !== undefined ? s.isTitleSlide : (idx === 0),
           elements: s.elements,
           objects: s.objects,
           aspectRatio: s.aspectRatio,
@@ -457,10 +553,21 @@ export class PresentationCore {
           isPptx: true,
         }));
       } else {
+        // Trigger background hydration from IndexedDB if not cached yet
+        if (contentId) {
+          PresentationCore.triggerBackgroundPresentationLoad(contentId);
+        }
+
+        // Return a clean authentic template slide for the presentation
         generated = [
-          { id: 'p1', title: 'Slide 1', text: item.name, backgroundUrl: item.customBackgroundUrl },
-          { id: 'p2', title: 'Slide 2', text: 'Key Scripture Points', backgroundUrl: item.customBackgroundUrl },
-          { id: 'p3', title: 'Slide 3', text: 'Closing Prayer & Blessing', backgroundUrl: item.customBackgroundUrl }
+          {
+            id: `${item.id || 'pres'}-slide-1`,
+            title: item.name || 'PowerPoint Presentation',
+            text: item.notes || 'Presentation Slide',
+            backgroundUrl: item.customBackgroundUrl,
+            isTitleSlide: true,
+            isPptx: true,
+          }
         ];
       }
     } else if (

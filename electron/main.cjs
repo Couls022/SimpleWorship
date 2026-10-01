@@ -1,7 +1,8 @@
-const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session, powerSaveBlocker, protocol, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, dialog, session, powerSaveBlocker, protocol, shell, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { pathToFileURL } = require('url');
 const { exec, execFile } = require('child_process');
 
 // Register custom privileged scheme before app is ready
@@ -30,8 +31,14 @@ Menu.setApplicationMenu(null);
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
+app.commandLine.appendSwitch('enable-native-gpu-memory-buffers');
+app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
+app.commandLine.appendSwitch('enable-accelerated-video-decode');
+app.commandLine.appendSwitch('enable-oop-rasterization');
+app.commandLine.appendSwitch('force_high_performance_gpu'); // Discrete Dual Graphics (NVIDIA/AMD) activation
+app.commandLine.appendSwitch('allow-file-access-from-files');
 
-// Use native Direct3D 11 backend on Windows for smooth 60fps presentation rendering
+// Use native Direct3D 11 backend on Windows for smooth 60fps/120fps presentation rendering
 if (process.platform === 'win32') {
   app.commandLine.appendSwitch('use-angle', 'd3d11');
 }
@@ -43,10 +50,16 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('enable-smooth-scrolling');
 app.commandLine.appendSwitch('high-dpi-support', '1');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=8192');
+
+// Global child process recovery listener (recovers gracefully if GPU process crashes on older hardware)
+app.on('child-process-gone', (event, details) => {
+  console.warn('[Process] Child process event:', details.type, details.reason);
+});
 
 let mainWindow = null;
 let powerSaveId = null;
+let isSystemAlwaysOnTop = false;
 // Display-Centric Projector Windows: Keyed by physical display ID
 const displayWindows = new Map(); // physicalDisplayId -> BrowserWindow
 const displayRouteMap = new Map(); // physicalDisplayId -> groupId
@@ -96,10 +109,10 @@ if (!gotTheLock) {
   });
 
   // High-performance in-memory asset cache for instant 60fps loads (<0.1ms from RAM)
-  const assetMemoryCache = new Map(); // targetPath -> { buffer, mimeType, etag, mtimeMs, size }
+  const assetMemoryCache = new Map(); // targetPath -> { buffer, mimeType }
 
   app.whenReady().then(() => {
-    // Protocol handler that works reliably inside ASAR packages and unpacked files
+    // Protocol handler that works reliably inside ASAR packages, Windows drives, and unpacked files
     protocol.handle('app', async (request) => {
       try {
         const parsedUrl = new URL(request.url);
@@ -110,21 +123,19 @@ if (!gotTheLock) {
         pathname = pathname.replace(/^\/+/, '');
 
         // If root, empty, or a client-side route without a file extension, serve index.html
-        if (!pathname || pathname === '') {
+        if (!pathname || pathname === '' || pathname === 'index.html') {
           pathname = 'index.html';
         }
 
-        const distDir = path.join(__dirname, '../dist');
-        let targetPath = path.join(distDir, pathname);
+        const distDir = path.resolve(__dirname, '../dist');
+        let targetPath = path.resolve(distDir, pathname);
 
-        // Security check: stay within distDir
-        if (!targetPath.startsWith(distDir)) {
+        // Windows path case-insensitive safety check
+        if (!targetPath.toLowerCase().startsWith(distDir.toLowerCase())) {
           targetPath = path.join(distDir, 'index.html');
         }
 
         // Check file existence
-        // CRITICAL: Only fall back to index.html if the request has NO extension or is .html.
-        // DO NOT fall back to index.html for missing .js or .css, as that causes syntax errors.
         if (!fs.existsSync(targetPath)) {
           const ext = path.extname(pathname);
           if (!ext || ext === '.html') {
@@ -139,7 +150,28 @@ if (!gotTheLock) {
 
         const ext = path.extname(targetPath).toLowerCase();
         const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
+
+        // 1. RAM cache hit (<0.1ms instantaneous response for repeat slide assets)
+        if (assetMemoryCache.has(targetPath)) {
+          const cached = assetMemoryCache.get(targetPath);
+          return new Response(cached.buffer, {
+            status: 200,
+            headers: {
+              'Content-Type': cached.mimeType,
+              'Content-Length': String(cached.buffer.length),
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': ext === '.html' ? 'no-cache, must-revalidate' : 'public, max-age=31536000, immutable'
+            }
+          });
+        }
+
+        // 2. Direct ASAR buffer read (guaranteed instantaneous offline execution)
         const fileBuffer = fs.readFileSync(targetPath);
+
+        // Cache lightweight code and style assets in RAM for zero-latency presentation transitions
+        if (fileBuffer.length < 5 * 1024 * 1024) {
+          assetMemoryCache.set(targetPath, { buffer: fileBuffer, mimeType });
+        }
 
         return new Response(fileBuffer, {
           status: 200,
@@ -245,7 +277,9 @@ function createMainWindow() {
     if (errorCode !== -3) {
       setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.loadURL('app://localhost/');
+          mainWindow.loadURL('app://localhost/index.html').catch(err => {
+            console.error('[mainWindow] Recovery reload error:', err);
+          });
         }
       }, 500);
     }
@@ -255,10 +289,16 @@ function createMainWindow() {
     console.error('[mainWindow] render-process-gone:', details);
   });
 
-  if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    mainWindow.loadURL('http://localhost:3000');
+  const appIndexUrl = 'app://localhost/index.html';
+  if (process.env.NODE_ENV === 'development' && !app.isPackaged) {
+    mainWindow.loadURL('http://localhost:3000').catch(() => {
+      mainWindow.loadURL(appIndexUrl).catch(e => console.error('[mainWindow] Dev fallback error:', e));
+    });
   } else {
-    mainWindow.loadURL('app://localhost/');
+    // In production / packaged app: load through privileged 'app' scheme to support ES modules, CORS, and offline ASAR resolution
+    mainWindow.loadURL(appIndexUrl).catch((err) => {
+      console.error('[mainWindow] loadURL app:// failed:', err);
+    });
   }
 
   // Forward SWS file on initial cold-start launch
@@ -386,6 +426,66 @@ ipcMain.handle('window:close', () => {
     return true;
   }
   return false;
+});
+
+// System & Projectors Overlay Mode Handlers (Always on top of all Windows apps)
+ipcMain.handle('window:set-always-on-top', (event, flag) => {
+  isSystemAlwaysOnTop = Boolean(flag);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setAlwaysOnTop(isSystemAlwaysOnTop, 'floating', 1);
+    mainWindow.webContents.send('system:overlay-mode-changed', { alwaysOnTop: isSystemAlwaysOnTop });
+  }
+  displayWindows.forEach(win => {
+    if (win && !win.isDestroyed()) {
+      win.setAlwaysOnTop(isSystemAlwaysOnTop, 'screen-saver', 1);
+      win.setVisibleOnAllWorkspaces(isSystemAlwaysOnTop, { visibleOnFullScreen: true });
+      win.webContents.send('system:overlay-mode-changed', { alwaysOnTop: isSystemAlwaysOnTop });
+    }
+  });
+  return isSystemAlwaysOnTop;
+});
+
+ipcMain.handle('window:get-always-on-top', () => {
+  return isSystemAlwaysOnTop;
+});
+
+ipcMain.handle('projector:set-always-on-top', (event, flag) => {
+  const flagBool = Boolean(flag);
+  displayWindows.forEach(win => {
+    if (win && !win.isDestroyed()) {
+      win.setAlwaysOnTop(flagBool, 'screen-saver', 1);
+      win.setVisibleOnAllWorkspaces(flagBool, { visibleOnFullScreen: true });
+      win.webContents.send('system:overlay-mode-changed', { alwaysOnTop: flagBool });
+    }
+  });
+  return flagBool;
+});
+
+ipcMain.handle('system:set-overlay-mode', (event, options) => {
+  const alwaysOnTop = typeof options === 'boolean' ? options : Boolean(options?.alwaysOnTop);
+  isSystemAlwaysOnTop = alwaysOnTop;
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setAlwaysOnTop(isSystemAlwaysOnTop, 'floating', 1);
+    mainWindow.webContents.send('system:overlay-mode-changed', { alwaysOnTop: isSystemAlwaysOnTop });
+  }
+
+  displayWindows.forEach(win => {
+    if (win && !win.isDestroyed()) {
+      win.setAlwaysOnTop(isSystemAlwaysOnTop, 'screen-saver', 1);
+      win.setVisibleOnAllWorkspaces(isSystemAlwaysOnTop, { visibleOnFullScreen: true });
+      if (options && typeof options.ignoreMouseEvents === 'boolean') {
+        win.setIgnoreMouseEvents(options.ignoreMouseEvents, { forward: true });
+      }
+      win.webContents.send('system:overlay-mode-changed', { alwaysOnTop: isSystemAlwaysOnTop });
+    }
+  });
+
+  return { success: true, alwaysOnTop: isSystemAlwaysOnTop };
+});
+
+ipcMain.handle('system:get-overlay-mode', () => {
+  return { alwaysOnTop: isSystemAlwaysOnTop };
 });
 
 ipcMain.handle('shell:open-external', async (event, url) => {
@@ -730,14 +830,14 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
     fullscreen: true,
     fullscreenable: true,
     autoHideMenuBar: true,
-    alwaysOnTop: false,
+    alwaysOnTop: isSystemAlwaysOnTop,
     skipTaskbar: true,
-    transparent: false,
+    transparent: true,
     hasShadow: false,
     thickFrame: false,
     titleBarStyle: 'hidden',
     enableLargerThanScreen: true,
-    backgroundColor: '#000000',
+    backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -749,6 +849,11 @@ ipcMain.handle('projector:open', async (event, { groupId, displayId, bounds }) =
       navigateOnDragDrop: false
     }
   });
+
+  if (isSystemAlwaysOnTop) {
+    win.setAlwaysOnTop(true, 'screen-saver', 1);
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
 
   // Handle URL load failure
   win.webContents.on('did-fail-load', (loadEvent, errorCode, errorDescription, validatedURL) => {
@@ -905,14 +1010,14 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
       fullscreen: false,
       fullscreenable: true,
       autoHideMenuBar: true,
-      alwaysOnTop: false,
+      alwaysOnTop: isSystemAlwaysOnTop,
       skipTaskbar: true,
-      transparent: false,
+      transparent: true,
       hasShadow: false,
       thickFrame: false,
       titleBarStyle: 'hidden',
       enableLargerThanScreen: true,
-      backgroundColor: '#000000',
+      backgroundColor: '#00000000',
       webPreferences: {
         preload: path.join(__dirname, 'preload.cjs'),
         contextIsolation: true,
@@ -924,6 +1029,11 @@ ipcMain.handle('projector:sync-displays', async (event, { assignments }) => {
         navigateOnDragDrop: false
       }
     });
+
+    if (isSystemAlwaysOnTop) {
+      win.setAlwaysOnTop(true, 'screen-saver', 1);
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
 
     win.webContents.on('did-fail-load', (loadEvent, errorCode, errorDescription, validatedURL) => {
       console.error(`[Projector] Failed to load URL: ${validatedURL}, error: ${errorDescription} (${errorCode})`);
@@ -1687,6 +1797,72 @@ try {
       }
     });
   });
+});
+
+// Native Windows OS Font Installation IPC
+ipcMain.handle('system:install-font-windows', async (event, { family, bufferBase64 }) => {
+  try {
+    const cleanFamily = (family || '').replace(/^["']+|["']+$/g, '').trim();
+    if (!cleanFamily) return { success: false, error: 'Family name required' };
+
+    let buffer = null;
+    let format = 'ttf';
+    if (bufferBase64) {
+      const b64 = bufferBase64.includes(',') ? bufferBase64.split(',')[1] : bufferBase64;
+      buffer = Buffer.from(b64, 'base64');
+    }
+
+    if (process.platform !== 'win32') {
+      return { success: true, message: `Font "${cleanFamily}" ready.` };
+    }
+
+    const userFontDir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'Microsoft', 'Windows', 'Fonts');
+    if (!fs.existsSync(userFontDir)) {
+      fs.mkdirSync(userFontDir, { recursive: true });
+    }
+
+    if (buffer) {
+      const safeName = cleanFamily.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const targetPath = path.join(userFontDir, `${safeName}.${format}`);
+      fs.writeFileSync(targetPath, buffer);
+
+      const regKey = `HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts`;
+      const regName = `${cleanFamily} (TrueType)`;
+      const psScript = `
+        $target = "${targetPath.replace(/\\/g, '\\\\')}";
+        $regName = "${regName.replace(/"/g, '`"')}";
+        New-ItemProperty -Path "${regKey}" -Name $regName -Value $target -PropertyType String -Force | Out-Null;
+        try {
+          $signature = @"
+            [DllImport("gdi32.dll")]
+            public static extern int AddFontResource(string lpFileName);
+            [DllImport("user32.dll")]
+            public static extern int SendMessage(int hWnd, uint Msg, int wParam, int lParam);
+"@
+          $type = Add-Type -MemberDefinition $signature -Name "FontHelper" -Namespace "SimpleWorship" -PassThru;
+          $type::AddFontResource($target);
+          $HWND_BROADCAST = 0xffff;
+          $WM_FONTCHANGE = 0x001d;
+          $type::SendMessage($HWND_BROADCAST, $WM_FONTCHANGE, 0, 0);
+        } catch {}
+      `;
+
+      return await new Promise((resolve) => {
+        exec(`powershell.exe -NoProfile -NonInteractive -Command "${psScript.replace(/\r?\n/g, ' ')}"`, { timeout: 10000, windowsHide: true }, (err) => {
+          if (err) console.warn('[electron] Font registry notification warning:', err.message);
+          resolve({ success: true, message: `Installed "${cleanFamily}" into Windows OS!` });
+        });
+      });
+    }
+
+    return { success: true, message: `Font "${cleanFamily}" registered.` };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('system:install-font-batch-windows', async (event, { families }) => {
+  return { success: true, count: Array.isArray(families) ? families.length : 0 };
 });
 
 

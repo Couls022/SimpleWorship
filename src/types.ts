@@ -418,6 +418,7 @@ export interface ObjectAnimation {
 export interface ObjectStyle {
   fontFamily?: string;
   fontSize?: number;
+  rawFontSize?: number;
   fontColor?: string;
   fontWeight?: string;
   fontStyle?: string;
@@ -581,6 +582,7 @@ export interface Slide {
   nativeAnimations?: any[];
   animations?: any[];
   animationSteps?: any[];
+  isPptx?: boolean;
 }
 
 export interface PresentationItem {
@@ -896,6 +898,9 @@ declare global {
       detectPowerPoint?: () => Promise<{ available: boolean; platform: string; executablePath?: string; version?: string; reason?: string }>;
       renderPptxWithPowerPoint?: (payload: any) => Promise<{ success: boolean; slides?: string[]; slideCount?: number; width?: number; height?: number; aspectRatio?: number; cached?: boolean; error?: string }>;
       clearPowerPointCache?: (hash?: string) => Promise<{ success: boolean; error?: string }>;
+      openExternalUrl?: (url: string) => Promise<boolean>;
+      installFontToWindows?: (family: string, bufferBase64?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+      installFontBatchToWindows?: (families: string[]) => Promise<{ success: boolean; count?: number; error?: string }>;
     };
   }
 }

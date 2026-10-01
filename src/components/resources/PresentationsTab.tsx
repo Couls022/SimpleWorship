@@ -7,6 +7,7 @@ import { parsePptxOffline } from '../../utils/pptxParser';
 import { extractFontsFromPptx, ensurePptxFontsLoaded, scanPptxFontsDetailed } from '../../utils/pptxFontManager';
 import { handleRangeSelection } from '../../utils/selectionUtils';
 import { PresentationEditorModal } from '../PresentationEditorModal';
+import { PresentationCore } from '../../core/PresentationCore';
 
 export default function PresentationsTab() {
   const [presentations, setPresentations] = useState<Asset[]>([]);
@@ -86,7 +87,10 @@ export default function PresentationsTab() {
         window.dispatchEvent(new CustomEvent('simpleworship:notify', { detail: 'No slides could be parsed from this PPTX file.' }));
         return;
       }
-      await savePresentation(file.name.replace('.pptx', ''), slides, file);
+      const savedAsset = await savePresentation(file.name.replace('.pptx', ''), slides, file);
+      if (savedAsset) {
+        PresentationCore.registerPresentationSlides(savedAsset.id, slides);
+      }
       await loadPresentations();
 
       // 3. Proactive Check: If fonts exist on device, use them directly! If missing, pop up the 1-Click installer!
@@ -99,13 +103,13 @@ export default function PresentationsTab() {
           }
         }));
         window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
-          detail: `⚠️ May ${scanResult.missingFonts.length} font na wala sa device. Bukas ang 1-Click Download & Install!` 
+          detail: `⚠️ ${scanResult.missingFonts.length} fonts missing on device. 1-Click Download & Install is ready!` 
         }));
       } else {
         const fontCount = scanResult.allFonts.length;
         window.dispatchEvent(new CustomEvent('simpleworship:notify', { 
           detail: fontCount > 0 
-            ? `✓ Na-import ang "${file.name.replace('.pptx', '')}": Lahat ng ${fontCount} fonts ay nade-detect sa iyong device at gagamitin agad!`
+            ? `✓ Imported "${file.name.replace('.pptx', '')}": All ${fontCount} fonts are detected on your device and applied!`
             : `✓ Imported ${slides.length} slides from PPTX!`
         }));
       }
@@ -120,6 +124,9 @@ export default function PresentationsTab() {
   };
 
   const handleAddToSchedule = (pres: Asset) => {
+    if (pres.data?.slides) {
+      PresentationCore.registerPresentationSlides(pres.id, pres.data.slides);
+    }
     addScheduleItem({
       id: `sched-item-${Date.now()}`,
       type: 'presentation',
@@ -133,6 +140,9 @@ export default function PresentationsTab() {
   };
 
   const handleSendToLive = (pres: Asset) => {
+    if (pres.data?.slides) {
+      PresentationCore.registerPresentationSlides(pres.id, pres.data.slides);
+    }
     const itemId = `live-item-${Date.now()}`;
     const item = {
       id: itemId,
@@ -144,11 +154,14 @@ export default function PresentationsTab() {
       isExpanded: false
     };
     const { setPreviewItem } = useStore.getState();
-    setPreviewItem(item.id, 0);
+    setPreviewItem(item, 0);
     goLiveItem(item.id, 0, useStore.getState().activeControlGroupId || undefined, item);
   };
 
   const handleDragStart = (e: React.DragEvent, pres: Asset) => {
+    if (pres.data?.slides) {
+      PresentationCore.registerPresentationSlides(pres.id, pres.data.slides);
+    }
     const payload = {
       type: 'presentation',
       item: {
@@ -181,6 +194,9 @@ export default function PresentationsTab() {
     setSelectedPresIds(selectedIds);
     setAnchorPresId(anchorId);
 
+    if (pres.data?.slides) {
+      PresentationCore.registerPresentationSlides(pres.id, pres.data.slides);
+    }
     const { setPreviewItem } = useStore.getState();
     const item = {
       id: pres.id,

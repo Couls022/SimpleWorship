@@ -621,6 +621,50 @@ async function startServer() {
     }
   });
 
+  // 9. Windows OS Direct Font Installation API (System-Wide for PowerPoint, Word, Canva, etc.)
+  app.post('/api/system/install-font-windows', async (req, res) => {
+    try {
+      const { family, bufferBase64 } = req.body;
+      if (!family || typeof family !== 'string') {
+        return res.status(400).json({ success: false, error: 'Font family name is required' });
+      }
+
+      const fontBuffer = bufferBase64 ? Buffer.from(bufferBase64, 'base64') : undefined;
+      const { installFontToWindows } = await import('./src/server/fontDownloader');
+      const result = await installFontToWindows(family, fontBuffer);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post('/api/system/install-font-batch-windows', async (req, res) => {
+    try {
+      const { families } = req.body;
+      if (!Array.isArray(families) || families.length === 0) {
+        return res.status(400).json({ success: false, error: 'Array of font families is required' });
+      }
+
+      const { installFontToWindows } = await import('./src/server/fontDownloader');
+      const results: Array<{ family: string; success: boolean; message: string }> = [];
+
+      for (const fam of families) {
+        if (!fam) continue;
+        const resObj = await installFontToWindows(fam);
+        results.push({ family: fam, success: resObj.success, message: resObj.message });
+      }
+
+      res.json({
+        success: true,
+        total: results.length,
+        successfulCount: results.filter(r => r.success).length,
+        results
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Vite Middleware Setup
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

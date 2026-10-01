@@ -6,6 +6,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize'),
   isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
+  setAlwaysOnTop: (flag) => ipcRenderer.invoke('window:set-always-on-top', flag),
+  getAlwaysOnTop: () => ipcRenderer.invoke('window:get-always-on-top'),
+  setProjectorAlwaysOnTop: (flag) => ipcRenderer.invoke('projector:set-always-on-top', flag),
+  setOverlayMode: (options) => ipcRenderer.invoke('system:set-overlay-mode', options),
+  getOverlayMode: () => ipcRenderer.invoke('system:get-overlay-mode'),
+  onOverlayModeChanged: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('system:overlay-mode-changed', handler);
+    return () => ipcRenderer.removeListener('system:overlay-mode-changed', handler);
+  },
   onWindowStateChanged: (callback) => {
     const handler = (event, isMaximized) => callback(isMaximized);
     ipcRenderer.on('window:state-changed', handler);
@@ -67,4 +77,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renderPptxWithPowerPoint: (payload) => ipcRenderer.invoke('pptx:render-slides', payload),
   clearPowerPointCache: (hash) => ipcRenderer.invoke('pptx:clear-cache', hash),
   openExternalUrl: (url) => ipcRenderer.invoke('shell:open-external', url),
+  installFontToWindows: (family, bufferBase64) => ipcRenderer.invoke('system:install-font-windows', { family, bufferBase64 }),
+  installFontBatchToWindows: (families) => ipcRenderer.invoke('system:install-font-batch-windows', { families }),
 });

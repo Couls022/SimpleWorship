@@ -193,17 +193,9 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
   return color;
 }
 
-  const [, setFontTick] = React.useState(0);
+  // Proactive font background loading for custom Canva/Google fonts (only on full/live views to prevent thumbnail gallery spam)
   useEffect(() => {
-    const handleFontUpdated = () => {
-      setFontTick(t => t + 1);
-    };
-    window.addEventListener('simpleworship:fonts-updated', handleFontUpdated);
-    return () => window.removeEventListener('simpleworship:fonts-updated', handleFontUpdated);
-  }, []);
-
-  // Proactive font background loading for custom Canva/Google fonts
-  useEffect(() => {
+    if (mode === 'thumbnail') return;
     const fonts = new Set<string>();
     if (slide.fontFamily) fonts.add(slide.fontFamily);
     if (slide.titleFontFamily) fonts.add(slide.titleFontFamily);
@@ -223,7 +215,7 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
     if (fonts.size > 0) {
       ensurePptxFontsLoaded(Array.from(fonts)).catch(() => {});
     }
-  }, [slide, themeStyles]);
+  }, [slide, themeStyles, mode]);
 
   const titleFont = getCompatibleFontStack(slide.titleFontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif');
   const bodyFont = getCompatibleFontStack(slide.fontFamily || themeStyles?.fontFamily || 'Aptos, Calibri, "Segoe UI", -apple-system, sans-serif');
@@ -371,13 +363,14 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
             const style = obj.style || {};
             const objFont = getCompatibleFontStack(style.fontFamily || (obj.type === 'shape' ? bodyFont : titleFont));
 
+            const baseFontSz = (style as any).rawFontSize || style.fontSize || 36;
             // Auto-adjust scale calculation to prevent overflow, line jumps and collision
             const autoFitFactor = (obj.type === 'text' || obj.type === 'shape') && obj.text && obj.width > 0 && obj.height > 0
               ? calculateAutoFitTextScale({
                   text: obj.text,
                   boxWidth: obj.width,
                   boxHeight: obj.height,
-                  fontSize: style.fontSize || 36,
+                  fontSize: baseFontSz,
                   fontFamily: objFont,
                   fontWeight: style.fontWeight || (obj.type === 'text' ? 'bold' : 'normal'),
                   lineHeightRatio: style.lineSpacing || 1.2,
@@ -385,7 +378,6 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                 })
               : 1;
 
-            const baseFontSz = style.fontSize || 36;
             const fontPx = Math.max(6, Math.round(baseFontSz * fitScale * autoFitFactor));
             const paddingPx = Math.max(0, Math.round((style.padding || 8) * fitScale));
             const paddingTopPx = style.paddingTop !== undefined ? Math.round(style.paddingTop * fitScale) : paddingPx;

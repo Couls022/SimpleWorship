@@ -91,8 +91,10 @@ export default function TargetMonitorLock({ groupId, onOpenConfig, compact = fal
   const hasSharingRoutes = sharingGroups.length > 0;
 
   // Check if this route is currently the Top Overlay
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
   const stackRank = routeActivationStack.indexOf(groupId);
-  const isTopOverlay = stackRank === 0 || sharingGroups.every(other => {
+  const isTopOverlay = (groupId === activeControlGroupId) || (stackRank === 0) || sharingGroups.every(other => {
+    if (other.id === activeControlGroupId) return false;
     const otherRank = routeActivationStack.indexOf(other.id);
     return otherRank === -1 || (stackRank !== -1 && stackRank < otherRank);
   });

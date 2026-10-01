@@ -133,32 +133,35 @@ export function routeTargetsDisplay(group: OutputGroup, displayId: string, cache
     ? group.displayIds 
     : (group.targetDisplayId ? [group.targetDisplayId] : []);
 
-  // When output group has no explicit display IDs configured:
-  if (list.length === 0) {
-    const target = String(displayId).toLowerCase().trim();
-    const isTargetStage = target.includes('stage') || target.includes('confidence') || target.includes('foldback');
-    if (group.role === 'confidence' || group.id === 'group-stage') {
-      return isTargetStage;
-    }
-    
-    // For standard broadcast and presentation routes (Route 1, Route 2, R3, R4, custom etc.),
-    // if target is a stage screen, don't target it unless configured.
-    if (isTargetStage) {
-      return false;
-    }
-
-    // Pipeline Isolation: Only the primary default route (Route 1 / group-congregation)
-    // targets standard presentation screens by default when no displays are explicitly locked.
-    // Secondary routes (Route 2, Route 3...) must be explicitly configured to target displays,
-    // preventing unconfigured routes from bleeding onto main auditorium screens.
-    return group.id === 'group-congregation';
-  }
-
   const displays = cachedDisplays || 
     (typeof window !== 'undefined' ? (window as any).__simpleworship_cached_displays : undefined);
 
-  // Strictly check if target display matches any of the explicitly configured displays in this route's list
-  return list.some((id) => isSamePhysicalDisplay(id, displayId, displays));
+  // If this route has explicit target lock displays configured, STRICTLY enforce that list!
+  if (list.length > 0) {
+    return list.some((id) => isSamePhysicalDisplay(id, displayId, displays));
+  }
+
+  // When output group has NO explicit display IDs configured:
+  const target = String(displayId).toLowerCase().trim();
+  const isTargetStage = target.includes('stage') || target.includes('confidence') || target.includes('foldback');
+
+  if (group.role === 'confidence' || group.id === 'group-stage') {
+    return isTargetStage;
+  }
+  
+  if (isTargetStage) {
+    return false;
+  }
+
+  // Default foundational primary congregation route ('group-congregation' or role === 'primary'):
+  // If not yet explicitly target-locked, defaults to presentation screens.
+  if (group.id === 'group-congregation' || group.role === 'primary') {
+    return true;
+  }
+
+  // Auxiliary router panels (Route 2, Route 3, Add Route...) MUST be target-locked to a monitor.
+  // If not target-locked, they do NOT output to displays they are not locked to.
+  return false;
 }
 
 /**
@@ -235,11 +238,14 @@ export function resolveDisplayAssignments(
       continue;
     }
 
-    // 3. Resolve overlay stacking order based on routeActivationStack
-    // Most recently activated live route is index 0 (UNA / topmost)
-    // The previous live route is index 1 (PANGALAWA / 2nd)
-    // The one before is index 2 (PANGATLO / 3rd)
+    // 3. Resolve overlay stacking order based on activeControlGroupId and routeActivationStack
+    // Most active live route is index 0 (UNA / topmost overlay on target monitor)
     const stackedGroupIds = [...liveGroupIds].sort((a, b) => {
+      const aIsActive = (a === activeControlGroupId);
+      const bIsActive = (b === activeControlGroupId);
+      if (aIsActive && !bIsActive) return -1;
+      if (bIsActive && !aIsActive) return 1;
+
       const rankA = stackRankMap.has(a) ? stackRankMap.get(a)! : 999;
       const rankB = stackRankMap.has(b) ? stackRankMap.get(b)! : 999;
       return rankA - rankB;
@@ -296,7 +302,7 @@ export function buildProjectorUrl(
   const query = `projector=true&displayId=${encodeURIComponent(displayId)}&groupId=${encodeURIComponent(groupId)}`;
   const hash = `#/projector?displayId=${encodeURIComponent(displayId)}&groupId=${encodeURIComponent(groupId)}`;
 
-  if (baseOriginOrFileUrl.startsWith('http://') || baseOriginOrFileUrl.startsWith('https://')) {
+  if (baseOriginOrFileUrl.startsWith('http://') || baseOriginOrFileUrl.startsWith('https://') || baseOriginOrFileUrl.startsWith('app://')) {
     const cleanOrigin = baseOriginOrFileUrl.replace(/\/+$/, '');
     return `${cleanOrigin}/?${query}${hash}`;
   }

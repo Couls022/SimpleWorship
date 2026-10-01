@@ -538,6 +538,24 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
       }}
     >
       {(() => {
+        // 1. PRIMARY ENGINE: High-fidelity interactive vector canvas with full animations, effects, and typography
+        if (effectiveCanvasProps && effectiveActiveSlide) {
+          return (
+            <SlideCanvas 
+              {...effectiveCanvasProps} 
+              activeSlide={effectiveActiveSlide}
+              presentationElementStates={!isThumbnail ? mergedElementStates : undefined}
+              presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
+              zoom={customZoom} 
+              mode="present"
+              showRulers={false} 
+              showGrid={false} 
+              canEdit={false} 
+            />
+          );
+        }
+
+        // 2. Fallback to rasterized frame if vector canvas is unavailable or PowerPoint COM explicitly requested
         const canonical = PptxRenderCacheManager.getCanonicalFrame(contentId, activeSlideIndex);
         const effectiveDataUrl = canonical?.dataUrl || powerPointSession?.slides?.[activeSlideIndex]?.dataUrl;
 
@@ -557,22 +575,7 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
           );
         }
 
-        if (effectiveCanvasProps && effectiveActiveSlide) {
-          return (
-            <SlideCanvas 
-              {...effectiveCanvasProps} 
-              activeSlide={effectiveActiveSlide}
-              presentationElementStates={!isThumbnail ? mergedElementStates : undefined}
-              presentationKeyframesCss={!isThumbnail ? presentationKeyframesCss : undefined}
-              zoom={customZoom} 
-              mode="present"
-              showRulers={false} 
-              showGrid={false} 
-              canEdit={false} 
-            />
-          );
-        }
-
+        // 3. Fallback to native PresentationSlideView with vector DrawingML shapes & typography
         if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl || currentSlide.text)) {
           return (
             <PresentationSlideView 
@@ -724,22 +727,7 @@ const PptxDirectThumbnail: React.FC<{
     return { ...cachedDeck.canvasProps.zoom, editorScale: scale };
   }, [cachedDeck.canvasProps?.zoom, effectiveContainerW, effectiveContainerH, cWidth, cHeight]);
 
-  // 1. Authoritative check: If PowerPoint COM or rasterized canonical frame is available, render exact image!
-  const canonical = PptxRenderCacheManager.getCanonicalFrame(contentId, slideIndex);
-  if (canonical?.dataUrl) {
-    return (
-      <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden pointer-events-none">
-        <img 
-          src={canonical.dataUrl} 
-          alt={`Slide ${slideIndex + 1}`}
-          className="w-full h-full object-contain pointer-events-none select-none"
-          style={{ maxWidth: '100%', maxHeight: '100%' }}
-        />
-      </div>
-    );
-  }
-
-  // 2. Native OpenXML vector canvas render when ready
+  // 1. Native OpenXML vector canvas render when ready
   if (cachedDeck.canvasProps && targetSlide) {
     return (
       <div
@@ -758,6 +746,21 @@ const PptxDirectThumbnail: React.FC<{
           showRulers={false}
           showGrid={false}
           canEdit={false}
+        />
+      </div>
+    );
+  }
+
+  // 2. Authoritative check: If PowerPoint COM or rasterized canonical frame is available, render exact image!
+  const canonical = PptxRenderCacheManager.getCanonicalFrame(contentId, slideIndex);
+  if (canonical?.dataUrl) {
+    return (
+      <div className="w-full h-full relative flex items-center justify-center bg-black overflow-hidden pointer-events-none">
+        <img 
+          src={canonical.dataUrl} 
+          alt={`Slide ${slideIndex + 1}`}
+          className="w-full h-full object-contain pointer-events-none select-none"
+          style={{ maxWidth: '100%', maxHeight: '100%' }}
         />
       </div>
     );
@@ -871,30 +874,14 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
       }
     }
     if (contentId) {
-      import('../db').then(({ getDB }) => {
-        getDB().then(async (db) => {
-          let asset = await db.get('assets', contentId);
-          if (!asset && contentId.startsWith('asset-')) {
-            asset = await db.get('assets', contentId.replace('asset-', ''));
-          } else if (!asset && !contentId.startsWith('asset-')) {
-            asset = await db.get('assets', `asset-${contentId}`);
-          }
-          if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
-            const bytes = toValidPptxUint8Array(asset.data.fileBytes);
-            if (bytes) {
-              pptxBytesCache.set(contentId, bytes);
-              if (isMounted) setLocalBytes(bytes);
+      import('../db/presentations').then(({ getPptxFileBytes }) => {
+        getPptxFileBytes(contentId).then((bytes) => {
+          if (bytes && isValidPptxBinary(bytes)) {
+            const valid = toValidPptxUint8Array(bytes);
+            if (valid && isMounted) {
+              pptxBytesCache.set(contentId, valid);
+              setLocalBytes(valid);
             }
-          } else if (asset?.blob) {
-            asset.blob.arrayBuffer().then((buf: ArrayBuffer) => {
-              if (isValidPptxBinary(buf)) {
-                const bytes = toValidPptxUint8Array(buf);
-                if (bytes) {
-                  pptxBytesCache.set(contentId, bytes);
-                  if (isMounted) setLocalBytes(bytes);
-                }
-              }
-            }).catch(() => {});
           }
         }).catch(e => console.error('[PptxRenderOverlay] Error loading PPTX from DB', e));
       });
@@ -918,7 +905,60 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     return () => window.removeEventListener('simpleworship:canonical-frame-updated', handleFrameUpdate);
   }, [contentId]);
 
-  // 1. Authoritative check: If PowerPoint COM or rasterized canonical frame is available, render exact image!
+  // 1. If this is a thumbnail and we have the shared deck cached, render PptxDirectThumbnail
+  if (isThumbnail && cachedDeck) {
+    return (
+      <PptxDirectThumbnail
+        cachedDeck={cachedDeck}
+        slideIndex={activeSlideIndex}
+        contentId={contentId}
+        targetWidth={targetWidth}
+        targetHeight={targetHeight}
+        currentSlide={currentSlide}
+        themeStyles={themeStyles}
+      />
+    );
+  }
+
+  // 2. If local binary bytes are available, render interactive PptxViewerInner with full animations & typography
+  if (localBytes) {
+    const fallbackView = currentSlide ? (
+      <PresentationSlideView 
+        slide={currentSlide} 
+        slideIndex={activeSlideIndex} 
+        themeStyles={themeStyles} 
+        targetWidth={targetWidth}
+        targetHeight={targetHeight}
+        isProjectorMode={isProjectorMode}
+        isOverlayLayer={isOverlayLayer}
+        mode={isThumbnail ? 'thumbnail' : 'full'}
+      />
+    ) : undefined;
+
+    return (
+      <PptxErrorBoundary fallback={fallbackView}>
+        <PptxViewerInner 
+          bytes={localBytes} 
+          activeSlideIndex={activeSlideIndex} 
+          contentId={contentId} 
+          isThumbnail={isThumbnail} 
+          isProjectorMode={isProjectorMode} 
+          isOverlayLayer={isOverlayLayer}
+          pptxAction={pptxAction} 
+          pptxActionTimestamp={pptxActionTimestamp} 
+          pptxAnimationGroupIndex={pptxAnimationGroupIndex}
+          onAnimationGroupChange={onAnimationGroupChange}
+          onActiveSlideChange={onActiveSlideChange}
+          currentSlide={currentSlide}
+          themeStyles={themeStyles}
+          targetWidth={targetWidth}
+          targetHeight={targetHeight}
+        />
+      </PptxErrorBoundary>
+    );
+  }
+
+  // 3. Fallback: If canonical frame image is available in memory/disk, render
   const canonicalFrame = PptxRenderCacheManager.getCanonicalFrame(contentId, activeSlideIndex);
   if (canonicalFrame?.dataUrl) {
     return (
@@ -936,8 +976,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     );
   }
 
-  // 2. If this is a thumbnail and we have the shared deck cached, render PptxDirectThumbnail
-  if (isThumbnail && cachedDeck) {
+  if (cachedDeck && cachedDeck.canvasProps) {
     return (
       <PptxDirectThumbnail
         cachedDeck={cachedDeck}
@@ -951,78 +990,29 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     );
   }
 
-  if (!localBytes) {
-    if (cachedDeck && cachedDeck.canvasProps) {
-      return (
-        <PptxDirectThumbnail
-          cachedDeck={cachedDeck}
-          slideIndex={activeSlideIndex}
-          contentId={contentId}
-          targetWidth={targetWidth}
-          targetHeight={targetHeight}
-          currentSlide={currentSlide}
-          themeStyles={themeStyles}
-        />
-      );
-    }
-    // Only fall back to PresentationSlideView if rich elements/objects exist
-    if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl || currentSlide.text)) {
-      return (
-        <PresentationSlideView 
-          slide={currentSlide} 
-          slideIndex={activeSlideIndex} 
-          themeStyles={themeStyles} 
-          targetWidth={targetWidth}
-          targetHeight={targetHeight}
-          isProjectorMode={isProjectorMode}
-          isOverlayLayer={isOverlayLayer}
-          mode={isThumbnail ? 'thumbnail' : 'full'}
-        />
-      );
-    }
+  // 4. Fallback to vector PresentationSlideView
+  if (currentSlide && ((currentSlide.objects && currentSlide.objects.length > 0) || (currentSlide.elements && currentSlide.elements.length > 0) || currentSlide.backgroundUrl || currentSlide.backgroundColor || currentSlide.text || currentSlide.title || (currentSlide as any).isPptx)) {
     return (
-      <div className={`w-full h-full flex items-center justify-center text-white/40 font-mono text-xs select-none ${isProjectorMode ? 'bg-transparent' : 'bg-black'}`}>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-          <span>Loading Presentation Deck...</span>
-        </div>
-      </div>
+      <PresentationSlideView 
+        slide={currentSlide} 
+        slideIndex={activeSlideIndex} 
+        themeStyles={themeStyles} 
+        targetWidth={targetWidth}
+        targetHeight={targetHeight}
+        isProjectorMode={isProjectorMode}
+        isOverlayLayer={isOverlayLayer}
+        mode={isThumbnail ? 'thumbnail' : 'full'}
+      />
     );
   }
 
-  const fallbackView = currentSlide ? (
-    <PresentationSlideView 
-      slide={currentSlide} 
-      slideIndex={activeSlideIndex} 
-      themeStyles={themeStyles} 
-      targetWidth={targetWidth}
-      targetHeight={targetHeight}
-      isProjectorMode={isProjectorMode}
-      isOverlayLayer={isOverlayLayer}
-      mode={isThumbnail ? 'thumbnail' : 'full'}
-    />
-  ) : undefined;
-
   return (
-    <PptxErrorBoundary fallback={fallbackView}>
-      <PptxViewerInner 
-        bytes={localBytes} 
-        activeSlideIndex={activeSlideIndex} 
-        contentId={contentId} 
-        isThumbnail={isThumbnail} 
-        isProjectorMode={isProjectorMode} 
-        isOverlayLayer={isOverlayLayer}
-        pptxAction={pptxAction} 
-        pptxActionTimestamp={pptxActionTimestamp} 
-        pptxAnimationGroupIndex={pptxAnimationGroupIndex}
-        onAnimationGroupChange={onAnimationGroupChange}
-        onActiveSlideChange={onActiveSlideChange}
-        currentSlide={currentSlide}
-        themeStyles={themeStyles}
-        targetWidth={targetWidth}
-        targetHeight={targetHeight}
-      />
-    </PptxErrorBoundary>
+    <div className={`w-full h-full flex items-center justify-center text-white/40 font-mono text-xs select-none ${isProjectorMode ? 'bg-transparent' : 'bg-black'}`}>
+      <div className="flex items-center gap-2">
+        <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+        <span>Loading Presentation Deck...</span>
+      </div>
+    </div>
   );
 }, (prevProps, nextProps) => {
   return (

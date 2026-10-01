@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useRef, useEffect } from 'react';
 import { PresentationContentResolver } from '../core/PresentationContentResolver';
 import { 
@@ -30,7 +31,7 @@ interface MediaLibraryModalProps {
   onSelect?: (asset: Asset) => void;
 }
 
-export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryModalProps) {
+function MediaLibraryModal({ onClose, onSelect }: MediaLibraryModalProps) {
   const assetsList = useStore(state => state.assetsList);
   const themesList = useStore(state => state.themesList);
   const systemOptions = useStore(state => state.systemOptions);
@@ -904,3 +905,6 @@ export default function MediaLibraryModal({ onClose, onSelect }: MediaLibraryMod
     </div>
   );
 }
+
+export default withPortal(MediaLibraryModal);
+

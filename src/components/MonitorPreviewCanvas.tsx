@@ -150,10 +150,24 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   // MediaStreamController dynamically fetches video sources.
   // Images can be fetched directly during rendering if needed.
 
+  const [slidesTick, setSlidesTick] = useState(0);
+
+  useEffect(() => {
+    const handleSlidesLoaded = () => {
+      setSlidesTick(t => t + 1);
+    };
+    window.addEventListener('simpleworship:slides-loaded', handleSlidesLoaded);
+    window.addEventListener('simpleworship:canonical-frame-updated', handleSlidesLoaded);
+    return () => {
+      window.removeEventListener('simpleworship:slides-loaded', handleSlidesLoaded);
+      window.removeEventListener('simpleworship:canonical-frame-updated', handleSlidesLoaded);
+    };
+  }, []);
+
   // Resolve Content & Themes
   const slides = React.useMemo(() => {
     return activeItem ? PresentationCore.generateSlides(activeItem, songsList, systemOptions) : [];
-  }, [activeItem, songsList, systemOptions]);
+  }, [activeItem, songsList, systemOptions, slidesTick]);
   const currentSlide = slides[presentationState.activeSlideIndex ?? 0] || slides[0] || null;
 
   
@@ -392,9 +406,12 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     }
   }
 
-  const isOverlayGroup = isOverlayLayer !== undefined
-    ? Boolean(isProjectorMode && isOverlayLayer)
-    : false; // Never implicitly assume overlay unless explicitly declared
+  // Primary presentation group ('group-congregation' or role === 'primary') is the foundational presentation canvas
+  // and must NEVER be treated as a background-less overlay. It always retains wallpaper, background video, and themes.
+  const isPrimaryBaseGroup = group?.id === 'group-congregation' || group?.role === 'primary';
+  const isOverlayGroup = isPrimaryBaseGroup
+    ? false
+    : (isOverlayLayer !== undefined ? Boolean(isProjectorMode && isOverlayLayer) : false);
 
   // If this group acts as an overlay on the projector (e.g. R2, R3, R4...), suppress default background images/colors
   // unless the item or slide explicitly specifies a custom background!
@@ -414,7 +431,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
   const resolveSyncUrl = (url: string, contentId?: string): string => {
     if (!url) return '';
-    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
+    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/') || url.startsWith('app:')) {
       return url;
     }
     const assets = useStore.getState().assetsList || [];
@@ -435,19 +452,19 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
   const getValidMediaSrc = (src: string | null | undefined): string | undefined => {
     if (!src) return undefined;
-    if (src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:') || src.startsWith('file:')) return src;
+    if (src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:') || src.startsWith('file:') || src.startsWith('app:')) return src;
     return undefined;
   };
 
   const effectiveAudioSrc = localAudioSrc || getValidMediaSrc(resolveAssetUrl(audioSrc)) || getValidMediaSrc(audioSrc) || '';
 
   const lastValidBgRef = useRef<string>(syncBg || backgroundUrl);
-  if (isOverlayGroup && !hasExplicitCustomBackground) {
-    lastValidBgRef.current = '';
-  } else if (localBackgroundUrl) {
+  if (localBackgroundUrl) {
     lastValidBgRef.current = localBackgroundUrl;
   } else if (syncBg) {
     lastValidBgRef.current = syncBg;
+  } else if (backgroundUrl) {
+    lastValidBgRef.current = backgroundUrl;
   }
   const effectiveBackgroundUrl = (isOverlayGroup && !hasExplicitCustomBackground)
     ? ''
@@ -729,6 +746,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             height: `${targetHeight}px`,
             transform: `scale(${scale})`,
             fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
+            opacity: (isOverlayGroup && presentationState.isBlack) ? 0 : 1,
             background: (isOverlayGroup && !hasExplicitCustomBackground)
               ? 'transparent'
               : isGradient 
@@ -753,7 +771,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
               <AnimatePresence mode="sync">
                 <motion.div
                   key={`bg-${(isOverlayGroup && !hasExplicitCustomBackground) ? 'overlay-trans' : (effectiveBackgroundUrl || videoSrc || gradientVal || resolvedStyles.backgroundColor)}`}
-                  initial={{ opacity: (isOverlayGroup && !hasExplicitCustomBackground) ? 1 : 0 }}
+                  initial={{ opacity: (isOverlayGroup && !hasExplicitCustomBackground) ? 1 : (lastValidBgRef.current ? 1 : 0) }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 1, zIndex: 0 }}
                   transition={{ duration: 0.35, ease: 'easeInOut' }}
@@ -1269,9 +1287,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
           {/* Service Interval Countdown Timer for Main Displays */}
           <MainDisplayCountdownOverlay isBlack={presentationState.isBlack} />
 
-          {/* Master Blackout Overlay (z-50) */}
+          {/* Master Blackout Overlay (z-50) - Only for base canvas; overlays hide transparently */}
           <AnimatePresence>
-            {presentationState.isBlack && (
+            {presentationState.isBlack && !isOverlayGroup && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

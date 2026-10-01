@@ -361,7 +361,7 @@ export default function BibleLibraryModule({ isSidebarMode = false }: BibleLibra
           <form onSubmit={handleQuickJump} className="relative flex-1 min-w-[100px] shrink">
             <input
               type="text"
-              placeholder="Search across ALL Bible books (e.g. John 3:16, grace, kapayapaan, Awit 23)..."
+              placeholder="Search across ALL Bible books (e.g. John 3:16, grace, peace, Psalms 23)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-[#15171c] border border-[#2d3240] rounded pl-7 pr-7 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-amber-500/50 shadow-inner"

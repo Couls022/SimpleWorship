@@ -4,7 +4,8 @@ import { PresentationSlideView } from './PresentationSlideView';
 import { PptxRenderOverlay } from './PptxRenderOverlay';
 import { getCachedPptxSlides, getOrParsePptxSlides } from '../utils/pptxParser';
 import { PptxRenderCacheManager } from '../utils/pptxBackend';
-import { getDB } from '../db';
+import { getPptxFileBytes } from '../db/presentations';
+import { PresentationCore } from '../core/PresentationCore';
 
 interface PptxSlideThumbnailProps {
   slide: Slide;
@@ -33,7 +34,11 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
       setCanonicalTick(t => t + 1);
     };
     window.addEventListener('simpleworship:canonical-frame-updated', handleUpdate);
-    return () => window.removeEventListener('simpleworship:canonical-frame-updated', handleUpdate);
+    window.addEventListener('simpleworship:slides-loaded', handleUpdate);
+    return () => {
+      window.removeEventListener('simpleworship:canonical-frame-updated', handleUpdate);
+      window.removeEventListener('simpleworship:slides-loaded', handleUpdate);
+    };
   }, []);
 
   // 1. Authoritative check: If PowerPoint COM or rasterized canonical frame is already in cache, render immediately
@@ -63,13 +68,20 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
     );
   }
 
-  // 2. Check if full parsed slide is already in memory cache or in slide prop
+  // 2. Check if full parsed slide is already in memory cache, registry, or in slide prop
   const currentSlide = useMemo(() => {
     if (asyncSlide) return asyncSlide;
-    if (slide.backgroundUrl || slide.backgroundColor || (slide.objects && slide.objects.length > 0)) {
+    if (slide.backgroundUrl || slide.backgroundColor || (slide.objects && slide.objects.length > 0) || (slide.elements && slide.elements.length > 0)) {
       return slide;
     }
     if (contentId) {
+      const regSlides = PresentationCore.getRegisteredPresentationSlides(contentId);
+      if (regSlides && regSlides[slideIndex]) {
+        return {
+          ...slide,
+          ...regSlides[slideIndex],
+        };
+      }
       const cached = getCachedPptxSlides(contentId);
       if (cached && cached[slideIndex]) {
         return {
@@ -117,9 +129,10 @@ export const PptxSlideThumbnail: React.FC<PptxSlideThumbnailProps> = React.memo(
           return;
         }
 
-        const db = await getDB();
-        const asset = await db.get('assets', contentId);
-        const bytes = asset?.data?.fileBytes || liveItem?.data?.fileBytes;
+        let bytes = liveItem?.data?.fileBytes;
+        if (!bytes && contentId) {
+          bytes = await getPptxFileBytes(contentId);
+        }
         if (bytes) {
           const parsed = await getOrParsePptxSlides(contentId, bytes);
           if (isMounted && parsed && parsed[slideIndex]) {

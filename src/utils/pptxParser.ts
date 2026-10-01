@@ -965,6 +965,7 @@ export async function parsePptx(file: File | Blob | ArrayBuffer | Uint8Array): P
               fontColor: effectiveFontColor,
               fontFamily: targetFontFamily,
               fontSize: calculatedFontSize,
+              rawFontSize: rawBaseFontSize,
               fontWeight: shapeFontWeight,
               letterSpacing: shapeLetterSpacing,
               textAlign: shapeTextAlign,

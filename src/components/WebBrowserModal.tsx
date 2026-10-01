@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState } from 'react';
 import { X, Globe, Plus, Search, ExternalLink, RefreshCw, Play, Film, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -13,7 +14,7 @@ const POPULAR_WORSHIP_WEB_LINKS = [
   { name: 'YouTube Live Stream', url: 'https://www.youtube.com', desc: 'Embed live camera streams or background loops' },
 ];
 
-export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
+function WebBrowserModal({ onClose }: WebBrowserModalProps) {
   const [targetUrl, setTargetUrl] = useState('https://www.biblegateway.com');
   const [activeIframeUrl, setActiveIframeUrl] = useState('https://www.biblegateway.com');
   const [customTitle, setCustomTitle] = useState('Online Web Stream / Asset');
@@ -153,3 +154,6 @@ export default function WebBrowserModal({ onClose }: WebBrowserModalProps) {
     </div>
   );
 }
+
+export default withPortal(WebBrowserModal);
+

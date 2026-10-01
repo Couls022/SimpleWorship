@@ -647,12 +647,9 @@ html.hw-tier-eco .motion-reduce {
   overflow: visible !important;
 }
 
-/* 4. Safe vertical centering prevents top-clipping of oversized Canva titles like "MEANING:" */
-.pptx-strict-typography [data-element-id] > div,
-.pptx-presenter-override [data-element-id] > div,
-[data-pptx-viewer] [data-element-id] > div,
-[data-pptx-viewport] [data-element-id] > div {
-  justify-content: safe center;
+/* 4. Respect authentic PowerPoint/Canva alignment without forcing vertical center shift */
+.pptx-strict-typography [data-text-container] {
+  max-width: 100%;
 }
 
 /* 5. Only media, image containers and canvas masks should have hidden overflow */

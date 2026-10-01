@@ -224,22 +224,32 @@ export default function ModeratorView() {
         return;
       }
 
-      const isInputActive = ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName);
+      const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null;
+      const targetEl = e.target as HTMLElement | null;
+      const isInputActive = Boolean(
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(targetEl?.tagName || '') ||
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl?.tagName || '') ||
+        targetEl?.isContentEditable ||
+        activeEl?.isContentEditable ||
+        targetEl?.closest?.('input, textarea, select, [contenteditable="true"], [role="searchbox"]') ||
+        activeEl?.closest?.('input, textarea, select, [contenteditable="true"], [role="searchbox"]')
+      );
       const mappings = shortcutSettings?.keyMappings || DEFAULT_SIMPLEWORSHIP_MAPPINGS;
       const currentStore = useStore.getState();
+
+      // Don't trigger standard presentation shortcuts while actively typing in text fields or search bars
+      if (isInputActive) {
+        if (e.key === 'Escape') {
+          targetEl?.blur?.();
+          activeEl?.blur?.();
+        }
+        return;
+      }
 
       // F1 or Ctrl+/ opens Center Shortcuts settings dialog from anywhere (unless F1 is mapped to clearOutput)
       if (((e.key === 'F1' && mappings?.clearOutput !== 'F1') || ((e.ctrlKey || e.metaKey) && e.key === '/'))) {
         e.preventDefault();
         setIsShortcutsOpen((prev) => !prev);
-        return;
-      }
-
-      // Don't trigger standard presentation shortcuts while actively typing in text fields
-      if (isInputActive) {
-        if (e.key === 'Escape') {
-          (e.target as HTMLElement)?.blur();
-        }
         return;
       }
 

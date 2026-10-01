@@ -70,6 +70,9 @@ interface SimpleWorshipDB extends DBSchema {
 let dbPromise: Promise<IDBPDatabase<SimpleWorshipDB>> | null = null;
 
 export function getDB() {
+  if (typeof indexedDB === 'undefined') {
+    return Promise.reject(new Error('IndexedDB is not available in current environment'));
+  }
   if (!dbPromise) {
     dbPromise = openDB<SimpleWorshipDB>('simple-worship-db', 2, {
       async upgrade(db, oldVersion) {

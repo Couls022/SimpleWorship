@@ -127,6 +127,69 @@ export async function getAllPresentations(): Promise<Asset[]> {
   }
 }
 
+export async function getPresentationById(id: string): Promise<Asset | null> {
+  if (!id) return null;
+  try {
+    const db = await getDB();
+    let asset = await db.get('assets', id);
+    if (!asset && id.startsWith('asset-')) {
+      asset = await db.get('assets', id.replace('asset-', ''));
+    } else if (!asset && !id.startsWith('asset-')) {
+      asset = await db.get('assets', `asset-${id}`);
+    }
+    return asset || null;
+  } catch (err) {
+    console.warn('[presentations] getPresentationById error:', err);
+    return null;
+  }
+}
+
+export async function getPptxFileBytes(idOrContentId: string): Promise<Uint8Array | null> {
+  if (!idOrContentId) return null;
+  try {
+    const db = await getDB();
+    const cleanId = idOrContentId.replace(/^(sched-item-|live-item-|pres-drag-)/, '');
+    const candidateKeys = [
+      idOrContentId,
+      cleanId,
+      `pres-${cleanId}`,
+      `asset-${cleanId}`,
+      `asset-${idOrContentId}`,
+      idOrContentId.replace(/^asset-/, ''),
+      idOrContentId.replace(/^pres-/, ''),
+    ];
+
+    for (const key of candidateKeys) {
+      const asset = await db.get('assets', key);
+      if (asset?.data?.fileBytes && isValidPptxBinary(asset.data.fileBytes)) {
+        return asset.data.fileBytes instanceof Uint8Array 
+          ? asset.data.fileBytes 
+          : new Uint8Array(asset.data.fileBytes);
+      }
+      if (asset?.blob) {
+        const buf = await asset.blob.arrayBuffer();
+        if (isValidPptxBinary(buf)) {
+          return new Uint8Array(buf);
+        }
+      }
+    }
+
+    // Fallback: search all assets if not found by primary keys
+    const all = await db.getAll('assets');
+    for (const a of all) {
+      if ((a.id === idOrContentId || a.name === idOrContentId || a.hash === idOrContentId) && a.data?.fileBytes) {
+        if (isValidPptxBinary(a.data.fileBytes)) {
+          return a.data.fileBytes instanceof Uint8Array ? a.data.fileBytes : new Uint8Array(a.data.fileBytes);
+        }
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('[presentations] getPptxFileBytes error:', err);
+    return null;
+  }
+}
+
 export async function deletePresentation(id: string): Promise<void> {
   const db = await getDB();
   await db.delete('assets', id);

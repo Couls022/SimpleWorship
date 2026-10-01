@@ -2111,6 +2111,9 @@ function getMeasureContext(): CanvasRenderingContext2D | null {
   return sharedMeasureCtx;
 }
 
+const autoFitCache = new Map<string, number>();
+const MAX_AUTOFIT_CACHE_SIZE = 1200;
+
 /**
  * Responsive Auto-Fit Text Engine
  * Calculates an optimal auto-adjust scale factor (0.45 - 1.0) so text never overflows,
@@ -2134,6 +2137,13 @@ export function calculateAutoFitTextScale(params: {
 
   const cleanText = text.trim();
   if (cleanText.length === 0) return 1;
+
+  // Cache lookup for rapid 60FPS rendering without repeatedly querying canvas measureText
+  const cacheKey = `${cleanText.slice(0, 100)}_${cleanText.length}_${Math.round(boxWidth)}_${Math.round(boxHeight)}_${Math.round(fontSize)}_${fontFamily || ''}_${fontWeight}_${lineHeightRatio}`;
+  const cachedVal = autoFitCache.get(cacheKey);
+  if (cachedVal !== undefined) {
+    return cachedVal;
+  }
 
   // Available inner dimensions
   const innerW = Math.max(10, boxWidth - padding * 2);
@@ -2227,13 +2237,12 @@ export function calculateAutoFitTextScale(params: {
 
   // Check if text already fits comfortably
   if (estimatedTotalHeight <= innerH && maxWordWidth <= innerW) {
+    if (autoFitCache.size >= MAX_AUTOFIT_CACHE_SIZE) autoFitCache.clear();
+    autoFitCache.set(cacheKey, 1);
     return 1;
   }
 
   // 1. Scale required to fit height
-  // For single-line titles/headings where the text fits horizontally within the box width
-  // but Canva exported an arbitrarily shallow box height (e.g. 40px box for 72px font),
-  // do NOT crush the font height. In PowerPoint/Canva, the box expands vertically.
   const isSingleLine = !cleanText.includes('\n') && maxWordWidth <= innerW;
   const effectiveHeightScale = isSingleLine && innerH < singleLineH * 1.35
     ? 1.0
@@ -2248,5 +2257,8 @@ export function calculateAutoFitTextScale(params: {
   optimalScale = Math.max(0.45, Math.min(1, optimalScale));
 
   // Round to 3 decimal places for stability
-  return Math.round(optimalScale * 1000) / 1000;
+  const result = Math.round(optimalScale * 1000) / 1000;
+  if (autoFitCache.size >= MAX_AUTOFIT_CACHE_SIZE) autoFitCache.clear();
+  autoFitCache.set(cacheKey, result);
+  return result;
 }

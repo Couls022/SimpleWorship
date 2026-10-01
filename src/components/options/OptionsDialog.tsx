@@ -75,8 +75,27 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
   const activeProfileId = useStore(state => state.activeProfileId);
   const activeSchedule = useStore(state => state.activeSchedule);
 
-  // Local working state clone
-  const [localOptions, setLocalOptions] = useState<SystemOptions>(JSON.parse(JSON.stringify(systemOptions)));
+  // Local working state clone with preserved active output route target monitors
+  const [localOptions, setLocalOptions] = useState<SystemOptions>(() => {
+    const cloned = JSON.parse(JSON.stringify(systemOptions));
+    const currentGroups = useStore.getState().outputGroups;
+    const primaryGroup = currentGroups.find(g => g.id === 'group-congregation') || currentGroups[0];
+    const stageGroup = currentGroups.find(g => g.id === 'group-stage');
+    const altGroup = currentGroups.find(g => g.id === 'group-alternate');
+
+    if (primaryGroup && (primaryGroup.targetDisplayId || (primaryGroup.displayIds && primaryGroup.displayIds.length > 0))) {
+      cloned.mainOutput.general.outputMonitor = primaryGroup.targetDisplayId || primaryGroup.displayIds[0] || cloned.mainOutput.general.outputMonitor;
+    }
+    if (stageGroup && (stageGroup.targetDisplayId || (stageGroup.displayIds && stageGroup.displayIds.length > 0))) {
+      cloned.foldback.outputMonitor = stageGroup.targetDisplayId || stageGroup.displayIds[0] || cloned.foldback.outputMonitor;
+      cloned.foldback.enabled = true;
+    }
+    if (altGroup && (altGroup.targetDisplayId || (altGroup.displayIds && altGroup.displayIds.length > 0))) {
+      cloned.alternateOutput.outputMonitor = altGroup.targetDisplayId || altGroup.displayIds[0] || cloned.alternateOutput.outputMonitor;
+      cloned.alternateOutput.enabled = true;
+    }
+    return cloned;
+  });
 
   // Navigation state
   const [activeCategory, setActiveCategory] = useState<MainCategory>(initialCategory || 'Main Output');
@@ -164,71 +183,32 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
 
   React.useEffect(() => {
     if (screens.length > 0) {
-      // 1. Sync Main Output Monitor
-      const currentMainMonitor = localOptions.mainOutput.general.outputMonitor;
-      const matchedMain = screens.find((s: any) => s.label === currentMainMonitor || s.name === currentMainMonitor || s.id === currentMainMonitor);
-      if (!matchedMain) {
-        const primaryScr = screens.find((s: any) => s.isPrimary) || screens[0];
-        if (primaryScr) {
-          const w = primaryScr.bounds?.width || 1920;
-          const h = primaryScr.bounds?.height || 1080;
-          const x = primaryScr.bounds?.x ?? 0;
-          const y = primaryScr.bounds?.y ?? 0;
-          setLocalOptions((prev) => ({
-            ...prev,
-            mainOutput: {
-              ...prev.mainOutput,
+      setLocalOptions((prev) => {
+        let changed = false;
+        const next = { ...prev };
+
+        // 1. Only suggest fallback monitor if main output monitor is completely unset
+        if (!next.mainOutput?.general?.outputMonitor) {
+          const primaryScr = screens.find((s: any) => s.isPrimary) || screens[0];
+          if (primaryScr) {
+            const w = primaryScr.bounds?.width || 1920;
+            const h = primaryScr.bounds?.height || 1080;
+            const x = primaryScr.bounds?.x ?? 0;
+            const y = primaryScr.bounds?.y ?? 0;
+            next.mainOutput = {
+              ...next.mainOutput,
               general: {
-                ...prev.mainOutput.general,
-                outputMonitor: primaryScr.label || primaryScr.name,
-                position: { ...prev.mainOutput.general.position, left: x, top: y, width: w, height: h }
+                ...next.mainOutput.general,
+                outputMonitor: primaryScr.label || primaryScr.name || primaryScr.id,
+                position: { ...next.mainOutput.general.position, left: x, top: y, width: w, height: h }
               }
-            }
-          }));
+            };
+            changed = true;
+          }
         }
-      }
 
-      // 2. Sync Alternate Output Monitor
-      const currentAltMonitor = localOptions.alternateOutput.outputMonitor;
-      const matchedAlt = screens.find((s: any) => s.label === currentAltMonitor || s.name === currentAltMonitor || s.id === currentAltMonitor);
-      if (!matchedAlt && screens.length > 1) {
-        const secondaryScr = screens.find((s: any) => !s.isPrimary) || screens[1];
-        if (secondaryScr) {
-          const w = secondaryScr.bounds?.width || 1920;
-          const h = secondaryScr.bounds?.height || 1080;
-          const x = secondaryScr.bounds?.x ?? 0;
-          const y = secondaryScr.bounds?.y ?? 0;
-          setLocalOptions((prev) => ({
-            ...prev,
-            alternateOutput: {
-              ...prev.alternateOutput,
-              outputMonitor: secondaryScr.label || secondaryScr.name,
-              position: { ...prev.alternateOutput.position, left: x, top: y, width: w, height: h }
-            }
-          }));
-        }
-      }
-
-      // 3. Sync Foldback Monitor
-      const currentFoldbackMonitor = localOptions.foldback.outputMonitor;
-      const matchedFoldback = screens.find((s: any) => s.label === currentFoldbackMonitor || s.name === currentFoldbackMonitor || s.id === currentFoldbackMonitor);
-      if (!matchedFoldback && screens.length > 2) {
-        const stageScr = screens.filter((s: any) => !s.isPrimary)[1] || screens[2];
-        if (stageScr) {
-          const w = stageScr.bounds?.width || 1920;
-          const h = stageScr.bounds?.height || 1080;
-          const x = stageScr.bounds?.x ?? 0;
-          const y = stageScr.bounds?.y ?? 0;
-          setLocalOptions((prev) => ({
-            ...prev,
-            foldback: {
-              ...prev.foldback,
-              outputMonitor: stageScr.label || stageScr.name,
-              position: { ...prev.foldback.position, left: x, top: y, width: w, height: h }
-            }
-          }));
-        }
-      }
+        return changed ? next : prev;
+      });
     }
   }, [screens]);
 
@@ -386,22 +366,31 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
     updateSystemOptions(localOptions);
     applyAppearanceSettings(localOptions.appearance);
 
-    // Bi-directionally sync with active output group(s)
+    // Bi-directionally sync with active output group(s) WITHOUT overwriting or clearing configured route monitors
     const pos = localOptions.mainOutput?.general?.position;
     const currentGroups = useStore.getState().outputGroups;
     if (pos && pos.width > 0 && pos.height > 0) {
       const primaryGroup = currentGroups.find(g => g.id === 'group-congregation') || currentGroups[0];
       if (primaryGroup) {
+        const targetMon = localOptions.mainOutput?.general?.outputMonitor;
+        const currentDisplayIds = (primaryGroup.displayIds && primaryGroup.displayIds.length > 0)
+          ? primaryGroup.displayIds
+          : (primaryGroup.targetDisplayId ? [primaryGroup.targetDisplayId] : []);
+        
+        const effectiveDisplayIds = targetMon
+          ? (currentDisplayIds.includes(targetMon) ? currentDisplayIds : [targetMon, ...currentDisplayIds])
+          : currentDisplayIds;
+
         useStore.getState().updateOutputGroup(primaryGroup.id, {
           aspectRatio: `${pos.width}x${pos.height}`,
           customResolution: { width: pos.width, height: pos.height },
-          displayIds: localOptions.mainOutput.general.outputMonitor ? [localOptions.mainOutput.general.outputMonitor] : primaryGroup.displayIds,
-          targetDisplayId: localOptions.mainOutput.general.outputMonitor || ''
+          displayIds: effectiveDisplayIds,
+          targetDisplayId: targetMon || primaryGroup.targetDisplayId || effectiveDisplayIds[0] || ''
         });
       }
     }
 
-    // Persist explicit user foldback preference
+    // Persist explicit user foldback preference while preserving existing stage route display assignments
     const isFoldbackActive = Boolean(localOptions.foldback?.enabled);
     try {
       localStorage.setItem('simpleworship_foldback_explicit_v1', isFoldbackActive ? 'true' : 'false');
@@ -409,49 +398,35 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
 
     const stageGroup = currentGroups.find(g => g.id === 'group-stage');
     if (stageGroup) {
+      const targetStageMon = localOptions.foldback?.outputMonitor;
+      const currentStageDisplays = (stageGroup.displayIds && stageGroup.displayIds.length > 0)
+        ? stageGroup.displayIds
+        : (stageGroup.targetDisplayId ? [stageGroup.targetDisplayId] : []);
+
+      const effectiveStageDisplays = (isFoldbackActive && targetStageMon)
+        ? (currentStageDisplays.includes(targetStageMon) ? currentStageDisplays : [targetStageMon, ...currentStageDisplays])
+        : currentStageDisplays;
+
       useStore.getState().updateOutputGroup(stageGroup.id, {
-        displayIds: (isFoldbackActive && localOptions.foldback.outputMonitor) ? [localOptions.foldback.outputMonitor] : [],
-        targetDisplayId: (isFoldbackActive && localOptions.foldback.outputMonitor) || ''
+        displayIds: effectiveStageDisplays,
+        targetDisplayId: targetStageMon || stageGroup.targetDisplayId || effectiveStageDisplays[0] || ''
       });
-      if (!isFoldbackActive) {
-        DisplayManager.closeProjector('group-stage').catch(() => {});
-      }
     }
 
     const altGroup = currentGroups.find(g => g.id === 'group-alternate');
-    if (localOptions.alternateOutput.enabled) {
-      const altRole = localOptions.alternateOutput.feedMode === 'foyer_announcements' ? 'lobby' : 'broadcast';
-      const altWidth = localOptions.alternateOutput.position?.width || 1920;
-      const altHeight = localOptions.alternateOutput.position?.height || 1080;
-      const altRatio = `${altWidth}x${altHeight}`;
+    if (altGroup && localOptions.alternateOutput?.enabled) {
+      const targetAltMon = localOptions.alternateOutput?.outputMonitor;
+      const currentAltDisplays = (altGroup.displayIds && altGroup.displayIds.length > 0)
+        ? altGroup.displayIds
+        : (altGroup.targetDisplayId ? [altGroup.targetDisplayId] : []);
 
-      if (altGroup) {
-        useStore.getState().updateOutputGroup(altGroup.id, {
-          displayIds: localOptions.alternateOutput.outputMonitor ? [localOptions.alternateOutput.outputMonitor] : altGroup.displayIds,
-          targetDisplayId: localOptions.alternateOutput.outputMonitor || '',
-          role: altRole,
-          aspectRatio: altRatio,
-          customResolution: { width: altWidth, height: altHeight }
-        });
-      } else {
-        useStore.getState().addOutputGroup({
-          id: 'group-alternate',
-          name: 'Alternate Output (Foyer / Stream)',
-          themeId: 'theme-global',
-          role: altRole,
-          displayIds: localOptions.alternateOutput.outputMonitor ? [localOptions.alternateOutput.outputMonitor] : [],
-          targetDisplayId: localOptions.alternateOutput.outputMonitor || '',
-          aspectRatio: altRatio,
-          customResolution: { width: altWidth, height: altHeight },
-          isBlack: false,
-          isClear: false,
-          showLogo: false
-        });
-      }
-    } else if (altGroup) {
+      const effectiveAltDisplays = targetAltMon
+        ? (currentAltDisplays.includes(targetAltMon) ? currentAltDisplays : [targetAltMon, ...currentAltDisplays])
+        : currentAltDisplays;
+
       useStore.getState().updateOutputGroup(altGroup.id, {
-        displayIds: [],
-        targetDisplayId: ''
+        displayIds: effectiveAltDisplays,
+        targetDisplayId: targetAltMon || altGroup.targetDisplayId || effectiveAltDisplays[0] || ''
       });
     }
 
@@ -3537,6 +3512,17 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                         className="rounded accent-blue-500"
                       />
                       <span>Advance Schedule after Go Live is pressed</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={useStore.getState().isSystemOverlayMode}
+                        onChange={(e) => {
+                          useStore.getState().setSystemOverlayMode(e.target.checked);
+                        }}
+                        className="rounded accent-cyan-500"
+                      />
+                      <span className="text-cyan-300 font-medium">Desktop & Projectors Overlay Mode (Keep console and all projector displays pinned on top of other Windows apps) [F9]</span>
                     </label>
                   </div>
 

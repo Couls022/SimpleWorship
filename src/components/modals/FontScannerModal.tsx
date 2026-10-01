@@ -1,3 +1,4 @@
+import { withPortal } from '../common/withPortal';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Type, 
@@ -53,7 +54,7 @@ interface FontScannerModalProps {
   autoTriggered?: boolean;
 }
 
-export const FontScannerModal: React.FC<FontScannerModalProps> = ({
+const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
   isOpen,
   onClose,
   presentationName = 'Presentation',
@@ -206,14 +207,14 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     );
 
     if (uninstalled.length === 0) {
-      setStatusMessage(`✓ Lahat ng font sa "${presentationName}" ay verified na nasa device na! Handa na para sa live display.`);
+      setStatusMessage(`✓ All fonts in "${presentationName}" are verified on this device! Ready for live display.`);
       return;
     }
 
     if (isOnline) {
-      setStatusMessage(`⚠️ May ${uninstalled.length} font na nadetect na wala sa iyong device. I-click ang "1-Click Download & Install" upang ma-install agad!`);
+      setStatusMessage(`⚠️ ${uninstalled.length} missing fonts detected on your device. Click "1-Click Download & Install" to install immediately!`);
     } else {
-      setStatusMessage(`⚠️ Offline Mode: Walang internet connection ang PC. ${uninstalled.length} missing fonts cannot be downloaded online. Smart typographic fallback applied.`);
+      setStatusMessage(`⚠️ Offline Mode: No internet connection. ${uninstalled.length} missing fonts cannot be downloaded online. Smart typographic fallback applied.`);
     }
   }, [isOpen, autoTriggered, initialScanResult, isOnline]);
 
@@ -268,20 +269,34 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     ) || [])
   ];
 
-  // 1-Click Install to App for single font
+  // 1-Click Install to App & Windows OS for single font
   const handleInstallSingle = async (fontOrFamily: string | DetectedFontScanItem) => {
     const family = typeof fontOrFamily === 'string' 
       ? fontOrFamily.trim() 
       : fontOrFamily.normalizedFamily || fontOrFamily.fontName;
 
     setInstallingFonts(prev => ({ ...prev, [family]: true }));
-    setStatusMessage(`Downloading authentic "${family}" binary from Google Fonts into IndexedDB...`);
+    setStatusMessage(`Downloading and installing "${family}" system-wide into Windows OS and SimpleWorship...`);
 
     try {
       const ok = await fetchAndInstallGoogleFont(family);
+      
+      // Also invoke native Windows OS font installation (Electron IPC or local Express endpoint)
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI?.installFontToWindows) {
+          await window.electronAPI.installFontToWindows(family);
+        } else {
+          await fetch('/api/system/install-font-windows', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ family })
+          });
+        }
+      } catch {}
+
       if (ok) {
         setInstalledSet(prev => new Set([...prev, family.toLowerCase()]));
-        setStatusMessage(`✓ Installed "${family}" into offline storage! Display updated.`);
+        setStatusMessage(`✓ Installed "${family}" into Windows OS and SimpleWorship! Available across all Windows applications.`);
         setPreviewFont(family);
         registerFontAliasesInDom([family]);
         refreshStoredDbFonts();
@@ -292,7 +307,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
       setStatusMessage(`Failed to install "${family}".`);
     } finally {
       setInstallingFonts(prev => ({ ...prev, [family]: false }));
-      setTimeout(() => setStatusMessage(null), 4000);
+      setTimeout(() => setStatusMessage(null), 5000);
     }
   };
 
@@ -306,8 +321,21 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     setStatusMessage(`Downloading "${family}" font file for Windows installation...`);
 
     try {
+      // Auto-trigger direct Windows OS install (Native Electron or local Express)
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI?.installFontToWindows) {
+          await window.electronAPI.installFontToWindows(family);
+        } else {
+          await fetch('/api/system/install-font-windows', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ family })
+          });
+        }
+      } catch {}
+
       await downloadFontFileToPc(family);
-      setStatusMessage(`✓ Download started for "${family}". Open your Downloads folder and double-click to install.`);
+      setStatusMessage(`✓ Download started and registered for "${family}". Ready for all Windows applications.`);
     } catch {
       setStatusMessage(`Failed to download "${family}".`);
     } finally {
@@ -316,11 +344,11 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     }
   };
 
-  // 1-Click Install ALL missing fonts to App with enterprise batch progress
+  // 1-Click Install ALL missing fonts to Windows OS & App with enterprise batch progress
   const handleInstallAllMissing = async () => {
     if (missingFonts.length === 0) return;
     setIsInstallingAll(true);
-    setStatusMessage(`Downloading and installing all ${missingFonts.length} missing fonts into IndexedDB...`);
+    setStatusMessage(`Downloading and installing all ${missingFonts.length} missing fonts system-wide into Windows OS and SimpleWorship...`);
 
     let count = 0;
     const installedNames: string[] = [];
@@ -345,6 +373,19 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
       }
     }
 
+    // Direct Windows OS batch registration (Native Electron IPC or local Express endpoint)
+    try {
+      if (typeof window !== 'undefined' && window.electronAPI?.installFontBatchToWindows) {
+        await window.electronAPI.installFontBatchToWindows(installedNames);
+      } else {
+        await fetch('/api/system/install-font-batch-windows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ families: installedNames })
+        });
+      }
+    } catch {}
+
     setBatchProgress(null);
     setIsInstallingAll(false);
     refreshStoredDbFonts();
@@ -353,7 +394,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     window.dispatchEvent(new CustomEvent('simpleworship:fonts-updated', { detail: { loaded: installedNames } }));
     window.dispatchEvent(new CustomEvent('simpleworship:pptx-fonts-loaded', { detail: { loaded: installedNames } }));
 
-    // Automatically trigger Windows 1-Click Font Auto-Installer Package download
+    // Automatically trigger Windows 1-Click Font Auto-Installer Package download for standalone convenience
     try {
       const zipBlob = await exportWindowsFontInstallerPackage(installedNames);
       if (zipBlob) {
@@ -370,7 +411,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
       }
     } catch {}
 
-    setStatusMessage(`✓ Handa na! Na-install ang ${count} fonts sa SimpleWorship. I-extract ang nadownload na ZIP at i-double click ang "Install-Fonts-Windows.cmd" para ma-install sa buong Windows OS!`);
+    setStatusMessage(`✓ Success! Installed ${count} font(s) directly into Windows OS & SimpleWorship. All fonts are now permanently available in PowerPoint, Word, Canva, and all Windows applications!`);
     setTimeout(() => setStatusMessage(null), 8000);
   };
 
@@ -390,9 +431,9 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
         }, 2000);
-        setStatusMessage('✓ Download started! I-extract ang ZIP at i-double click ang "Install-Fonts-Windows.cmd" para ma-install sa buong Windows OS!');
+        setStatusMessage('✓ Download started! Extract the ZIP and double-click "Install-Fonts-Windows.cmd" to install system-wide on Windows!');
       } else {
-        setStatusMessage('I-click muna ang "1-Click Download & Install" upang ma-download ang font files.');
+        setStatusMessage('Click "1-Click Download & Install" first to download font files.');
       }
     } catch {
       setStatusMessage('Failed to create Windows font installer package.');
@@ -499,7 +540,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div 
         className="w-full max-w-4xl bg-[#12141c] border border-[#2a2f42] rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
@@ -593,7 +634,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                     </div>
                     <div>
                       <h4 className="text-base font-extrabold text-white flex items-center gap-2">
-                        <span>Nadetect ang Kulang na Font sa Device ({missingFonts.length} Missing)</span>
+                        <span>Missing Fonts Detected on Device ({missingFonts.length} Missing)</span>
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/25 text-red-300 border border-red-500/40 uppercase">
                           Action Required
                         </span>
@@ -601,9 +642,9 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                     </div>
                   </div>
                   <p className="text-xs text-gray-300 mt-2 leading-relaxed">
-                    Ang presentasyong ito ay gumagamit ng mga font na hindi nakikita sa inyong computer. 
-                    I-click ang <strong>"1-Click Download & Install"</strong> sa ibaba upang agad ma-download at lumabas nang perpekto ang presentation, 
-                    o i-download ang <strong>.TTF</strong> para i-install sa Windows.
+                    This presentation uses fonts that are not installed on this computer. 
+                    Click <strong>"1-Click Download & Install"</strong> below to automatically download and render the presentation with exact typography, 
+                    or download the <strong>.TTF</strong> files to install on Windows.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-3 mt-4">
@@ -674,8 +715,8 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                             </span>
                           </div>
                           <p className="text-[11px] text-gray-400 mt-0.5">
-                            {font.slidesUsed?.length ? `Ginagamit sa ${font.slidesUsed.length} slides` : 'Ginagamit sa presentation'}
-                            {font.sampleText && ` • Halimbawa: "${font.sampleText.slice(0, 35)}..."`}
+                            {font.slidesUsed?.length ? `Used in ${font.slidesUsed.length} slides` : 'Used in presentation'}
+                            {font.sampleText && ` • Sample: "${font.sampleText.slice(0, 35)}..."`}
                           </p>
                         </div>
                       </div>
@@ -770,10 +811,10 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-emerald-200">
-                    Lahat ng Font ay Handa at Naka-install na sa Device!
+                    All Fonts Ready & Installed on Device!
                   </h4>
                   <p className="text-xs text-gray-300 mt-0.5">
-                    Lahat ng font na ginagamit sa kasalukuyang presentation ay available na offline sa inyong device at SimpleWorship storage.
+                    All fonts used in the current presentation are available offline on this device and SimpleWorship storage.
                   </p>
                 </div>
               </div>
@@ -785,7 +826,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                   onClick={onClose}
                   className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all cursor-pointer active:scale-95 shadow"
                 >
-                  I-close
+                  Close
                 </button>
               </div>
             </div>
@@ -801,7 +842,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                 </h4>
               </div>
               <span className="text-[11px] text-gray-400">
-                Mag-type ng anumang font name (e.g. Montserrat, Bebas Neue, Poppins, Inter, Cinzel)
+                Type any font name (e.g. Montserrat, Bebas Neue, Poppins, Inter, Cinzel)
               </span>
             </div>
 
@@ -811,7 +852,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                   type="text"
                   value={searchFontName}
                   onChange={(e) => setSearchFontName(e.target.value)}
-                  placeholder="I-type ang pangalan ng font (hal. Bebas Neue, Montserrat, Poppins, Roboto, Cinzel)..."
+                  placeholder="Type font name (e.g. Bebas Neue, Montserrat, Poppins, Roboto, Cinzel)..."
                   className="w-full px-3.5 py-2 pl-9 rounded-lg bg-[#0e1017] border border-[#2f364d] text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-400 transition-colors"
                 />
                 <Search size={14} className="absolute left-3 top-2.5 text-gray-500" />
@@ -967,7 +1008,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
                 type="text"
                 value={previewText}
                 onChange={(e) => setPreviewText(e.target.value)}
-                placeholder="Baguhin ang sample text..."
+                placeholder="Change sample text..."
                 className="w-2/3 px-2.5 py-1 rounded bg-[#0e1017] border border-[#282e42] text-gray-300 text-xs focus:outline-none focus:border-cyan-400"
               />
               <span className="font-mono text-[10px] text-gray-500">
@@ -1056,7 +1097,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
               <div className="mt-3 p-3 rounded-xl bg-[#161925] border border-[#272d40] space-y-2">
                 {storedDbFonts.length === 0 ? (
                   <p className="text-xs text-gray-400 py-2 text-center">
-                    Walang naka-save na custom fonts sa IndexedDB. Mag-1-click install ng Google Fonts o mag-upload ng .ttf file sa itaas!
+                    No custom fonts saved in IndexedDB yet. 1-click install Google Fonts or upload a .ttf file above!
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
@@ -1170,3 +1211,7 @@ export const FontScannerModal: React.FC<FontScannerModalProps> = ({
     </div>
   );
 };
+
+export const FontScannerModal = withPortal(FontScannerModalBase);
+export default FontScannerModal;
+

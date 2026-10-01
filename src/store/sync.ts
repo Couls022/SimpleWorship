@@ -498,6 +498,10 @@ export function initSync(isProjector: boolean = false) {
         if (data.systemOptions) {
           useStore.setState({ systemOptions: data.systemOptions });
         }
+      } else if (payload.type === 'SYSTEM_OVERLAY_UPDATE') {
+        if (data.isOverlayMode !== undefined) {
+          useStore.setState({ isSystemOverlayMode: Boolean(data.isOverlayMode) });
+        }
       } else if (payload.type === 'ALERT_UPDATE') {
         if (data.alert) {
           useStore.setState({ alert: data.alert });

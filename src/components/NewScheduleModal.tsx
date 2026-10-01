@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState } from 'react';
 import { X, Calendar, Plus, Check } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -19,7 +20,7 @@ const PRESETS = [
   }
 ];
 
-export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
+function NewScheduleModal({ onClose }: NewScheduleModalProps) {
   const activeScheduleName = useStore(state => state.activeSchedule?.name);
   const [scheduleName, setScheduleName] = useState('Sunday Morning Service');
   const [selectedPreset, setSelectedPreset] = useState('blank');
@@ -148,3 +149,5 @@ export default function NewScheduleModal({ onClose }: NewScheduleModalProps) {
     </div>
   );
 }
+
+export default withPortal(NewScheduleModal);

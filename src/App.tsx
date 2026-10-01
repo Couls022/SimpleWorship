@@ -15,6 +15,7 @@ import { useStore } from './store/useStore';
 import { applyAppearanceSettings, initSystemThemeListener } from './utils/themeManager';
 import { hardwareProfile } from './core/HardwareProfile';
 import { initAndLoadStoredFonts } from './utils/fontStorage';
+import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 
 export default function App() {
   const [isReady, setIsReady] = useState(true);
@@ -169,40 +170,77 @@ export default function App() {
     window.addEventListener('beforeunload', handleAppShutdown);
     window.addEventListener('unload', handleAppShutdown);
 
-    // When in projector mode, ensure document and body have transparency enabled
-    if (isProjector) {
-      document.documentElement.classList.add('projector-mode');
-      document.body.classList.add('projector-mode');
-      document.documentElement.style.backgroundColor = 'transparent';
-      document.body.style.backgroundColor = 'transparent';
-      const rootEl = document.getElementById('root');
-      if (rootEl) {
-        rootEl.classList.add('projector-mode');
-        rootEl.style.backgroundColor = 'transparent';
+    // Projector live transparency management (Ensures Moderator window NEVER becomes transparent/white)
+    const applyOverlayTransparency = (overlayActive: boolean) => {
+      if (isProjector) {
+        document.documentElement.classList.add('projector-mode');
+        document.body.classList.add('projector-mode');
+        const rootEl = document.getElementById('root');
+        if (rootEl) {
+          rootEl.classList.add('projector-mode');
+        }
+        if (overlayActive) {
+          document.documentElement.style.backgroundColor = 'transparent';
+          document.body.style.backgroundColor = 'transparent';
+          if (rootEl) rootEl.style.backgroundColor = 'transparent';
+        } else {
+          document.documentElement.style.backgroundColor = '#000000';
+          document.body.style.backgroundColor = '#000000';
+          if (rootEl) rootEl.style.backgroundColor = '#000000';
+        }
+      } else {
+        // Moderator & Remote windows always maintain solid dark workspace background
+        document.documentElement.classList.remove('projector-mode', 'system-overlay-mode');
+        document.body.classList.remove('projector-mode', 'system-overlay-mode');
+        document.documentElement.style.backgroundColor = '#0c0d10';
+        document.body.style.backgroundColor = '#0c0d10';
+        const rootEl = document.getElementById('root');
+        if (rootEl) {
+          rootEl.classList.remove('projector-mode', 'system-overlay-mode');
+          rootEl.style.backgroundColor = '#0c0d10';
+        }
       }
-    }
+    };
+
+    applyOverlayTransparency(useStore.getState().isSystemOverlayMode);
+
+    const handleSystemOverlayChanged = (e: any) => {
+      applyOverlayTransparency(Boolean(e.detail?.isOverlayMode));
+    };
+    window.addEventListener('simpleworship:system-overlay-changed', handleSystemOverlayChanged);
 
     return () => {
       window.removeEventListener('dragover', preventGlobalDrop);
       window.removeEventListener('drop', preventGlobalDrop);
       window.removeEventListener('beforeunload', handleAppShutdown);
       window.removeEventListener('unload', handleAppShutdown);
+      window.removeEventListener('simpleworship:system-overlay-changed', handleSystemOverlayChanged);
       cleanupThemeListener?.();
       unsubscribeStore();
     };
   }, [isProjector]);
 
   if (isProjector) {
-    return <ProjectorView groupId={groupId} displayId={displayId} />;
+    return (
+      <AppErrorBoundary fallbackType="projector">
+        <ProjectorView groupId={groupId} displayId={displayId} />
+      </AppErrorBoundary>
+    );
   }
 
   if (isRemote) {
-    return <RemoteView pinFromUrl={pinFromUrl} />;
+    return (
+      <AppErrorBoundary fallbackType="moderator">
+        <RemoteView pinFromUrl={pinFromUrl} />
+      </AppErrorBoundary>
+    );
   }
 
   return (
-    <WorkspaceProvider>
-      <ModeratorView />
-    </WorkspaceProvider>
+    <AppErrorBoundary fallbackType="moderator">
+      <WorkspaceProvider>
+        <ModeratorView />
+      </WorkspaceProvider>
+    </AppErrorBoundary>
   );
 }

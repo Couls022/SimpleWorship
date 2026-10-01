@@ -50,11 +50,11 @@ export class PptxBackendSelector {
       if (isPptAvail) {
         return this.powerPointBackendInstance;
       }
-      console.warn('[PptxBackendSelector] PowerPoint backend requested but not available. Falling back to native engine.');
+      console.warn('[PptxBackendSelector] PowerPoint backend requested but not available. Falling back to native interactive vector engine.');
       return this.nativeBackendInstance;
     }
 
-    // Auto mode: If PowerPoint is available on this system, use it; otherwise Native
+    // Auto mode: If PowerPoint hardware acceleration is detected and available on this Windows host, use it
     const isPptAvail = await this.powerPointBackendInstance.isAvailable();
     if (isPptAvail) {
       return this.powerPointBackendInstance;

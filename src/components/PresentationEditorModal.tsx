@@ -2743,16 +2743,23 @@ export function PresentationEditorModalInner({
 
   // 3. Normal / Floating Movable Window Mode
   return (
-    <div
-      id="presentation-editor-window"
-      onMouseDown={() => setIsActiveWindow(true)}
-      className={`fixed transition-shadow select-none ${
-        isMaximized
-          ? 'inset-0 z-[999999] rounded-none'
-          : isActiveWindow
-          ? 'z-[999999] border border-sky-500/80 ring-2 ring-sky-500/30 rounded-xl shadow-[0_25px_70px_rgba(0,0,0,0.9)]'
-          : 'z-[99999] border border-slate-700/80 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] opacity-95'
-      }`}
+    <>
+      {/* System Backdrop Overlay */}
+      <div 
+        className="fixed inset-0 z-[99998] bg-black/50 backdrop-blur-[2px] transition-opacity duration-150"
+        onClick={() => setIsActiveWindow(false)}
+      />
+
+      <div
+        id="presentation-editor-window"
+        onMouseDown={() => setIsActiveWindow(true)}
+        className={`fixed transition-shadow select-none ${
+          isMaximized
+            ? 'inset-0 z-[999999] rounded-none'
+            : isActiveWindow
+            ? 'z-[999999] border border-sky-500/80 ring-2 ring-sky-500/30 rounded-xl shadow-[0_25px_70px_rgba(0,0,0,0.9)]'
+            : 'z-[99999] border border-slate-700/80 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] opacity-95'
+        }`}
       style={
         isMaximized
           ? { top: 0, left: 0, width: '100vw', height: '100vh' }
@@ -2822,6 +2829,7 @@ export function PresentationEditorModalInner({
         </>
       )}
     </div>
+    </>
   );
 }
 

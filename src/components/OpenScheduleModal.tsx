@@ -1,3 +1,4 @@
+import { withPortal } from './common/withPortal';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, FolderOpen, Upload, Trash2, Check, Clock, FileText, Search, Plus, Calendar, Download, Sparkles, PackageCheck } from 'lucide-react';
 import { useStore } from '../store/useStore';
@@ -10,7 +11,7 @@ interface OpenScheduleModalProps {
   onClose: () => void;
 }
 
-export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
+function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
   const activeSchedule = useStore(state => state.activeSchedule);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -397,3 +398,5 @@ export default function OpenScheduleModal({ onClose }: OpenScheduleModalProps) {
     </div>
   );
 }
+
+export default withPortal(OpenScheduleModal);

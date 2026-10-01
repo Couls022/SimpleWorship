@@ -106,6 +106,8 @@ export default function TopToolbar({
   const routerPanels = useStore(state => state.routerPanels);
   const activeRouterId = useStore(state => state.activeRouterId);
   const previewItemId = useStore(state => state.previewItemId);
+  const isSystemOverlayMode = useStore(state => state.isSystemOverlayMode);
+  const toggleSystemOverlayMode = useStore(state => state.toggleSystemOverlayMode);
 
   const workspace = useWorkspace();
 
@@ -240,6 +242,18 @@ export default function TopToolbar({
       // Browser sandbox may restrict window.close
     }
   };
+
+  // Global F9 keyboard shortcut for System & Projector Desktop Overlay Mode
+  useEffect(() => {
+    const handleOverlayShortcut = (e: KeyboardEvent) => {
+      if (e.key === 'F9' || ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'O' || e.key === 'o'))) {
+        e.preventDefault();
+        toggleSystemOverlayMode();
+      }
+    };
+    window.addEventListener('keydown', handleOverlayShortcut);
+    return () => window.removeEventListener('keydown', handleOverlayShortcut);
+  }, [toggleSystemOverlayMode]);
 
   // Load recent schedules when opening dropdown
   const loadRecentSchedules = async () => {
@@ -478,6 +492,27 @@ export default function TopToolbar({
 
         {/* Window controls */}
         <div className="app-no-drag flex items-center h-full -mr-3 -my-1 shrink-0">
+          {/* System & Projectors Overlay Mode Pin Toggle */}
+          <button 
+            id="btn-window-overlay-mode"
+            onClick={toggleSystemOverlayMode}
+            className={`w-9 h-7 flex items-center justify-center transition-all cursor-pointer select-none relative ${
+              isSystemOverlayMode
+                ? 'text-cyan-300 bg-cyan-950/70 hover:bg-cyan-900 border-b-2 border-cyan-400'
+                : 'text-gray-400 hover:text-white hover:bg-[#2e323b] active:bg-[#3d424e]'
+            }`}
+            title={
+              isSystemOverlayMode
+                ? "System & Projectors Overlay Mode is ACTIVE: All projector views and console are pinned on top of other Windows apps (F9)"
+                : "Desktop & Projectors Overlay Mode: Pin entire system and all projector displays on top of other Windows apps (F9)"
+            }
+            aria-label="Toggle Overlay Mode"
+          >
+            <Pin size={12} className={isSystemOverlayMode ? "fill-cyan-400 text-cyan-400 rotate-45" : ""} strokeWidth={2} />
+            {isSystemOverlayMode && (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,1)]" />
+            )}
+          </button>
           <button 
             id="btn-window-minimize"
             onClick={handleMinimizeWindow}
@@ -942,6 +977,23 @@ export default function TopToolbar({
                 <div className="border-t border-[#313540] my-1"></div>
                 <button 
                   onClick={() => { 
+                    toggleSystemOverlayMode(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className={`flex items-center gap-1.5 ${isSystemOverlayMode ? 'text-cyan-300 font-semibold' : 'text-gray-300'}`}>
+                    <Pin size={12} className={isSystemOverlayMode ? "fill-cyan-400 text-cyan-400" : ""} />
+                    <span>System & Projectors Overlay (Always on Top)</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {isSystemOverlayMode && <Check size={12} className="text-cyan-400" />}
+                    <span className="text-[10px] font-mono text-cyan-400">F9</span>
+                  </div>
+                </button>
+                <div className="border-t border-[#313540] my-1"></div>
+                <button 
+                  onClick={() => { 
                     toggleMasterLive(activeControlGroupId || outputGroups[0]?.id || ""); 
                     setActiveMenu(null); 
                   }} 
@@ -1226,6 +1278,25 @@ export default function TopToolbar({
                     </div>
                   );
                 })}
+
+                <div className="border-t border-[#313540] my-1"></div>
+
+                <button 
+                  onClick={() => { 
+                    toggleSystemOverlayMode(); 
+                    setActiveMenu(null); 
+                  }} 
+                  className="w-full flex items-center justify-between px-3 py-1 hover:bg-[#323744] hover:text-white cursor-pointer"
+                >
+                  <span className={`flex items-center gap-1.5 ${isSystemOverlayMode ? 'text-cyan-300 font-semibold' : 'text-gray-200'}`}>
+                    <Pin size={12} className={isSystemOverlayMode ? "fill-cyan-400 text-cyan-400" : ""} />
+                    <span>Desktop & Projectors Overlay Mode</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {isSystemOverlayMode && <Check size={12} className="text-cyan-400" />}
+                    <span className="text-[10px] font-mono text-cyan-400">F9</span>
+                  </div>
+                </button>
 
                 <div className="border-t border-[#313540] my-1"></div>
 

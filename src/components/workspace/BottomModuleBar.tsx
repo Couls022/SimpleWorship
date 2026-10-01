@@ -82,31 +82,12 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
     };
   }, []);
 
-  const handleFocusEntireSystem = () => {
-    try {
-      window.focus();
-    } catch (e) {}
-
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
-      try {
-        if (typeof (window as any).electronAPI.focusWindow === 'function') {
-          (window as any).electronAPI.focusWindow();
-        }
-      } catch (e) {}
-    }
-
-    // Bring open active window or all modals to front overlay
-    window.dispatchEvent(new CustomEvent('simpleworship:focus-active-window'));
-    window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-      detail: 'SimpleWorship Active System — Overlaid on Top'
-    }));
-  };
-
   const handleSelectRouter = (routerId: string, routeLabel: string) => {
     setActiveRouterId(routerId);
     const router = routerPanels.find(p => p.routerId === routerId);
     if (router?.targetOutputGroupId) {
       useStore.getState().setActiveControlGroupId(router.targetOutputGroupId);
+      useStore.getState().bringRouteToTop(router.targetOutputGroupId);
     }
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
@@ -320,17 +301,6 @@ export default function BottomModuleBar({ onConfigureRoute }: BottomModuleBarPro
             ))}
           </div>
         )}
-
-        {/* Active System Overlay Button: Brings entire system to front overlay */}
-        <button
-          onClick={handleFocusEntireSystem}
-          className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-sky-950/90 hover:bg-sky-900 border border-sky-500/70 text-sky-200 text-[11px] font-bold transition-all shadow-sm active:scale-95 group cursor-pointer"
-          title="SimpleWorship Active System — Click to overlay and bring to front across all apps"
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-125 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-          <span className="tracking-wide hidden xs:inline">SimpleWorship</span>
-          <span className="text-[9px] bg-sky-900/90 text-sky-300 px-1 py-0.2 rounded font-mono uppercase">ACTIVE</span>
-        </button>
 
         {/* Real-time Clock */}
         <ClockDisplay />

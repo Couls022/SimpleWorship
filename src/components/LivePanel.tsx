@@ -98,6 +98,19 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const activeRouterId = useStore(state => state.activeRouterId);
   const activeControlGroupId = useStore(state => state.activeControlGroupId);
   const stagedGroupState = useStore(state => state.stagedGroupStates[groupId]);
+  const [, setSlidesTick] = useState(0);
+
+  useEffect(() => {
+    const handleSlidesLoaded = () => {
+      setSlidesTick(t => t + 1);
+    };
+    window.addEventListener('simpleworship:slides-loaded', handleSlidesLoaded);
+    window.addEventListener('simpleworship:canonical-frame-updated', handleSlidesLoaded);
+    return () => {
+      window.removeEventListener('simpleworship:slides-loaded', handleSlidesLoaded);
+      window.removeEventListener('simpleworship:canonical-frame-updated', handleSlidesLoaded);
+    };
+  }, []);
   
   const { panels, togglePanelDock } = useWorkspace();
   const isDocked = panels.live?.isDocked ?? true;
@@ -142,6 +155,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
     const targetRouter = routerId || useStore.getState().activeRouterId || 'router-1';
     useStore.getState().setActiveRouterId(targetRouter);
     useStore.getState().setActiveControlGroupId(groupId);
+    useStore.getState().bringRouteToTop(groupId);
   };
 
   const handleAddPanel = () => {
@@ -366,6 +380,10 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handleSelectSlide = React.useCallback((idx: number) => {
     useStore.getState().setActiveControlGroupId(groupId);
+    if (routerId) {
+      useStore.getState().setActiveRouterId(routerId);
+    }
+    useStore.getState().bringRouteToTop(groupId);
     if (activeControlState?.activeItemId === liveItem?.id) {
       useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: idx, pptxAction: null });
     } else if (liveItem) {
@@ -375,6 +393,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handlePrevSlide = () => {
     if (slides.length === 0) return;
+    useStore.getState().bringRouteToTop(groupId);
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev, pptxAction: null });
@@ -382,6 +401,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
   const handleNextSlide = () => {
     if (slides.length === 0) return;
+    useStore.getState().bringRouteToTop(groupId);
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next, pptxAction: null });

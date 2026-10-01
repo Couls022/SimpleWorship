@@ -219,6 +219,11 @@ interface AppState {
   removeProfile: (id: string) => void;
   setActiveProfile: (id: string) => void;
 
+  // System & Projector Desktop Overlay Mode (Always on top of all Windows apps)
+  isSystemOverlayMode: boolean;
+  setSystemOverlayMode: (enabled: boolean) => void;
+  toggleSystemOverlayMode: () => boolean;
+
   // Shortcut Key Settings
   shortcutSettings: ShortcutSettings;
   updateShortcutSettings: (updates: Partial<ShortcutSettings> | ((prev: ShortcutSettings) => ShortcutSettings)) => void;
@@ -382,6 +387,39 @@ export const useStore = create<AppState>((set, get) => ({
         detail: `Active Profile Switched: "${target?.name || id}" (All databases connected)` 
       })
     );
+  },
+
+  isSystemOverlayMode: safeStorage.getItem('simpleworship_overlay_mode_v1') === 'true',
+  setSystemOverlayMode: (enabled: boolean) => {
+    safeStorage.setItem('simpleworship_overlay_mode_v1', String(enabled));
+    set({ isSystemOverlayMode: enabled });
+
+    // Call native Electron API to immediately update main window AND all projector output windows on Windows
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.setOverlayMode) {
+      (window as any).electronAPI.setOverlayMode({ alwaysOnTop: enabled }).catch(() => {});
+    }
+
+    // Broadcast across windows (Projector windows, Remote, Multi-group)
+    broadcastStateChange({
+      type: 'SYSTEM_OVERLAY_UPDATE',
+      data: { isOverlayMode: enabled }
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('simpleworship:system-overlay-changed', {
+        detail: { isOverlayMode: enabled }
+      }));
+      window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+        detail: enabled
+          ? '✓ System & Projectors Overlay Mode: Pinned on top of all Windows apps'
+          : 'System Overlay Mode Disabled: Standard windowing'
+      }));
+    }
+  },
+  toggleSystemOverlayMode: () => {
+    const next = !get().isSystemOverlayMode;
+    get().setSystemOverlayMode(next);
+    return next;
   },
 
   shortcutSettings: getStoredShortcuts(),
@@ -738,6 +776,7 @@ export const useStore = create<AppState>((set, get) => ({
         activeRouterId
       }
     });
+    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, activeControlGroupId, routeActivationStack).catch(() => {});
   },
   addRouterPanel: (panel) => set((state) => {
     let targetGroupId = panel.targetOutputGroupId;
@@ -838,6 +877,12 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     panels.push(updatedPanel);
 
+    const prevStack = state.routeActivationStack || [];
+    const nextStack = targetGroupId ? [targetGroupId, ...prevStack.filter(id => id !== targetGroupId)] : prevStack;
+    try {
+      safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
+    } catch (e) {}
+
     scheduleGroupStatesSave(newGroupStates);
     broadcastStateChange({
       type: 'SYNC_STATE',
@@ -845,16 +890,20 @@ export const useStore = create<AppState>((set, get) => ({
         outputGroups: newGroups,
         groupStates: newGroupStates,
         routerPanels: panels,
+        routeActivationStack: nextStack,
         activeControlGroupId: targetGroupId,
         activeRouterId: updatedPanel.routerId,
       }
     });
+
+    DisplayManager.syncPhysicalDisplays(newGroups, newGroupStates, targetGroupId, nextStack).catch(() => {});
 
     return {
       outputGroups: newGroups,
       groupStates: newGroupStates,
       stagedGroupStates: newStagedStates,
       routerPanels: panels,
+      routeActivationStack: nextStack,
       activeRouterId: updatedPanel.routerId,
       activeControlGroupId: targetGroupId,
       previewItemId: updatedPanel.previewItemId ?? null,
@@ -1028,6 +1077,7 @@ export const useStore = create<AppState>((set, get) => ({
         groupStates
       }
     });
+    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, activeControlGroupId, routeActivationStack).catch(() => {});
   },
 
   outputGroups: defaultOutputGroups,
@@ -1576,6 +1626,7 @@ export const useStore = create<AppState>((set, get) => ({
         routerPanels
       } 
     });
+    DisplayManager.syncPhysicalDisplays(outputGroups, groupStates, id, routeActivationStack).catch(() => {});
   },
 
   activeSchedule: defaultSchedule,
@@ -1596,6 +1647,9 @@ export const useStore = create<AppState>((set, get) => ({
       };
       if (newItem.data && 'fileBytes' in newItem.data) {
         delete newItem.data.fileBytes;
+      }
+      if ((newItem.type === 'presentation' || (newItem.type as any) === 'ppt') && newItem.data?.slides) {
+        PresentationCore.registerPresentationSlides(newItem.contentId || newItem.id, newItem.data.slides);
       }
       const updatedSchedule = {
         ...state.activeSchedule,
@@ -1699,6 +1753,9 @@ export const useStore = create<AppState>((set, get) => ({
       );
       if (existing) {
         resolvedItemId = existing.id;
+        if ((existing.type === 'presentation' || (existing.type as any) === 'ppt') && existing.data?.slides) {
+          PresentationCore.registerPresentationSlides(existing.contentId || existing.id, existing.data.slides);
+        }
       } else {
         const newItem: PresentationItem = {
           id: itemOrId.id || `item-${Date.now()}`,
@@ -1712,6 +1769,9 @@ export const useStore = create<AppState>((set, get) => ({
         };
         if (newItem.data && 'fileBytes' in newItem.data) {
           delete newItem.data.fileBytes;
+        }
+        if ((newItem.type === 'presentation' || (newItem.type as any) === 'ppt') && newItem.data?.slides) {
+          PresentationCore.registerPresentationSlides(newItem.contentId || newItem.id, newItem.data.slides);
         }
         if (state.activeSchedule) {
           const updatedSchedule = {
@@ -1831,6 +1891,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Find presentation item or construct one for direct live persistence
     let liveItem: PresentationItem | undefined = directItem || activeSchedule?.items?.find(i => i.id === itemId);
+    if (liveItem && (liveItem.type === 'presentation' || (liveItem.type as any) === 'ppt') && liveItem.data?.slides) {
+      PresentationCore.registerPresentationSlides(liveItem.contentId || liveItem.id, liveItem.data.slides);
+    }
     if (!liveItem) {
       const song = songsList.find(s => s.id === itemId);
       if (song) {
@@ -2094,22 +2157,20 @@ export const useStore = create<AppState>((set, get) => ({
   toggleMasterLive: (groupId?: string) => {
     const { groupStates, stagedGroupStates, outputGroups, activeControlGroupId, songsList, themesList, systemOptions, activeSchedule } = get();
     
-    // Check if master live is currently on
-    const isCurrentlyLive = groupId 
-      ? Boolean(groupStates[groupId]?.isLiveEnabled)
-      : Boolean(groupStates['group-congregation']?.isLiveEnabled || (activeControlGroupId && groupStates[activeControlGroupId]?.isLiveEnabled));
+    // Resolve the single target route group to toggle
+    const effectiveGroupId = groupId || activeControlGroupId || (outputGroups.length > 0 ? outputGroups[0].id : 'group-congregation');
+    const isCurrentlyLive = Boolean(groupStates[effectiveGroupId]?.isLiveEnabled);
     const nextLive = !isCurrentlyLive;
 
     const updatedStates = { ...groupStates };
     const updatedStaged = { ...stagedGroupStates };
 
-    const targetGroupIds = groupId 
-      ? [groupId] 
-      : outputGroups.filter(g => g.role !== 'confidence' && g.id !== 'group-stage').map(g => g.id);
+    // STRICT PIPELINE ISOLATION: Toggle ONLY the target group, never all groups
+    const targetGroupIds = [effectiveGroupId];
 
     let nextStack = get().routeActivationStack || [];
-    if (groupId && nextLive) {
-      nextStack = [groupId, ...nextStack.filter(id => id !== groupId)];
+    if (nextLive) {
+      nextStack = [effectiveGroupId, ...nextStack.filter(id => id !== effectiveGroupId)];
       try {
         safeStorage.setItem('simpleworship_route_stack_v1', JSON.stringify(nextStack));
       } catch (e) {}
@@ -2231,7 +2292,7 @@ export const useStore = create<AppState>((set, get) => ({
       console.error('[useStore] DisplayManager.syncPhysicalDisplays error on toggleMasterLive:', err);
     });
 
-    const targetGroup = groupId ? outputGroups.find(g => g.id === groupId) : null;
+    const targetGroup = outputGroups.find(g => g.id === effectiveGroupId) || null;
     const routeLabel = targetGroup?.name || 'Presentation Route';
 
     window.dispatchEvent(

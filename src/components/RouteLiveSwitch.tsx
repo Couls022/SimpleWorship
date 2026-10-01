@@ -34,16 +34,17 @@ export default function RouteLiveSwitch({ groupId, className = '', compact = fal
   );
   const hasSharingRoutes = sharingGroups.length > 0;
   const stackRank = routeActivationStack.indexOf(groupId);
-  const isTopOverlay = stackRank === 0 || sharingGroups.every(other => {
+  const activeControlGroupId = useStore(state => state.activeControlGroupId);
+  const isTopOverlay = (groupId === activeControlGroupId) || (stackRank === 0) || sharingGroups.every(other => {
+    if (other.id === activeControlGroupId) return false;
     const otherRank = routeActivationStack.indexOf(other.id);
     return otherRank === -1 || (stackRank !== -1 && stackRank < otherRank);
   });
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isLive) {
-      bringRouteToTop(groupId);
-    }
+    bringRouteToTop(groupId);
+    useStore.getState().setActiveControlGroupId(groupId);
     toggleMasterLive(groupId);
   };
 
