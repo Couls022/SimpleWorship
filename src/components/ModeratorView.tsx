@@ -728,7 +728,17 @@ export default function ModeratorView() {
 
       {/* 7. Toast Notification */}
       {notification && (
-        <div className="fixed bottom-12 right-6 z-50 bg-[#1c2230] border border-indigo-500/60 text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div 
+          onClick={() => {
+            if (notification.toLowerCase().includes('font') || notification.toLowerCase().includes('download & install')) {
+              setIsFontScannerOpen(true);
+            }
+          }}
+          className={`fixed bottom-12 right-6 z-50 bg-[#1c2230] border border-indigo-500/60 text-white px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-bottom-3 duration-200 ${
+            notification.toLowerCase().includes('font') ? 'cursor-pointer hover:border-amber-400 hover:bg-[#242c3d]' : ''
+          }`}
+          title={notification.toLowerCase().includes('font') ? 'Click to open Font Scanner & Auto-Installer' : undefined}
+        >
           <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
           <span>{notification}</span>
         </div>

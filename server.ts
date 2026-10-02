@@ -640,18 +640,25 @@ async function startServer() {
 
   app.post('/api/system/install-font-batch-windows', async (req, res) => {
     try {
-      const { families } = req.body;
-      if (!Array.isArray(families) || families.length === 0) {
-        return res.status(400).json({ success: false, error: 'Array of font families is required' });
-      }
-
+      const { families, fontItems } = req.body;
       const { installFontToWindows } = await import('./src/server/fontDownloader');
       const results: Array<{ family: string; success: boolean; message: string }> = [];
 
-      for (const fam of families) {
-        if (!fam) continue;
-        const resObj = await installFontToWindows(fam);
-        results.push({ family: fam, success: resObj.success, message: resObj.message });
+      if (Array.isArray(fontItems) && fontItems.length > 0) {
+        for (const item of fontItems) {
+          if (!item || !item.family) continue;
+          const fontBuffer = item.bufferBase64 ? Buffer.from(item.bufferBase64.replace(/^data:[^;]+;base64,/, ''), 'base64') : undefined;
+          const resObj = await installFontToWindows(item.family, fontBuffer);
+          results.push({ family: item.family, success: resObj.success, message: resObj.message });
+        }
+      } else if (Array.isArray(families) && families.length > 0) {
+        for (const fam of families) {
+          if (!fam) continue;
+          const resObj = await installFontToWindows(fam);
+          results.push({ family: fam, success: resObj.success, message: resObj.message });
+        }
+      } else {
+        return res.status(400).json({ success: false, error: 'Array of font families or fontItems is required' });
       }
 
       res.json({

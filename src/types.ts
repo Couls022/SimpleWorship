@@ -899,8 +899,8 @@ declare global {
       renderPptxWithPowerPoint?: (payload: any) => Promise<{ success: boolean; slides?: string[]; slideCount?: number; width?: number; height?: number; aspectRatio?: number; cached?: boolean; error?: string }>;
       clearPowerPointCache?: (hash?: string) => Promise<{ success: boolean; error?: string }>;
       openExternalUrl?: (url: string) => Promise<boolean>;
-      installFontToWindows?: (family: string, bufferBase64?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-      installFontBatchToWindows?: (families: string[]) => Promise<{ success: boolean; count?: number; error?: string }>;
+      installFontToWindows?: (family: string, bufferBase64?: string, format?: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+      installFontBatchToWindows?: (families: string[], fontItems?: Array<{ family: string; bufferBase64: string; format?: string }>) => Promise<{ success: boolean; count?: number; error?: string }>;
     };
   }
 }

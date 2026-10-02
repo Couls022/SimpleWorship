@@ -30,6 +30,7 @@ interface MonitorPreviewCanvasProps {
   isProjectorMode?: boolean;
   isOverlayLayer?: boolean;
   isThumbnail?: boolean;
+  isInactivePreview?: boolean;
 }
 
 const STATIC_FALLBACK_STATE: PresentationState = Object.freeze({
@@ -60,6 +61,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   isProjectorMode = false,
   isOverlayLayer,
   isThumbnail = false,
+  isInactivePreview = false,
 }: MonitorPreviewCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState(() => (
@@ -447,7 +449,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   };
 
   const syncBg = resolveSyncUrl(backgroundUrl, activeItem?.contentId);
+  const syncVideo = resolveSyncUrl(videoSrc, activeItem?.contentId);
   const [localBackgroundUrl, setLocalBackgroundUrl] = useState<string>(syncBg);
+  const [localVideoSrc, setLocalVideoSrc] = useState<string>(syncVideo);
   const [localAudioSrc, setLocalAudioSrc] = useState<string>('');
 
   const getValidMediaSrc = (src: string | null | undefined): string | undefined => {
@@ -457,6 +461,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   };
 
   const effectiveAudioSrc = localAudioSrc || getValidMediaSrc(resolveAssetUrl(audioSrc)) || getValidMediaSrc(audioSrc) || '';
+  const effectiveVideoSrc = localVideoSrc || getValidMediaSrc(resolveAssetUrl(videoSrc)) || getValidMediaSrc(videoSrc) || '';
 
   const lastValidBgRef = useRef<string>(syncBg || backgroundUrl);
   if (localBackgroundUrl) {
@@ -487,10 +492,15 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     if (syncBg) {
       setLocalBackgroundUrl(syncBg);
     }
+    if (syncVideo) {
+      setLocalVideoSrc(syncVideo);
+    }
     
     if (activeItem?.contentId) {
       const cachedAudio = dbApi.getCachedUrl(activeItem.contentId) || resolveAssetUrl(activeItem.contentId);
       if (cachedAudio) setLocalAudioSrc(cachedAudio);
+      const cachedVideo = dbApi.getCachedUrl(activeItem.contentId) || resolveAssetUrl(activeItem.contentId);
+      if (cachedVideo) setLocalVideoSrc(cachedVideo);
     }
     
     const resolveUrl = async (url: string, contentId?: string): Promise<string> => {
@@ -528,6 +538,13 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
         }
       });
     }
+    if (!syncVideo && videoSrc) {
+      resolveUrl(videoSrc, activeItem?.contentId).then(resolved => {
+        if (isMounted && resolved) {
+          setLocalVideoSrc(resolved);
+        }
+      });
+    }
     if (audioSrc) {
       resolveUrl(audioSrc, activeItem?.contentId).then(resolved => {
         if (isMounted && resolved) {
@@ -539,7 +556,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     return () => { 
       isMounted = false; 
     };
-  }, [backgroundUrl, audioSrc, activeItem?.contentId, syncBg]);
+  }, [backgroundUrl, videoSrc, audioSrc, activeItem?.contentId, syncBg, syncVideo]);
 
   const isExplicitVideoItem = (
     contentType === 'video' ||
@@ -572,7 +589,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     if (!videoEl) return;
 
     videoEl.loop = presentationState.isVideoLooping ?? true;
-    videoEl.muted = isThumbnail ? true : (presentationState.isVideoMuted ?? false);
+    videoEl.muted = (isThumbnail || isInactivePreview) ? true : (presentationState.isVideoMuted ?? false);
     videoEl.volume = presentationState.videoVolume ?? 1;
 
     if (presentationState.isVideoPlaying === false) {
@@ -599,7 +616,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     presentationState.isVideoLooping,
     presentationState.videoVolume,
     videoSrc,
-    isThumbnail
+    isThumbnail,
+    isInactivePreview
   ]);
 
   useEffect(() => {
@@ -609,24 +627,33 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   }, [presentationState.videoSeekTime]);
 
   const handleTimeUpdate = () => {
-    if (isProjectorMode || isThumbnail) return;
+    if (isThumbnail) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const now = Date.now();
     
     // Update fast UI store every 250ms for smooth progress bar (bypasses full React tree re-renders)
-    if (now - (videoEl as any)._lastFastUpdate > 250 || !(videoEl as any)._lastFastUpdate) {
+    if (now - ((videoEl as any)._lastFastUpdate || 0) > 250) {
       (videoEl as any)._lastFastUpdate = now;
       useMediaProgressStore.getState().setProgress(groupId, videoEl.currentTime, videoEl.duration || 0);
     }
   };
 
   const handleLoadedMetadata = () => {
-    if (isProjectorMode || isThumbnail) return;
     const videoEl = videoRef.current;
     if (!videoEl) return;
+    
+    // Restore known ongoing playback time if video was already playing
+    const knownProgress = useMediaProgressStore.getState().progress[groupId]?.currentTime || presentationState.videoCurrentTime || stagedGroupState?.videoCurrentTime || 0;
+    if (knownProgress > 0.2 && Math.abs(videoEl.currentTime - knownProgress) > 0.5 && knownProgress < (videoEl.duration || 999999)) {
+      try {
+        videoEl.currentTime = knownProgress;
+      } catch {}
+    }
+
+    if (isThumbnail) return;
     useMediaProgressStore.getState().setProgress(groupId, videoEl.currentTime, videoEl.duration || 0);
-    if (setStagedGroupState) {
+    if (!isProjectorMode && setStagedGroupState) {
       setStagedGroupState(groupId, {
         videoDuration: videoEl.duration || 0,
       });
@@ -634,23 +661,31 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   };
 
   const handleAudioTimeUpdate = () => {
-    if (isProjectorMode || isThumbnail) return;
+    if (isThumbnail) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
     const now = Date.now();
     
-    if (now - (audioEl as any)._lastFastUpdate > 250 || !(audioEl as any)._lastFastUpdate) {
+    if (now - ((audioEl as any)._lastFastUpdate || 0) > 250) {
       (audioEl as any)._lastFastUpdate = now;
       useMediaProgressStore.getState().setProgress(groupId, audioEl.currentTime, audioEl.duration || 0);
     }
   };
 
   const handleAudioLoadedMetadata = () => {
-    if (isProjectorMode || isThumbnail) return;
     const audioEl = audioRef.current;
     if (!audioEl) return;
+    
+    const knownProgress = useMediaProgressStore.getState().progress[groupId]?.currentTime || presentationState.videoCurrentTime || stagedGroupState?.videoCurrentTime || 0;
+    if (knownProgress > 0.2 && Math.abs(audioEl.currentTime - knownProgress) > 0.5 && knownProgress < (audioEl.duration || 999999)) {
+      try {
+        audioEl.currentTime = knownProgress;
+      } catch {}
+    }
+
+    if (isThumbnail) return;
     useMediaProgressStore.getState().setProgress(groupId, audioEl.currentTime, audioEl.duration || 0);
-    if (setStagedGroupState) {
+    if (!isProjectorMode && setStagedGroupState) {
       setStagedGroupState(groupId, {
         videoDuration: audioEl.duration || 0,
       });
@@ -662,7 +697,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     if (!audioEl) return;
 
     audioEl.loop = presentationState.isVideoLooping ?? true;
-    audioEl.muted = presentationState.isVideoMuted ?? false;
+    audioEl.muted = (isThumbnail || isInactivePreview) ? true : (presentationState.isVideoMuted ?? false);
     audioEl.volume = presentationState.videoVolume ?? 1;
 
     if (presentationState.isVideoPlaying === false) {
@@ -688,7 +723,9 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     presentationState.isVideoMuted,
     presentationState.isVideoLooping,
     presentationState.videoVolume,
-    effectiveAudioSrc
+    effectiveAudioSrc,
+    isThumbnail,
+    isInactivePreview
   ]);
 
   useEffect(() => {
@@ -699,20 +736,22 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
   // Continuously synchronize playback position between controller and projector
   useEffect(() => {
-    if (!isProjectorMode || presentationState.videoCurrentTime === undefined) return;
+    if (presentationState.videoCurrentTime === undefined) return;
     
     const syncMedia = (el: HTMLVideoElement | HTMLAudioElement | null) => {
       if (!el) return;
       const targetTime = presentationState.videoCurrentTime;
       // Use a generous threshold (0.5s) to avoid micro-stutters during normal playback
       if (targetTime !== undefined && Math.abs(el.currentTime - targetTime) > 0.5) {
-        el.currentTime = targetTime;
+        try {
+          el.currentTime = targetTime;
+        } catch {}
       }
     };
 
     syncMedia(videoRef.current);
     syncMedia(audioRef.current);
-  }, [presentationState.videoCurrentTime, isProjectorMode]);
+  }, [presentationState.videoCurrentTime]);
 
   const isGradient = isLogoMode
     ? (logoStyles.backgroundType === 'gradient' && Boolean(logoStyles.backgroundGradient))
@@ -770,7 +809,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
               )}
               <AnimatePresence mode="sync">
                 <motion.div
-                  key={`bg-${(isOverlayGroup && !hasExplicitCustomBackground) ? 'overlay-trans' : (effectiveBackgroundUrl || videoSrc || gradientVal || resolvedStyles.backgroundColor)}`}
+                  key={`bg-${(isOverlayGroup && !hasExplicitCustomBackground) ? 'overlay-trans' : (effectiveBackgroundUrl || effectiveVideoSrc || gradientVal || resolvedStyles.backgroundColor)}`}
                   initial={{ opacity: (isOverlayGroup && !hasExplicitCustomBackground) ? 1 : (lastValidBgRef.current ? 1 : 0) }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 1, zIndex: 0 }}
@@ -780,18 +819,20 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                 >
                 {(isOverlayGroup && !hasExplicitCustomBackground) ? (
                   <div className="w-full h-full bg-transparent" />
-                ) : isVideo && videoSrc ? (
+                ) : isVideo && effectiveVideoSrc ? (
                   <video
                     ref={(el) => {
                       if (el) {
                         videoRef.current = el;
                       }
                     }}
-                    src={getValidMediaSrc(resolveAssetUrl(videoSrc)) || getValidMediaSrc(videoSrc) || ''}
+                    src={effectiveVideoSrc}
                     autoPlay
                     loop={presentationState.isVideoLooping ?? true}
-                    muted={isThumbnail ? true : (presentationState.isVideoMuted ?? false)}
+                    muted={(isThumbnail || isInactivePreview) ? true : (presentationState.isVideoMuted ?? false)}
                     playsInline
+                    disablePictureInPicture
+                    disableRemotePlayback
                     preload={isThumbnail ? "none" : "auto"}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
@@ -800,6 +841,12 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     }}
                     onCanPlay={(e) => {
                       const v = e.currentTarget;
+                      const knownProgress = useMediaProgressStore.getState().progress[groupId]?.currentTime || presentationState.videoCurrentTime || stagedGroupState?.videoCurrentTime || 0;
+                      if (knownProgress > 0.2 && Math.abs(v.currentTime - knownProgress) > 0.5 && knownProgress < (v.duration || 999999)) {
+                        try {
+                          v.currentTime = knownProgress;
+                        } catch {}
+                      }
                       if (presentationState.isVideoPlaying !== false && v.paused) {
                         v.play().catch(err => {
                           if (err.name !== 'AbortError') console.warn('[MonitorPreviewCanvas] Video onCanPlay play rejected:', err);
@@ -815,6 +862,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
                     style={{ 
                       transform: 'translate3d(0, 0, 0)',
                       willChange: 'transform',
+                      contain: 'strict',
                       backfaceVisibility: 'hidden',
                       WebkitBackfaceVisibility: 'hidden',
                       filter: 'none'

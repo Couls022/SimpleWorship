@@ -77,6 +77,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renderPptxWithPowerPoint: (payload) => ipcRenderer.invoke('pptx:render-slides', payload),
   clearPowerPointCache: (hash) => ipcRenderer.invoke('pptx:clear-cache', hash),
   openExternalUrl: (url) => ipcRenderer.invoke('shell:open-external', url),
-  installFontToWindows: (family, bufferBase64) => ipcRenderer.invoke('system:install-font-windows', { family, bufferBase64 }),
-  installFontBatchToWindows: (families) => ipcRenderer.invoke('system:install-font-batch-windows', { families }),
+  installFontToWindows: (family, bufferBase64, format) => ipcRenderer.invoke('system:install-font-windows', { family, bufferBase64, format }),
+  installFontBatchToWindows: (families, fontItems) => ipcRenderer.invoke('system:install-font-batch-windows', { families, fontItems }),
 });

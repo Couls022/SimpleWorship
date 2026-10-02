@@ -38,6 +38,9 @@ import {
   installCustomFontFromFile,
   inMemoryInstalledFonts,
   getAllStoredCustomFonts,
+  getAllStoredFontRecords,
+  getStoredFontRecord,
+  bufferToBase64,
   deleteStoredFont,
   exportAllFontsAsZip,
   exportWindowsFontInstallerPackage,
@@ -281,22 +284,27 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
     try {
       const ok = await fetchAndInstallGoogleFont(family);
       
-      // Also invoke native Windows OS font installation (Electron IPC or local Express endpoint)
+      // Also invoke native Windows OS font installation (Electron IPC and local Express endpoint)
       try {
+        const matching = await getStoredFontRecord(family);
+        const bufferBase64 = matching?.buffer ? bufferToBase64(matching.buffer) : undefined;
+        const format = matching?.format === 'truetype' ? 'ttf' : (matching?.format === 'opentype' ? 'otf' : 'ttf');
+
         if (typeof window !== 'undefined' && window.electronAPI?.installFontToWindows) {
-          await window.electronAPI.installFontToWindows(family);
-        } else {
-          await fetch('/api/system/install-font-windows', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ family })
-          });
+          await window.electronAPI.installFontToWindows(family, bufferBase64, format);
         }
-      } catch {}
+        await fetch('/api/system/install-font-windows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ family, bufferBase64, format })
+        }).catch(() => {});
+      } catch (winErr) {
+        console.warn('[FontScanner] Windows OS installation warning:', winErr);
+      }
 
       if (ok) {
         setInstalledSet(prev => new Set([...prev, family.toLowerCase()]));
-        setStatusMessage(`✓ Installed "${family}" into Windows OS and SimpleWorship! Available across all Windows applications.`);
+        setStatusMessage(`✓ Installed "${family}" into Windows OS and SimpleWorship! Available across PowerPoint, Word, Canva, and all Windows apps.`);
         setPreviewFont(family);
         registerFontAliasesInDom([family]);
         refreshStoredDbFonts();
@@ -318,24 +326,27 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
       : fontOrFamily.normalizedFamily || fontOrFamily.fontName;
 
     setDownloadingFonts(prev => ({ ...prev, [family]: true }));
-    setStatusMessage(`Downloading "${family}" font file for Windows installation...`);
+    setStatusMessage(`Downloading "${family}" TrueType font file for Windows installation...`);
 
     try {
       // Auto-trigger direct Windows OS install (Native Electron or local Express)
       try {
+        const matching = await getStoredFontRecord(family);
+        const bufferBase64 = matching?.buffer ? bufferToBase64(matching.buffer) : undefined;
+        const format = matching?.format === 'truetype' ? 'ttf' : (matching?.format === 'opentype' ? 'otf' : 'ttf');
+
         if (typeof window !== 'undefined' && window.electronAPI?.installFontToWindows) {
-          await window.electronAPI.installFontToWindows(family);
-        } else {
-          await fetch('/api/system/install-font-windows', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ family })
-          });
+          await window.electronAPI.installFontToWindows(family, bufferBase64, format);
         }
+        await fetch('/api/system/install-font-windows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ family, bufferBase64, format })
+        }).catch(() => {});
       } catch {}
 
       await downloadFontFileToPc(family);
-      setStatusMessage(`✓ Download started and registered for "${family}". Ready for all Windows applications.`);
+      setStatusMessage(`✓ TrueType font downloaded and registered for "${family}". Ready for all Windows applications.`);
     } catch {
       setStatusMessage(`Failed to download "${family}".`);
     } finally {
@@ -373,18 +384,28 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
       }
     }
 
-    // Direct Windows OS batch registration (Native Electron IPC or local Express endpoint)
+    // Direct Windows OS batch registration (Native Electron IPC and local Express endpoint)
     try {
+      const fullRecords = await getAllStoredFontRecords();
+      const fontItems = fullRecords
+        .filter(r => installedNames.some(name => name.toLowerCase() === r.family.toLowerCase() || name.toLowerCase() === r.familyLower))
+        .map(r => ({
+          family: r.family,
+          bufferBase64: bufferToBase64(r.buffer),
+          format: r.format === 'truetype' ? 'ttf' : (r.format === 'opentype' ? 'otf' : 'ttf')
+        }));
+
       if (typeof window !== 'undefined' && window.electronAPI?.installFontBatchToWindows) {
-        await window.electronAPI.installFontBatchToWindows(installedNames);
-      } else {
-        await fetch('/api/system/install-font-batch-windows', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ families: installedNames })
-        });
+        await window.electronAPI.installFontBatchToWindows(installedNames, fontItems);
       }
-    } catch {}
+      await fetch('/api/system/install-font-batch-windows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ families: installedNames, fontItems })
+      }).catch(() => {});
+    } catch (winBatchErr) {
+      console.warn('[FontScanner] Windows OS batch registration warning:', winBatchErr);
+    }
 
     setBatchProgress(null);
     setIsInstallingAll(false);
@@ -625,40 +646,66 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
 
           {/* 1. Missing Fonts Banner & 1-Click Install All */}
           {missingFonts.length > 0 ? (
-            <div className="p-5 rounded-2xl bg-gradient-to-r from-red-950/40 via-[#1e1520] to-[#171a26] border-2 border-red-500/40 shadow-xl">
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-red-950/40 via-[#1e1520] to-[#171a26] border-2 border-red-500/50 shadow-2xl relative overflow-hidden transition-all hover:border-red-500/80">
               <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
-                      <AlertTriangle size={18} />
-                    </div>
+                <div className="flex-1">
+                  <div 
+                    onClick={handleInstallAllMissing} 
+                    className="flex flex-wrap items-center gap-3 cursor-pointer group"
+                    title="Click here to install all missing fonts into Windows OS and SimpleWorship"
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleInstallAllMissing();
+                      }}
+                      disabled={isInstallingAll}
+                      className="w-9 h-9 rounded-xl bg-red-500/20 group-hover:bg-red-500/40 border border-red-500/50 group-hover:border-red-400 flex items-center justify-center text-red-400 group-hover:text-white shrink-0 cursor-pointer active:scale-95 transition-all shadow-md"
+                      title="Click to install all missing fonts to Windows OS and SimpleWorship"
+                    >
+                      {isInstallingAll ? <RefreshCw size={18} className="animate-spin text-amber-300" /> : <AlertTriangle size={18} />}
+                    </button>
                     <div>
-                      <h4 className="text-base font-extrabold text-white flex items-center gap-2">
-                        <span>Missing Fonts Detected on Device ({missingFonts.length} Missing)</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/25 text-red-300 border border-red-500/40 uppercase">
-                          Action Required
+                      <h4 className="text-base font-extrabold text-white flex flex-wrap items-center gap-2.5">
+                        <span className="group-hover:text-amber-300 transition-colors">
+                          Missing Fonts Detected on Device ({missingFonts.length} Missing)
                         </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInstallAllMissing();
+                          }}
+                          disabled={isInstallingAll}
+                          className="px-3 py-1 rounded-lg text-xs font-black bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white border border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.7)] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer active:scale-95 animate-pulse transition-all ring-2 ring-red-400/40"
+                          title="Click here to install all missing fonts directly into Windows OS and SimpleWorship"
+                        >
+                          <Zap size={13} className="text-amber-300 fill-amber-300" />
+                          <span>Action Required • Click to Install to Windows & System</span>
+                        </button>
                       </h4>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-300 mt-2 leading-relaxed">
+                  <p className="text-xs text-gray-300 mt-2.5 leading-relaxed">
                     This presentation uses fonts that are not installed on this computer. 
-                    Click <strong>"1-Click Download & Install"</strong> below to automatically download and render the presentation with exact typography, 
-                    or download the <strong>.TTF</strong> files to install on Windows.
+                    Click the <strong>Red Action Button</strong> or <strong>"1-Click Download & Install All"</strong> below to automatically install genuine TrueType (.TTF) fonts system-wide into <strong>Windows OS</strong> and SimpleWorship. 
+                    Once installed, all fonts will instantly be available in <strong>PowerPoint, Word, Canva Desktop, Photoshop</strong>, and all Windows applications!
                   </p>
 
                   <div className="flex flex-wrap items-center gap-3 mt-4">
                     <button
                       onClick={handleInstallAllMissing}
                       disabled={isInstallingAll}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg hover:shadow-emerald-500/30 transition-all cursor-pointer active:scale-95 disabled:opacity-50 ring-2 ring-emerald-400/30"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-extrabold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xl hover:shadow-emerald-500/40 transition-all cursor-pointer active:scale-95 disabled:opacity-50 ring-2 ring-emerald-400/40"
+                      title="Installs into both Windows OS font library and SimpleWorship offline storage"
                     >
                       {isInstallingAll ? (
-                        <RefreshCw size={15} className="animate-spin" />
+                        <RefreshCw size={16} className="animate-spin text-amber-300" />
                       ) : (
-                        <Zap size={15} className="text-amber-300 fill-amber-300" />
+                        <Zap size={16} className="text-amber-300 fill-amber-300" />
                       )}
-                      <span>⚡ 1-Click Download & Install All ({missingFonts.length} Fonts)</span>
+                      <span>⚡ 1-Click Install All ({missingFonts.length} Fonts) to Windows & System</span>
                     </button>
 
                     <button
@@ -698,20 +745,34 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                   return (
                     <div 
                       key={font.fontName}
-                      className="p-3 rounded-lg bg-[#181a24] border border-[#2b3044] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      onClick={() => handleInstallSingle(font)}
+                      className="p-3 rounded-lg bg-[#181a24] hover:bg-[#222638] border border-[#2b3044] hover:border-red-500/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all group shadow-sm hover:shadow-red-950/40"
+                      title={`Click anywhere on this card to install "${displayFamily}" into Windows OS and SimpleWorship`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
-                          <Type size={16} />
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInstallSingle(font);
+                          }}
+                          disabled={isInstalling}
+                          className="w-8 h-8 rounded-lg bg-red-500/15 group-hover:bg-red-500/30 border border-red-500/30 group-hover:border-red-400 flex items-center justify-center text-red-400 group-hover:text-red-200 shrink-0 transition-colors cursor-pointer"
+                          title="Click to install this font into Windows"
+                        >
+                          {isInstalling ? <RefreshCw size={14} className="animate-spin text-amber-300" /> : <Type size={16} />}
+                        </button>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-white">{displayFamily}</span>
+                            <span className="text-sm font-bold text-white group-hover:text-cyan-300 transition-colors">{displayFamily}</span>
                             {font.normalizedFamily && font.normalizedFamily !== displayFamily && (
                               <span className="text-[10px] text-gray-400">({font.normalizedFamily})</span>
                             )}
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 capitalize">
                               {font.archetype || 'sans-serif'}
+                            </span>
+                            <span className="text-[10px] text-emerald-400 font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                              ⚡ Click to Install
                             </span>
                           </div>
                           <p className="text-[11px] text-gray-400 mt-0.5">
@@ -721,7 +782,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap" onClick={(e) => e.stopPropagation()}>
                         {/* Preview button */}
                         <button
                           onClick={() => setPreviewFont(family)}
@@ -737,14 +798,14 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                           onClick={() => handleInstallSingle(font)}
                           disabled={isInstalling}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                          title="Auto-download and embed permanently into SimpleWorship"
+                          title="Auto-download and install permanently into Windows OS and SimpleWorship"
                         >
                           {isInstalling ? (
-                            <RefreshCw size={12} className="animate-spin" />
+                            <RefreshCw size={12} className="animate-spin text-amber-300" />
                           ) : (
                             <Zap size={12} className="text-amber-300" />
                           )}
-                          <span>1-Click Install</span>
+                          <span>Install to Windows</span>
                         </button>
 
                         {/* Download .TTF */}
@@ -752,7 +813,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                           onClick={() => handleDownloadSingle(font)}
                           disabled={isDownloading}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#222738] hover:bg-[#2c3349] text-gray-200 border border-[#353d57] transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                          title="Download .TTF file to install on Windows"
+                          title="Download TrueType .TTF file to install on Windows"
                         >
                           {isDownloading ? (
                             <RefreshCw size={12} className="animate-spin text-cyan-400" />

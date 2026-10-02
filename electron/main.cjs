@@ -1800,16 +1800,47 @@ try {
 });
 
 // Native Windows OS Font Installation IPC
-ipcMain.handle('system:install-font-windows', async (event, { family, bufferBase64 }) => {
+async function downloadTtfBufferForElectron(family) {
+  try {
+    const cleanFamily = (family || '').replace(/^["']+|["']+$/g, '').trim();
+    const formatted = encodeURIComponent(cleanFamily).replace(/%20/g, '+');
+    const ttfCssUrl = `https://fonts.googleapis.com/css?family=${formatted}:400,700`;
+    const res = await fetch(ttfCssUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Linux; U; Android 2.2; en-us; Nexus One Build/FRF91) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1'
+      }
+    });
+    if (res.ok) {
+      const text = await res.text();
+      const m = /url\((https:\/\/fonts\.gstatic\.com\/s\/[^)]+\.ttf)\)/i.exec(text);
+      if (m && m[1]) {
+        const binRes = await fetch(m[1]);
+        if (binRes.ok) {
+          const ab = await binRes.arrayBuffer();
+          return Buffer.from(ab);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[electron] TTF download error for', family, e);
+  }
+  return null;
+}
+
+ipcMain.handle('system:install-font-windows', async (event, { family, bufferBase64, format = 'ttf' }) => {
   try {
     const cleanFamily = (family || '').replace(/^["']+|["']+$/g, '').trim();
     if (!cleanFamily) return { success: false, error: 'Family name required' };
 
     let buffer = null;
-    let format = 'ttf';
+    let targetFormat = format || 'ttf';
+
     if (bufferBase64) {
       const b64 = bufferBase64.includes(',') ? bufferBase64.split(',')[1] : bufferBase64;
       buffer = Buffer.from(b64, 'base64');
+    } else {
+      buffer = await downloadTtfBufferForElectron(cleanFamily);
+      targetFormat = 'ttf';
     }
 
     if (process.platform !== 'win32') {
@@ -1823,7 +1854,7 @@ ipcMain.handle('system:install-font-windows', async (event, { family, bufferBase
 
     if (buffer) {
       const safeName = cleanFamily.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const targetPath = path.join(userFontDir, `${safeName}.${format}`);
+      const targetPath = path.join(userFontDir, `${safeName}.${targetFormat}`);
       fs.writeFileSync(targetPath, buffer);
 
       const regKey = `HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts`;
@@ -1839,7 +1870,7 @@ ipcMain.handle('system:install-font-windows', async (event, { family, bufferBase
             [DllImport("user32.dll")]
             public static extern int SendMessage(int hWnd, uint Msg, int wParam, int lParam);
 "@
-          $type = Add-Type -MemberDefinition $signature -Name "FontHelper" -Namespace "SimpleWorship" -PassThru;
+          $type = Add-Type -MemberDefinition $signature -Name "FontHelper_${Date.now()}" -Namespace "SimpleWorship" -PassThru;
           $type::AddFontResource($target);
           $HWND_BROADCAST = 0xffff;
           $WM_FONTCHANGE = 0x001d;
@@ -1861,8 +1892,95 @@ ipcMain.handle('system:install-font-windows', async (event, { family, bufferBase
   }
 });
 
-ipcMain.handle('system:install-font-batch-windows', async (event, { families }) => {
-  return { success: true, count: Array.isArray(families) ? families.length : 0 };
+ipcMain.handle('system:install-font-batch-windows', async (event, { families, fontItems }) => {
+  try {
+    const rawItems = Array.isArray(fontItems) ? fontItems : [];
+    const famList = Array.isArray(families) ? families : [];
+    const items = [...rawItems];
+
+    // If families array has strings not in fontItems, add them
+    for (const f of famList) {
+      if (typeof f === 'string' && f.trim() && !items.some(it => it && it.family && it.family.toLowerCase() === f.toLowerCase().trim())) {
+        items.push({ family: f.trim() });
+      }
+    }
+
+    if (process.platform !== 'win32') {
+      return { success: true, count: items.length };
+    }
+
+    const userFontDir = path.join(process.env.LOCALAPPDATA || os.homedir(), 'Microsoft', 'Windows', 'Fonts');
+    if (!fs.existsSync(userFontDir)) {
+      fs.mkdirSync(userFontDir, { recursive: true });
+    }
+
+    const installedPaths = [];
+    const regKey = `HKCU:\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts`;
+
+    for (const item of items) {
+      if (!item || !item.family) continue;
+      const cleanFamily = item.family.replace(/^["']+|["']+$/g, '').trim();
+      let buf = null;
+      let format = item.format || 'ttf';
+
+      if (item.bufferBase64) {
+        const b64 = item.bufferBase64.includes(',') ? item.bufferBase64.split(',')[1] : item.bufferBase64;
+        buf = Buffer.from(b64, 'base64');
+      } else {
+        buf = await downloadTtfBufferForElectron(cleanFamily);
+        format = 'ttf';
+      }
+
+      if (!buf) continue;
+
+      const safeName = cleanFamily.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const targetPath = path.join(userFontDir, `${safeName}.${format}`);
+      fs.writeFileSync(targetPath, buf);
+      installedPaths.push({
+        path: targetPath,
+        regName: `${cleanFamily} (TrueType)`
+      });
+    }
+
+    if (installedPaths.length > 0) {
+      const regLines = installedPaths.map(p => 
+        `New-ItemProperty -Path "${regKey}" -Name "${p.regName.replace(/"/g, '`"')}" -Value "${p.path.replace(/\\/g, '\\\\')}" -PropertyType String -Force | Out-Null;`
+      ).join(' ');
+
+      const addFontLines = installedPaths.map(p => 
+        `$type::AddFontResource("${p.path.replace(/\\/g, '\\\\')}") | Out-Null;`
+      ).join(' ');
+
+      const psScript = `
+        ${regLines}
+        try {
+          $signature = @"
+            [DllImport("gdi32.dll")]
+            public static extern int AddFontResource(string lpFileName);
+            [DllImport("user32.dll")]
+            public static extern int SendMessage(int hWnd, uint Msg, int wParam, int lParam);
+"@
+          $type = Add-Type -MemberDefinition $signature -Name "FontBatchHelper_${Date.now()}" -Namespace "SimpleWorship" -PassThru;
+          ${addFontLines}
+          $HWND_BROADCAST = 0xffff;
+          $WM_FONTCHANGE = 0x001d;
+          $type::SendMessage($HWND_BROADCAST, $WM_FONTCHANGE, 0, 0);
+        } catch {}
+      `;
+
+      await new Promise((resolve) => {
+        exec(`powershell.exe -NoProfile -NonInteractive -Command "${psScript.replace(/\r?\n/g, ' ')}"`, { timeout: 20000, windowsHide: true }, (err) => {
+          if (err) console.warn('[electron] Font batch registry warning:', err.message);
+          resolve(true);
+        });
+      });
+    }
+
+    return { success: true, count: installedPaths.length };
+  } catch (err) {
+    console.error('[electron] Batch font install error:', err);
+    return { success: false, error: err.message };
+  }
 });
 
 

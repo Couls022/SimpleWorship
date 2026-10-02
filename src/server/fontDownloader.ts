@@ -54,7 +54,7 @@ export async function searchFontOnline(family: string): Promise<{ success: boole
   return { success: false, family: cleanFamily, isAvailable: false };
 }
 
-export async function downloadFontBinary(family: string): Promise<FontDownloadResult> {
+export async function downloadFontBinary(family: string, preferTtf = true): Promise<FontDownloadResult> {
   if (!family) {
     return { success: false, family: '', error: 'Missing font family' };
   }
@@ -62,7 +62,44 @@ export async function downloadFontBinary(family: string): Promise<FontDownloadRe
   const cleanFamily = family.replace(/^["']+|["']+$/g, '').trim();
   const formatted = encodeURIComponent(cleanFamily).replace(/%20/g, '+');
 
-  // 1. Primary: Google Fonts CSS -> woff2 binary
+  // 1. Primary for Windows / Desktop App compatibility: Fetch genuine TrueType (.ttf) binary from Google Fonts
+  if (preferTtf) {
+    try {
+      const ttfCssUrl = `https://fonts.googleapis.com/css?family=${formatted}:400,700`;
+      const ttfCssRes = await fetch(ttfCssUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Linux; U; Android 2.2; en-us; Nexus One Build/FRF91) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1'
+        }
+      });
+
+      if (ttfCssRes.ok) {
+        const ttfCssText = await ttfCssRes.text();
+        const ttfMatch = /url\((https:\/\/fonts\.gstatic\.com\/s\/[^)]+\.ttf)\)/i.exec(ttfCssText);
+        if (ttfMatch && ttfMatch[1]) {
+          const binRes = await fetch(ttfMatch[1]);
+          if (binRes.ok) {
+            const ab = await binRes.arrayBuffer();
+            const validation = FontValidationService.validateFontSync(ab, { strictTableValidation: false });
+            if (validation.isValid) {
+              const buffer = Buffer.from(ab);
+              return {
+                success: true,
+                family: cleanFamily,
+                format: 'truetype',
+                buffer,
+                byteSize: buffer.length,
+                provider: 'Google Fonts (TrueType TTF for Windows)'
+              };
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[fontDownloader] TTF download attempt warning for "${cleanFamily}":`, err?.message);
+    }
+  }
+
+  // 2. Secondary: Google Fonts CSS2 -> woff2 binary
   try {
     const cssUrl = `https://fonts.googleapis.com/css2?family=${formatted}:wght@400;700&display=swap`;
     const cssRes = await fetch(cssUrl, {
@@ -158,10 +195,10 @@ export async function installFontToWindows(family: string, fontBuffer?: Buffer):
   let format = 'ttf';
 
   if (!buffer) {
-    const downloaded = await downloadFontBinary(cleanFamily);
+    const downloaded = await downloadFontBinary(cleanFamily, true);
     if (downloaded.success && downloaded.buffer) {
       buffer = downloaded.buffer;
-      format = downloaded.format === 'woff2' ? 'woff2' : 'ttf';
+      format = downloaded.format === 'truetype' ? 'ttf' : ((downloaded.format as string) === 'opentype' ? 'otf' : 'ttf');
     }
   }
 

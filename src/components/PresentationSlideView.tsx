@@ -7,6 +7,7 @@ import {
   calculateAutoFitTextScale 
 } from '../utils/pptxFontManager';
 import { deconflictAndDeduplicateSlideObjects } from '../utils/pptxParser';
+import { getSlideEntranceElementIds, buildMergedPresentationElementStates } from '../utils/pptxAnimationUtils';
 
 interface PresentationSlideViewProps {
   slide: Slide;
@@ -273,6 +274,15 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
 
   const hasObjects = sanitizedObjects.length > 0;
 
+  // Compute entrance animation IDs from slide data to guarantee frame-0 hiding
+  const effectiveEntranceIds = useMemo(() => {
+    return getSlideEntranceElementIds(slide);
+  }, [slide]);
+
+  const effectiveElementStates = useMemo(() => {
+    return buildMergedPresentationElementStates(presentationElementStates, effectiveEntranceIds, mode === 'thumbnail');
+  }, [presentationElementStates, effectiveEntranceIds, mode]);
+
   // Auto-fit calculation for traditional slide layouts to prevent text overflow & distortion
   const titleFitFactor = useMemo(() => {
     if (!slide.title) return 1;
@@ -343,9 +353,9 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
         <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
           {sanitizedObjects.filter(obj => {
             if (mode === 'thumbnail') return true;
-            const animState = presentationElementStates?.get(obj.id)
-              ?? (obj.shapeId ? presentationElementStates?.get(obj.shapeId) : undefined)
-              ?? (obj.shapeId ? presentationElementStates?.get(`shape-${obj.shapeId}`) : undefined);
+            const animState = effectiveElementStates?.get(obj.id)
+              ?? (obj.shapeId ? effectiveElementStates?.get(obj.shapeId) : undefined)
+              ?? (obj.shapeId ? effectiveElementStates?.get(`shape-${obj.shapeId}`) : undefined);
             if (animState && animState.visible !== undefined) {
               return animState.visible !== false;
             }
@@ -356,9 +366,9 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
             const widthPx = Math.round(obj.width * fitScale);
             const heightPx = Math.round(obj.height * fitScale);
 
-            const animState = presentationElementStates?.get(obj.id)
-              ?? (obj.shapeId ? presentationElementStates?.get(obj.shapeId) : undefined)
-              ?? (obj.shapeId ? presentationElementStates?.get(`shape-${obj.shapeId}`) : undefined);
+            const animState = effectiveElementStates?.get(obj.id)
+              ?? (obj.shapeId ? effectiveElementStates?.get(obj.shapeId) : undefined)
+              ?? (obj.shapeId ? effectiveElementStates?.get(`shape-${obj.shapeId}`) : undefined);
 
             const style = obj.style || {};
             const objFont = getCompatibleFontStack(style.fontFamily || (obj.type === 'shape' ? bodyFont : titleFont));
@@ -436,15 +446,22 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                     }}
                   >
                     {obj.paragraphs && obj.paragraphs.length > 0 ? (
-                      obj.paragraphs.map((para, pIdx) => (
-                        <div 
-                          key={pIdx} 
-                          className="w-full"
-                          style={{ 
-                            textAlign: para.textAlign || style.textAlign || 'left',
-                            marginBottom: pIdx < obj.paragraphs!.length - 1 ? `${Math.round(8 * fitScale)}px` : 0 
-                          }}
-                        >
+                      obj.paragraphs.map((para, pIdx) => {
+                        const pAnimState = effectiveElementStates?.get(`${obj.id}::p${pIdx}`)
+                          ?? (obj.shapeId ? effectiveElementStates?.get(`${obj.shapeId}::p${pIdx}`) : undefined)
+                          ?? (obj.shapeId ? effectiveElementStates?.get(`shape-${obj.shapeId}::p${pIdx}`) : undefined);
+                        if (mode !== 'thumbnail' && pAnimState && pAnimState.visible === false) {
+                          return null;
+                        }
+                        return (
+                          <div 
+                            key={pIdx} 
+                            className="w-full"
+                            style={{ 
+                              textAlign: para.textAlign || style.textAlign || 'left',
+                              marginBottom: pIdx < obj.paragraphs!.length - 1 ? `${Math.round(8 * fitScale)}px` : 0 
+                            }}
+                          >
                           {para.runs && para.runs.length > 0 ? (
                             para.runs.map((r, rIdx) => {
                               const rFont = r.fontFamily ? getCompatibleFontStack(r.fontFamily) : objFont;
@@ -469,8 +486,9 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                             <span>{obj.text}</span>
                           )}
                         </div>
-                      ))
-                    ) : (
+                      );
+                    })
+                  ) : (
                       <div className="w-full whitespace-pre-wrap">{obj.text}</div>
                     )}
                   </div>
@@ -688,36 +706,45 @@ function ensureContrast(color: string | undefined, isDark: boolean): string {
                   gap: `${Math.round(12 * fitScale)}px`,
                 }}
               >
-                {paragraphs.map((para, pIdx) => (
-                  <div 
-                    key={pIdx} 
-                    className={`flex items-start ${textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : 'justify-start'}`}
-                    style={{ gap: `${Math.round(8 * fitScale)}px` }}
-                  >
-                    {slide.bullets && slide.bullets.length > 0 && (
-                      <span 
-                        className="rounded-full shrink-0"
-                        style={{ 
-                          backgroundColor: accentColor,
-                          width: `${Math.max(3, Math.round(7 * fitScale))}px`,
-                          height: `${Math.max(3, Math.round(7 * fitScale))}px`,
-                          marginTop: `${Math.round(6 * fitScale)}px`,
-                        }}
-                      />
-                    )}
-                    <p 
-                      className="font-normal leading-relaxed antialiased"
-                      style={{
-                        fontFamily: bodyFont,
-                        fontSize: `${Math.max(8, Math.round(24 * fitScale * bodyFitFactor))}px`,
-                        color: bodyColor,
-                        textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
-                      }}
+                {paragraphs.map((para, pIdx) => {
+                  const isHidden = mode !== 'thumbnail' && (
+                    effectiveElementStates?.get(`p${pIdx}`)?.visible === false || 
+                    effectiveElementStates?.get(`bullet-${pIdx}`)?.visible === false ||
+                    effectiveElementStates?.get(`para-${pIdx}`)?.visible === false
+                  );
+                  if (isHidden) return null;
+
+                  return (
+                    <div 
+                      key={pIdx} 
+                      className={`flex items-start ${textAlign === 'center' ? 'justify-center' : textAlign === 'right' ? 'justify-end' : 'justify-start'}`}
+                      style={{ gap: `${Math.round(8 * fitScale)}px` }}
                     >
-                      {para}
-                    </p>
-                  </div>
-                ))}
+                      {slide.bullets && slide.bullets.length > 0 && (
+                        <span 
+                          className="rounded-full shrink-0"
+                          style={{ 
+                            backgroundColor: accentColor,
+                            width: `${Math.max(3, Math.round(7 * fitScale))}px`,
+                            height: `${Math.max(3, Math.round(7 * fitScale))}px`,
+                            marginTop: `${Math.round(6 * fitScale)}px`,
+                          }}
+                        />
+                      )}
+                      <p 
+                        className="font-normal leading-relaxed antialiased"
+                        style={{
+                          fontFamily: bodyFont,
+                          fontSize: `${Math.max(8, Math.round(24 * fitScale * bodyFitFactor))}px`,
+                          color: bodyColor,
+                          textShadow: isDarkBg ? '0 1px 3px rgba(0,0,0,0.6)' : 'none',
+                        }}
+                      >
+                        {para}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Badges / Shapes on Content Slides */}

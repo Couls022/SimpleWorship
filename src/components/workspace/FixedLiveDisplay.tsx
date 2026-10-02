@@ -268,11 +268,24 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
         <div 
           className="relative rounded-lg border border-[#1d212d] overflow-hidden shadow-2xl bg-black flex items-center justify-center shrink-0 w-full h-full"
         >
-          <MonitorPreviewCanvas 
-            groupId={effectiveGroupId} 
-            showResolutionTag={false}
-            className="w-full h-full"
-          />
+          {outputGroups.map((grp) => {
+            const isCurrent = grp.id === effectiveGroupId;
+            return (
+              <div
+                key={grp.id}
+                className={`absolute inset-0 w-full h-full flex items-center justify-center transition-opacity duration-150 ${
+                  isCurrent ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'
+                }`}
+              >
+                <MonitorPreviewCanvas 
+                  groupId={grp.id} 
+                  showResolutionTag={false}
+                  className="w-full h-full"
+                  isInactivePreview={!isCurrent}
+                />
+              </div>
+            );
+          })}
 
           {/* Drag & Drop Overlay */}
           {isDraggingOver && (

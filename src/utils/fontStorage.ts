@@ -523,6 +523,18 @@ export async function getAllStoredCustomFonts(): Promise<Array<{ family: string;
 }
 
 /**
+ * Returns all full StoredFontRecord entries (including binary ArrayBuffers) from IndexedDB.
+ */
+export async function getAllStoredFontRecords(): Promise<StoredFontRecord[]> {
+  try {
+    const db = await getFontDB();
+    return await db.getAll('installed_fonts');
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Removes a custom font from IndexedDB and memory
  */
 export async function deleteStoredFont(family: string): Promise<boolean> {
@@ -579,6 +591,35 @@ export async function exportAllFontsAsZip(): Promise<Blob | null> {
 }
 
 /**
+ * Retrieves a stored font record from IndexedDB by family name.
+ */
+export async function getStoredFontRecord(family: string): Promise<StoredFontRecord | undefined> {
+  try {
+    const db = await getFontDB();
+    const clean = family.replace(/^["']+|["']+$/g, '').trim().toLowerCase();
+    const direct = await db.get('installed_fonts', clean);
+    if (direct) return direct;
+    const all = await db.getAll('installed_fonts');
+    return all.find(r => r.familyLower === clean || r.family.toLowerCase() === clean);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Converts an ArrayBuffer to a Base64 string for IPC / JSON transfer.
+ */
+export function bufferToBase64(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+/**
  * Generates an automated 1-Click Windows Font Installer Package (.zip).
  * Contains the authentic font binaries plus automated `Install-Fonts-Windows.cmd` and `Install-Fonts-Windows.ps1`
  * to install and register all fonts into Windows system font registry (HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts).
@@ -587,10 +628,23 @@ export async function exportWindowsFontInstallerPackage(targetFamilies?: string[
   try {
     const db = await getFontDB();
     let records: StoredFontRecord[] = await db.getAll('installed_fonts');
+
+    // If target families specified, ensure they are fetched if not yet in storage
     if (targetFamilies && targetFamilies.length > 0) {
+      for (const fam of targetFamilies) {
+        const clean = fam.replace(/^["']+|["']+$/g, '').trim().toLowerCase();
+        const existing = records.find(r => r.familyLower === clean || r.family.toLowerCase() === clean);
+        if (!existing) {
+          try {
+            await fetchAndInstallGoogleFont(fam);
+          } catch {}
+        }
+      }
+      records = await db.getAll('installed_fonts');
       const allowed = new Set(targetFamilies.map(f => f.toLowerCase().trim()));
       records = records.filter(r => allowed.has(r.familyLower) || allowed.has(r.family.toLowerCase()));
     }
+
     if (records.length === 0) {
       records = await db.getAll('installed_fonts');
     }
@@ -621,7 +675,7 @@ if (!(Test-Path $UserFontFolder)) { New-Item -ItemType Directory -Force -Path $U
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $FontFiles = Get-ChildItem -Path $ScriptDir -Include *.ttf, *.otf, *.woff2 -Recurse
 
-Write-Host "Installing $($FontFiles.Count) font file(s) into Windows..." -ForegroundColor Cyan
+Write-Host "Installing $($FontFiles.Count) font file(s) into Windows OS..." -ForegroundColor Cyan
 
 foreach ($File in $FontFiles) {
     $TargetUser = Join-Path $UserFontFolder $File.Name
@@ -632,8 +686,26 @@ foreach ($File in $FontFiles) {
     Write-Host "✓ Installed: $($File.Name) into Windows Font Registry" -ForegroundColor Green
 }
 
+# Broadcast WM_FONTCHANGE to running Windows applications (PowerPoint, Word, Canva, etc.)
+try {
+    $signature = @"
+      [DllImport("gdi32.dll")]
+      public static extern int AddFontResource(string lpFileName);
+      [DllImport("user32.dll")]
+      public static extern int SendMessage(int hWnd, uint Msg, int wParam, int lParam);
+"@
+    $type = Add-Type -MemberDefinition $signature -Name "FontHelper_$([System.DateTime]::Now.Ticks)" -Namespace "SimpleWorship" -PassThru
+    foreach ($File in $FontFiles) {
+        $TargetUser = Join-Path $UserFontFolder $File.Name
+        $type::AddFontResource($TargetUser) | Out-Null
+    }
+    $HWND_BROADCAST = 0xffff
+    $WM_FONTCHANGE = 0x001d
+    $type::SendMessage($HWND_BROADCAST, $WM_FONTCHANGE, 0, 0) | Out-Null
+} catch {}
+
 Write-Host ""
-Write-Host "[OK] All presentation fonts successfully registered into Windows!" -ForegroundColor Green
+Write-Host "[OK] All presentation fonts successfully registered into Windows and available in all apps!" -ForegroundColor Green
 `;
 
     zip.file('Install-Fonts-Windows.cmd', cmdContent);

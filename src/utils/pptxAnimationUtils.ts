@@ -136,9 +136,19 @@ export function getSlideEntranceElementIds(slide: any): Set<string> {
       if (!obj) continue;
       if (obj.animation) {
         const anim = obj.animation;
-        const isEntrance = anim.type === 'entrance' || anim.category === 'entrance' || anim.action === 'appear' || anim.action === 'fade-in';
+        const isEntrance = anim.type === 'entrance' || anim.category === 'entrance' || anim.action === 'appear' || anim.action === 'fade-in' || anim.entrance === true || anim.presetClass === 'entr';
         if (isEntrance) {
           registerTarget(obj.id, true, anim);
+          if (obj.shapeId) registerTarget(obj.shapeId, true, anim);
+        }
+      }
+      if (Array.isArray(obj.animations)) {
+        for (const anim of obj.animations) {
+          const isEntrance = anim.type === 'entrance' || anim.category === 'entrance' || anim.action === 'appear' || anim.action === 'fade-in' || anim.entrance === true || anim.presetClass === 'entr';
+          if (isEntrance) {
+            registerTarget(obj.id, true, anim);
+            if (obj.shapeId) registerTarget(obj.shapeId, true, anim);
+          }
         }
       }
     }

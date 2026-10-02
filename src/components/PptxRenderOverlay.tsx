@@ -360,13 +360,16 @@ const PptxViewerInner: React.FC<PptxViewerInnerProps> = React.memo(({
     if (slides && slides[activeSlideIndex]) {
       return slides[activeSlideIndex];
     }
-    return blocks.canvasProps?.activeSlide;
-  }, [slides, activeSlideIndex, blocks.canvasProps?.activeSlide]);
+    if (blocks.canvasProps?.activeSlide) {
+      return blocks.canvasProps.activeSlide;
+    }
+    return currentSlide;
+  }, [slides, activeSlideIndex, blocks.canvasProps?.activeSlide, currentSlide]);
 
   // Synchronously compute entrance element IDs for the active slide
   const slideEntranceIds = useMemo(() => {
-    return getSlideEntranceElementIds(effectiveActiveSlide);
-  }, [effectiveActiveSlide]);
+    return getSlideEntranceElementIds(effectiveActiveSlide || currentSlide);
+  }, [effectiveActiveSlide, currentSlide]);
 
   // Merge presentation states: guarantees that from frame 0 of entering a slide,
   // any element with entrance animations is HIDDEN immediately (no flash of text).
@@ -905,6 +908,14 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
     return () => window.removeEventListener('simpleworship:canonical-frame-updated', handleFrameUpdate);
   }, [contentId]);
 
+  const precalculatedEntranceIds = useMemo(() => {
+    return getSlideEntranceElementIds(currentSlide);
+  }, [currentSlide]);
+
+  const precalculatedElementStates = useMemo(() => {
+    return buildMergedPresentationElementStates(undefined, precalculatedEntranceIds, Boolean(isThumbnail));
+  }, [precalculatedEntranceIds, isThumbnail]);
+
   // 1. If this is a thumbnail and we have the shared deck cached, render PptxDirectThumbnail
   if (isThumbnail && cachedDeck) {
     return (
@@ -932,6 +943,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
         isProjectorMode={isProjectorMode}
         isOverlayLayer={isOverlayLayer}
         mode={isThumbnail ? 'thumbnail' : 'full'}
+        presentationElementStates={!isThumbnail ? precalculatedElementStates : undefined}
       />
     ) : undefined;
 
@@ -1002,6 +1014,7 @@ export const PptxRenderOverlay: React.FC<PptxRenderOverlayProps> = React.memo(({
         isProjectorMode={isProjectorMode}
         isOverlayLayer={isOverlayLayer}
         mode={isThumbnail ? 'thumbnail' : 'full'}
+        presentationElementStates={!isThumbnail ? precalculatedElementStates : undefined}
       />
     );
   }
