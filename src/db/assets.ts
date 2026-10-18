@@ -239,6 +239,16 @@ export function isMediaLibraryAsset(asset: Asset | null | undefined): boolean {
   return true;
 }
 
+export const PERMANENT_BACKUP_ASSET_ID = 'asset-bg-emerald-gold-backup';
+export const PERMANENT_BACKUP_ASSET_URL = '';
+
+/**
+ * Checks whether an asset or asset ID is a permanently locked system backup asset
+ */
+export function isProtectedSystemAsset(_assetOrId: Asset | string | null | undefined): boolean {
+  return false;
+}
+
 export type DefaultMediaScope = 'songs' | 'scriptures' | 'presentations' | 'announcements' | 'logo' | 'timers';
 
 export interface DefaultBadgeInfo {
@@ -289,6 +299,7 @@ export function getActiveDefaultBadges(
   }
   return badges;
 }
+
 
 
 

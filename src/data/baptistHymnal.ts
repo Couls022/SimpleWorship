@@ -254,3 +254,5 @@ export const BAPTIST_HYMNAL: Song[] = [
 ]
   }
 ];
+
+export const BAPTIST_HYMNAL_SONGS = BAPTIST_HYMNAL;

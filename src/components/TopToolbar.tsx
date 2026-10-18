@@ -131,9 +131,18 @@ export default function TopToolbar({
 
   useEffect(() => {
     if (!serviceIntervals?.isRunning || !serviceIntervals?.targetTimestamp) return;
+    if (Date.now() >= serviceIntervals.targetTimestamp) {
+      useStore.getState().completeServiceTimerToLogo();
+      return;
+    }
     const interval = setInterval(() => {
-      setTimerNow(Date.now());
-    }, 1000);
+      const now = Date.now();
+      setTimerNow(now);
+      if (serviceIntervals.targetTimestamp && now >= serviceIntervals.targetTimestamp) {
+        clearInterval(interval);
+        useStore.getState().completeServiceTimerToLogo();
+      }
+    }, 250);
     return () => clearInterval(interval);
   }, [serviceIntervals?.isRunning, serviceIntervals?.targetTimestamp]);
 

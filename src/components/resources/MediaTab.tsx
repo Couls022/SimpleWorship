@@ -26,7 +26,7 @@ import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from '../ResizeHandle';
 import { useStore } from '../../store/useStore';
 import { Asset } from '../../types';
-import { isMediaLibraryAsset, isDefaultBackgroundFor, getActiveDefaultBadges, DefaultMediaScope } from '../../db/assets';
+import { isMediaLibraryAsset, isDefaultBackgroundFor, getActiveDefaultBadges, DefaultMediaScope, isProtectedSystemAsset } from '../../db/assets';
 import { handleRangeSelection } from '../../utils/selectionUtils';
 import { LazyVideoThumbnail } from '../common/LazyVideoThumbnail';
 

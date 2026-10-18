@@ -1,5 +1,5 @@
 import { NativeDisplayTarget, ProjectorStatus, OutputGroup, PresentationState } from '../types';
-import { resolveDisplayAssignments } from './DisplayRouter';
+import { resolveDisplayAssignments, isSamePhysicalDisplay } from './DisplayRouter';
 
 export interface DisplayConflict {
   displayId: string;
@@ -222,13 +222,18 @@ export class DisplayManager {
             s.label === displayId || 
             s.name === displayId || 
             s.id === displayId ||
-            (displayId && s.label?.toLowerCase().includes(displayId.toLowerCase()))
+            (displayId && isSamePhysicalDisplay(s.id, displayId, cached)) ||
+            (displayId && s.label && isSamePhysicalDisplay(s.label, displayId, cached))
           );
           if (targetScreen?.bounds) {
             features = `left=${targetScreen.bounds.x ?? 0},top=${targetScreen.bounds.y ?? 0},width=${targetScreen.bounds.width ?? 1920},height=${targetScreen.bounds.height ?? 1080},menubar=no,toolbar=no,location=no,status=no`;
           } else if ('getScreenDetails' in window) {
             const screenDetails = await (window as any).getScreenDetails();
-            const ts = screenDetails.screens.find((s: any) => s.label === displayId || s.id === displayId) || screenDetails.screens.find((s: any) => !s.isInternal) || screenDetails.screens[0];
+            const ts = screenDetails.screens.find((s: any) => 
+              s.label === displayId || 
+              s.id === displayId ||
+              (displayId && isSamePhysicalDisplay(s.id || s.label, displayId))
+            ) || screenDetails.screens.find((s: any) => !s.isInternal) || screenDetails.screens[0];
             if (ts) {
               features = `left=${ts.availLeft},top=${ts.availTop},width=${ts.availWidth},height=${ts.availHeight},menubar=no,toolbar=no,location=no,status=no`;
             }
@@ -492,15 +497,16 @@ export class DisplayManager {
     const displayToGroups = new Map<string, { groupIds: string[]; groupNames: string[] }>();
 
     for (const group of outputGroups) {
-      if (group.displayIds && group.displayIds.length > 0) {
-        for (const dispId of group.displayIds) {
-          if (!displayToGroups.has(dispId)) {
-            displayToGroups.set(dispId, { groupIds: [], groupNames: [] });
-          }
-          const entry = displayToGroups.get(dispId)!;
-          entry.groupIds.push(group.id);
-          entry.groupNames.push(group.name);
+      const targets = (group.displayIds && group.displayIds.length > 0)
+        ? group.displayIds
+        : (group.targetDisplayId ? [group.targetDisplayId] : []);
+      for (const dispId of targets) {
+        if (!displayToGroups.has(dispId)) {
+          displayToGroups.set(dispId, { groupIds: [], groupNames: [] });
         }
+        const entry = displayToGroups.get(dispId)!;
+        entry.groupIds.push(group.id);
+        entry.groupNames.push(group.name);
       }
     }
 

@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import { Asset } from '../types';
-import { isMediaLibraryAsset, isDefaultBackgroundFor, getActiveDefaultBadges, DefaultMediaScope } from '../db/assets';
+import { isMediaLibraryAsset, isDefaultBackgroundFor, getActiveDefaultBadges, DefaultMediaScope, isProtectedSystemAsset } from '../db/assets';
 import { LazyVideoThumbnail } from './common/LazyVideoThumbnail';
 
 interface MediaLibraryModalProps {

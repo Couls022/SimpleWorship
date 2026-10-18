@@ -19,8 +19,24 @@ export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayPr
   const initialTimeStr = opts?.countdownTime || '05:00';
   const backgroundAssetId = opts?.backgroundAssetId || '';
   const backgroundAssetUrl = (opts as any)?.backgroundAssetUrl;
-  const fontFamily = opts?.fontFamily || 'monospace';
+  const fontFamily = opts?.fontFamily || 'Segoe UI, sans-serif';
   const fontColor = opts?.fontColor || '#ffffff';
+  const fontSize = Math.max(60, Math.min(720, Number(opts?.fontSize) || 440));
+
+  // Ensure local Windows/OS font alias is registered in DOM
+  useEffect(() => {
+    if (!fontFamily || typeof document === 'undefined') return;
+    const primary = fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+    if (!primary || ['monospace', 'sans-serif', 'serif', 'system-ui'].includes(primary.toLowerCase())) return;
+    const styleId = 'sw-timer-local-font';
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = `@font-face { font-family: "${primary}"; src: local("${primary}"); font-display: swap; }`;
+  }, [fontFamily]);
 
   // 1. Resolve background asset or URL via useMemo to prevent unnecessary re-render loops
   // Hierarchy: Explicit selected asset -> Default timer asset from assetsList -> Stored background URL -> Theme timer styles
@@ -85,15 +101,21 @@ export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayPr
   useEffect(() => {
     const current = calculateRemaining();
     setRemainingSecs(current);
-    if (!enabled || !isRunning || !targetTimestamp || isBlack) return;
+    if (!isRunning || !targetTimestamp) return;
+
+    if (current <= 0) {
+      useStore.getState().completeServiceTimerToLogo();
+      return;
+    }
 
     const timer = setInterval(() => {
       const nowRemaining = calculateRemaining();
       setRemainingSecs(prev => (prev === nowRemaining ? prev : nowRemaining));
       if (nowRemaining <= 0) {
         clearInterval(timer);
+        useStore.getState().completeServiceTimerToLogo();
       }
-    }, 250);
+    }, 200);
 
     return () => clearInterval(timer);
   }, [enabled, isRunning, targetTimestamp, pausedRemainingSecs, initialTimeStr, isBlack]);
@@ -103,7 +125,6 @@ export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayPr
   const mins = Math.floor(remainingSecs / 60);
   const secs = remainingSecs % 60;
   const formattedTime = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  const isExpired = remainingSecs === 0 && (targetTimestamp !== null || isRunning);
 
   return (
     <div 
@@ -136,18 +157,16 @@ export const MainDisplayCountdownOverlay: React.FC<MainDisplayCountdownOverlayPr
         <div className="absolute inset-0 bg-black/40 z-0 pointer-events-none" />
       )}
 
-      {/* Centered Large Timer Display without label */}
+      {/* Centered Large Timer Display with Consistent User-Selected Font Color from Start to 00:00 */}
       <div className="relative z-10 flex flex-col items-center justify-center w-full h-full px-8 pointer-events-none">
         <div 
-          className={`font-black tabular-nums transition-colors tracking-tight text-center ${
-            isExpired ? 'text-amber-400' : remainingSecs <= 60 ? 'text-rose-400 animate-pulse' : ''
-          }`}
+          className="font-black tabular-nums tracking-tight text-center"
           style={{ 
-            fontSize: '440px',
-            fontFamily: fontFamily || 'Montserrat, sans-serif',
+            fontSize: `${fontSize}px`,
+            fontFamily: fontFamily || 'Segoe UI, Montserrat, sans-serif',
             fontWeight: 900,
             letterSpacing: '-0.02em',
-            color: isExpired ? '#f59e0b' : remainingSecs <= 60 ? '#f87171' : fontColor,
+            color: fontColor || '#ffffff',
             textShadow: '0 16px 48px rgba(0,0,0,0.95), 0 4px 16px rgba(0,0,0,0.9)',
             lineHeight: 0.9,
             userSelect: 'none'

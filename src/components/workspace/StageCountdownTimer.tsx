@@ -5,11 +5,13 @@ interface StageCountdownTimerProps {
   label?: string;
   enabled?: boolean;
   initialTimeStr?: string;
+  isProjectorMode?: boolean;
 }
 
 export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
   label: _propLabel,
   enabled = true,
+  isProjectorMode = false,
 }) => {
   const opts = useStore(state => state.systemOptions?.serviceIntervals);
 
@@ -18,6 +20,27 @@ export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
   const targetTimestamp = opts?.targetTimestamp || null;
   const pausedRemainingSecs = opts?.pausedRemainingSecs ?? null;
   const initialTimeStr = opts?.countdownTime || '05:00';
+  const fontFamily = opts?.fontFamily || 'Segoe UI, monospace';
+  const fontColor = opts?.fontColor || '#ffffff';
+  const mainFontSize = Math.max(60, Math.min(720, Number(opts?.fontSize) || 440));
+  const independentStageSize = Boolean(opts?.independentStageSize);
+  const rawStageSize = Math.max(10, Math.min(96, Number(opts?.stageTimerSize) || 16));
+
+  // Compute effective Stage Display timer font size (independent or linked to Main Display)
+  const effectiveStageFontSize = independentStageSize
+    ? (isProjectorMode ? Math.round(rawStageSize * 1.35) : rawStageSize)
+    : Math.max(11, Math.round((mainFontSize / 440) * (isProjectorMode ? 24 : 15)));
+
+  const handleAdjustStageSize = (delta: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (independentStageSize) {
+      const next = Math.max(10, Math.min(96, rawStageSize + delta));
+      useStore.getState().setServiceIntervalConfig({ stageTimerSize: next });
+    } else {
+      const nextMain = Math.max(60, Math.min(720, mainFontSize + delta * 20));
+      useStore.getState().setServiceIntervalConfig({ fontSize: nextMain });
+    }
+  };
 
   const parseSeconds = (timeStr: string): number => {
     if (!timeStr) return 300;
@@ -45,19 +68,23 @@ export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
   const [remainingSecs, setRemainingSecs] = useState<number>(calculateRemaining());
 
   useEffect(() => {
-    setRemainingSecs(calculateRemaining());
+    const initial = calculateRemaining();
+    setRemainingSecs(initial);
     if (!enabled || !isRunning || !targetTimestamp) return;
 
+    if (initial <= 0) {
+      useStore.getState().completeServiceTimerToLogo();
+      return;
+    }
+
     const timer = setInterval(() => {
-      setRemainingSecs((prev) => {
-        const current = calculateRemaining();
-        if (current <= 0) {
-          clearInterval(timer);
-          return 0;
-        }
-        return current;
-      });
-    }, 250); // 250ms for responsive and silky smooth clock sync
+      const current = calculateRemaining();
+      setRemainingSecs(current);
+      if (current <= 0) {
+        clearInterval(timer);
+        useStore.getState().completeServiceTimerToLogo();
+      }
+    }, 200);
     return () => clearInterval(timer);
   }, [enabled, isRunning, targetTimestamp, pausedRemainingSecs, initialTimeStr]);
 
@@ -66,36 +93,71 @@ export const StageCountdownTimer: React.FC<StageCountdownTimerProps> = ({
   const mins = Math.floor(remainingSecs / 60);
   const secs = remainingSecs % 60;
   const formattedTime = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  const isExpired = remainingSecs === 0 && (targetTimestamp !== null || isRunning);
 
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded border text-xs font-mono select-none shadow-sm transition-all ${
-      isExpired
-        ? 'bg-rose-950/90 border-rose-600/80 text-rose-300 animate-pulse'
-        : isRunning
-        ? 'bg-amber-950/80 border-amber-500/70 text-amber-200'
-        : pausedRemainingSecs !== null
-        ? 'bg-amber-950/40 border-amber-600/40 text-amber-300/80'
-        : 'bg-cyan-950/70 border-cyan-700/40 text-cyan-300'
-    }`}>
-      <span className="font-semibold text-gray-300 truncate max-w-[140px]">{label}:</span>
+    <div
+      className={`group flex items-center gap-1.5 px-2.5 py-0.5 rounded border font-mono select-none shadow-sm transition-all ${
+        isRunning
+          ? 'bg-amber-950/80 border-amber-500/70'
+          : pausedRemainingSecs !== null
+          ? 'bg-amber-950/40 border-amber-600/40'
+          : 'bg-cyan-950/70 border-cyan-700/40'
+      }`}
+      style={{
+        fontFamily,
+        fontSize: `${effectiveStageFontSize}px`,
+        lineHeight: 1.25,
+      }}
+    >
+      <span className="font-semibold text-gray-300 truncate max-w-[160px]" style={{ fontSize: '0.82em' }}>
+        {label}:
+      </span>
       <span
-        className={`font-black tabular-nums transition-colors ${
-          isExpired
-            ? 'text-rose-400 font-bold'
-            : isRunning
-            ? remainingSecs < 60
-              ? 'text-rose-400 animate-pulse'
-              : 'text-amber-300'
-            : 'text-gray-300'
-        }`}
+        className="font-black tabular-nums"
+        style={{ color: fontColor || '#ffffff' }}
       >
-        {isExpired ? '00:00 (LIVE)' : formattedTime}
+        {formattedTime}
       </span>
       {!isRunning && pausedRemainingSecs !== null && (
         <span className="text-[9px] uppercase px-1 py-0.2 bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
           PAUSED
         </span>
+      )}
+      {!isProjectorMode && (
+        <div className="flex items-center gap-1 ml-1 pl-1 border-l border-white/10 text-[10px] font-sans">
+          <input
+            type="color"
+            value={/^#[0-9A-Fa-f]{6}$/.test(fontColor) ? fontColor : '#ffffff'}
+            onClick={(e) => e.stopPropagation()}
+            onInput={(e) => {
+              e.stopPropagation();
+              const val = (e.target as HTMLInputElement).value;
+              useStore.getState().setServiceIntervalConfig({ fontColor: val });
+            }}
+            onChange={(e) => {
+              e.stopPropagation();
+              useStore.getState().setServiceIntervalConfig({ fontColor: e.target.value });
+            }}
+            className="w-3.5 h-3.5 rounded-xs border border-white/30 bg-transparent cursor-pointer p-0 shrink-0"
+            title="Change Timer Font Color"
+          />
+          <button
+            type="button"
+            onClick={(e) => handleAdjustStageSize(-2, e)}
+            className="px-1 py-0 rounded bg-black/40 hover:bg-black/70 text-gray-300 hover:text-white transition-colors cursor-pointer"
+            title="Decrease Timer Size"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            onClick={(e) => handleAdjustStageSize(2, e)}
+            className="px-1 py-0 rounded bg-black/40 hover:bg-black/70 text-gray-300 hover:text-white transition-colors cursor-pointer"
+            title="Increase Timer Size"
+          >
+            +
+          </button>
+        </div>
       )}
     </div>
   );

@@ -59,10 +59,22 @@ export interface SystemOptions {
       defaultLogoUrl?: string;
       logoUrl?: string;
       alphaKeyingMode?: 'none' | 'key' | 'ndi' | 'transparent';
+      scaleMode?: 'fit' | 'fill' | 'crop';
+      ledWallSettings?: {
+        enabled?: boolean;
+        width?: number;
+        height?: number;
+        unit?: 'ft' | 'm' | 'px';
+        aspectRatio?: string;
+      };
     };
     song: {
       backdropAssetUrl?: string;
       songFont: FontStyleOptions;
+      showSongTitle?: boolean;
+      songTitleFont?: FontStyleOptions;
+      songTitleLocation?: 'Above Verses' | 'Top Header' | 'First Slide Only' | 'None';
+      songTitleCasing?: 'as_is' | 'uppercase' | 'titlecase';
       showVerseChorusLabel: boolean;
       labelFont: FontStyleOptions;
       labelLocation?: 'Header' | 'Top Left' | 'Top Right' | 'Bottom Left' | 'Bottom Right';
@@ -84,6 +96,7 @@ export interface SystemOptions {
       maxLinesPerSlide?: number;
       splitLongSections?: boolean;
       splitLabelStyle?: 'part' | 'alpha' | 'numeric' | 'same';
+      includeTitleSlide?: boolean;
     };
     scripture: {
       backdropAssetUrl?: string;
@@ -183,6 +196,9 @@ export interface SystemOptions {
     pausedRemainingSecs?: number | null;
     fontFamily?: string;
     fontColor?: string;
+    fontSize?: number;
+    independentStageSize?: boolean;
+    stageTimerSize?: number;
   };
   slideLabels: SlideLabelConfig[];
   appearance?: {
@@ -216,6 +232,7 @@ export interface Asset {
   blob?: Blob;
   duration?: number;
   data?: any;
+  isSystemBackup?: boolean;
   isDefaultScope?: {
     songs?: boolean;
     scriptures?: boolean;
@@ -321,6 +338,13 @@ export interface Song {
   themeId?: string;
   themeOverride?: ThemeStyles;
   defaultBackgroundUrl?: string;
+  showTitleAboveVerses?: boolean;
+  titlePlacement?: 'all_slides' | 'first_slide' | 'none';
+  titleFontSize?: number;
+  titleFontColor?: string;
+  titleFontFamily?: string;
+  titleBold?: boolean;
+  titleUppercase?: boolean;
 }
 
 export interface ScriptureVerse {
@@ -627,6 +651,7 @@ export interface OutputGroup {
   status?: string;
   aspectRatio?: string;
   customResolution?: { width: number; height: number };
+  scaleMode?: 'fit' | 'fill' | 'crop';
   isBlack?: boolean;
   isClear?: boolean;
   showLogo?: boolean;
@@ -720,6 +745,7 @@ export interface RenderFrame {
   targetHeight: number;
   aspectRatio: number;
   aspectLabel: string;
+  scaleMode?: 'fit' | 'fill' | 'crop';
   margins: { left: number; top: number; right: number; bottom: number };
 
   activeItem: PresentationItem | null;
@@ -733,6 +759,11 @@ export interface RenderFrame {
   hasHeader: boolean;
   headerText: string;
   headerStyles: React.CSSProperties;
+
+  // Song Title evaluation (above verses)
+  hasSongTitle?: boolean;
+  songTitleText?: string;
+  songTitleStyles?: React.CSSProperties;
   
   hasFooter: boolean;
   footerText: string;

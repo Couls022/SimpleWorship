@@ -646,7 +646,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
 
           {/* 1. Missing Fonts Banner & 1-Click Install All */}
           {missingFonts.length > 0 ? (
-            <div className="p-5 rounded-2xl bg-gradient-to-r from-red-950/40 via-[#1e1520] to-[#171a26] border-2 border-red-500/50 shadow-2xl relative overflow-hidden transition-all hover:border-red-500/80">
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-[#171c28] via-[#1a1f30] to-[#151824] border border-[#2e374f] shadow-2xl relative overflow-hidden transition-all hover:border-cyan-500/50">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div 
@@ -661,7 +661,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                         handleInstallAllMissing();
                       }}
                       disabled={isInstallingAll}
-                      className="w-9 h-9 rounded-xl bg-red-500/20 group-hover:bg-red-500/40 border border-red-500/50 group-hover:border-red-400 flex items-center justify-center text-red-400 group-hover:text-white shrink-0 cursor-pointer active:scale-95 transition-all shadow-md"
+                      className="w-9 h-9 rounded-xl bg-cyan-500/20 group-hover:bg-cyan-500/40 border border-cyan-500/50 group-hover:border-cyan-400 flex items-center justify-center text-cyan-400 group-hover:text-white shrink-0 cursor-pointer active:scale-95 transition-all shadow-md"
                       title="Click to install all missing fonts to Windows OS and SimpleWorship"
                     >
                       {isInstallingAll ? <RefreshCw size={18} className="animate-spin text-amber-300" /> : <AlertTriangle size={18} />}
@@ -678,7 +678,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                             handleInstallAllMissing();
                           }}
                           disabled={isInstallingAll}
-                          className="px-3 py-1 rounded-lg text-xs font-black bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white border border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.7)] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer active:scale-95 animate-pulse transition-all ring-2 ring-red-400/40"
+                          className="px-3 py-1 rounded-lg text-xs font-black bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white border border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.5)] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all ring-2 ring-cyan-400/30"
                           title="Click here to install all missing fonts directly into Windows OS and SimpleWorship"
                         >
                           <Zap size={13} className="text-amber-300 fill-amber-300" />
@@ -689,7 +689,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                   </div>
                   <p className="text-xs text-gray-300 mt-2.5 leading-relaxed">
                     This presentation uses fonts that are not installed on this computer. 
-                    Click the <strong>Red Action Button</strong> or <strong>"1-Click Download & Install All"</strong> below to automatically install genuine TrueType (.TTF) fonts system-wide into <strong>Windows OS</strong> and SimpleWorship. 
+                    Click <strong>"1-Click Download & Install All"</strong> below to automatically install genuine TrueType (.TTF) fonts system-wide into <strong>Windows OS</strong> and SimpleWorship. 
                     Once installed, all fonts will instantly be available in <strong>PowerPoint, Word, Canva Desktop, Photoshop</strong>, and all Windows applications!
                   </p>
 
@@ -731,7 +731,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
               </div>
 
               {/* Missing Fonts List */}
-              <div className="mt-4 space-y-2 border-t border-red-500/20 pt-3">
+              <div className="mt-4 space-y-2 border-t border-[#2e374f] pt-3">
                 {missingFonts.map((font) => {
                   const displayFamily = font.fontName.includes(',')
                     ? font.fontName.split(',')[0].replace(/^["'\s]+|["'\s]+$/g, '').trim()
@@ -746,7 +746,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                     <div 
                       key={font.fontName}
                       onClick={() => handleInstallSingle(font)}
-                      className="p-3 rounded-lg bg-[#181a24] hover:bg-[#222638] border border-[#2b3044] hover:border-red-500/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all group shadow-sm hover:shadow-red-950/40"
+                      className="p-3 rounded-lg bg-[#181a24] hover:bg-[#222638] border border-[#2b3044] hover:border-cyan-500/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all group shadow-sm hover:shadow-cyan-950/40"
                       title={`Click anywhere on this card to install "${displayFamily}" into Windows OS and SimpleWorship`}
                     >
                       <div className="flex items-center gap-3">
@@ -757,7 +757,7 @@ const FontScannerModalBase: React.FC<FontScannerModalProps> = ({
                             handleInstallSingle(font);
                           }}
                           disabled={isInstalling}
-                          className="w-8 h-8 rounded-lg bg-red-500/15 group-hover:bg-red-500/30 border border-red-500/30 group-hover:border-red-400 flex items-center justify-center text-red-400 group-hover:text-red-200 shrink-0 transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-lg bg-cyan-500/15 group-hover:bg-cyan-500/30 border border-cyan-500/30 group-hover:border-cyan-400 flex items-center justify-center text-cyan-400 group-hover:text-cyan-200 shrink-0 transition-colors cursor-pointer"
                           title="Click to install this font into Windows"
                         >
                           {isInstalling ? <RefreshCw size={14} className="animate-spin text-amber-300" /> : <Type size={16} />}

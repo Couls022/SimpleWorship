@@ -86,16 +86,7 @@ export async function processSingleDroppedFile(file: File): Promise<Presentation
           }
 
           if (fontScan.missingFonts.length > 0) {
-            window.dispatchEvent(new CustomEvent('simpleworship:open-font-installer', {
-              detail: {
-                presentationName: file.name.replace(/\.pptx?$/i, ''),
-                scanResult: fontScan,
-                autoTriggered: true,
-              }
-            }));
-            window.dispatchEvent(new CustomEvent('simpleworship:notify', {
-              detail: `⚠️ May ${fontScan.missingFonts.length} font na wala sa iyong device. Bukas ang 1-Click Download & Install.`
-            }));
+            // Quietly load fallback fonts without forcing modal popups
           } else if (fontScan.allFonts.length > 0) {
             window.dispatchEvent(new CustomEvent('simpleworship:notify', {
               detail: `✓ Lahat ng ${fontScan.allFonts.length} fonts sa "${file.name}" ay nade-detect sa iyong device at gagamitin agad!`

@@ -86,11 +86,7 @@ class CameraManager {
 
     try {
       this.currentPreviewStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          deviceId: { exact: deviceId },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
+        video: { deviceId: { exact: deviceId } },
         audio: false // No audio to prevent feedback loop
       });
       return this.currentPreviewStream;
@@ -122,11 +118,7 @@ class CameraManager {
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { 
-        deviceId: { exact: deviceId },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      },
+      video: { deviceId: { exact: deviceId } },
       audio: false
     });
 

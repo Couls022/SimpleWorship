@@ -97,6 +97,7 @@ export default function StageMonitorContent({ isProjectorMode = false }: StageMo
               initialTimeStr={countdownTimeStr}
               label={countdownLabel}
               enabled={countdownEnabled}
+              isProjectorMode={isProjectorMode}
             />
           )}
           {isBlack && (

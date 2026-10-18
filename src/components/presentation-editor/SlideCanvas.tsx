@@ -110,7 +110,8 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   // Alignment Guides State
   const [guides, setGuides] = useState<{ x?: number; y?: number; xLabel?: string; yLabel?: string }>({});
 
-  const objects = slide.objects || [];
+  const objects = (Array.isArray(slide?.objects) ? slide.objects : (Array.isArray((slide as any)?.elements) ? (slide as any).elements : [])) || [];
+  const safeSelectedObjectIds = Array.isArray(selectedObjectIds) ? selectedObjectIds : [];
 
   // Helper to scale screen mouse coords to canvas coords
   const getCanvasCoords = (e: React.MouseEvent | MouseEvent) => {
@@ -775,7 +776,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   };
 
   // Bounding Box Calculation for Selected Object(s)
-  const selectedObjects = objects.filter((o) => selectedObjectIds.includes(o.id));
+  const selectedObjects = objects.filter((o) => safeSelectedObjectIds.includes(o.id));
   let bbox = null;
   if (selectedObjects.length > 0) {
     let minX = Infinity;
@@ -957,7 +958,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           {objects
             .filter((o) => o.visible !== false)
             .map((obj) => {
-              const isSelected = selectedObjectIds.includes(obj.id);
+              const isSelected = safeSelectedObjectIds.includes(obj.id);
               const isEditing = editingTextId === obj.id;
               const style = obj.style || {};
 
@@ -1144,7 +1145,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
           )}
 
           {/* SELECTION BOUNDING BOX & TRANSFORM HANDLES */}
-          {bbox && selectedObjectIds.length > 0 && !editingTextId && (
+          {bbox && safeSelectedObjectIds.length > 0 && !editingTextId && (
             <div
               className="absolute border-2 border-sky-500 pointer-events-none z-40"
               style={{

@@ -136,6 +136,21 @@ export class PptxRenderCacheManager {
     if (this.canonicalFrames.has(cleanKey)) {
       return this.canonicalFrames.get(cleanKey)!;
     }
+
+    // Check window.opener for instant cross-window sync in projector popup
+    if (typeof window !== 'undefined' && (window as any).opener) {
+      try {
+        const openerMgr = (window as any).opener?.PptxRenderCacheManager;
+        if (openerMgr && typeof openerMgr.getCanonicalFrame === 'function') {
+          const frame = openerMgr.getCanonicalFrame(identifier, slideIndex);
+          if (frame) {
+            this.canonicalFrames.set(directKey, frame);
+            return frame;
+          }
+        }
+      } catch (e) {}
+    }
+
     return null;
   }
 
@@ -211,4 +226,8 @@ export class PptxRenderCacheManager {
       this.sessionAliases.clear();
     }
   }
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).PptxRenderCacheManager = PptxRenderCacheManager;
 }

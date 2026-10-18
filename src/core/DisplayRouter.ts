@@ -16,10 +16,50 @@ export function cleanDisplayString(str: string): string {
   if (!str) return '';
   return str
     .toLowerCase()
+    .replace(/\s*\((?:primary|console|projector|main display|stage monitor|foldback|confidence)\)\s*/gi, '')
     .replace(/\s*\(primary\)\s*/gi, '')
     .replace(/\s*\(\d+\s*[x×]\s*\d+\)\s*/gi, '')
     .replace(/[^a-z0-9]/g, '')
     .trim();
+}
+
+/**
+ * Extracts a normalized monitor number (1, 2, 3...) or role-based index.
+ * Handles patterns such as:
+ * - "display-1", "display 1", "monitor-1", "monitor 1", "screen-0", "1" -> 1
+ * - "display-2", "display 2", "monitor-2", "monitor 2", "screen-1", "2" -> 2
+ * - "display-3", "display 3", "monitor-3", "monitor 3", "screen-2", "3" -> 3
+ * - "primary", "console", "disp-primary" -> 1
+ * - "secondary", "projector", "audience", "disp-secondary" -> 2
+ * - "foldback", "stage", "confidence", "disp-stage" -> 3
+ */
+export function extractCanonicalMonitorNumber(str: string): number | null {
+  if (!str) return null;
+  const s = String(str).toLowerCase().trim();
+
+  // Explicit number after display/monitor/screen/disp
+  const numMatch = s.match(/(?:display|monitor|screen|disp)[-_ ]*(\d+)/i);
+  if (numMatch) {
+    const num = parseInt(numMatch[1], 10);
+    // If it was "screen-0", "screen-1" (zero-indexed web screenDetails API)
+    if (s.startsWith('screen-') && s.includes('-') && !s.includes('screen-1-') && !s.includes('screen-2-') && !s.includes('screen-3-')) {
+      return num + 1;
+    }
+    return num;
+  }
+
+  // Standalone number or monitor digit
+  const standaloneMatch = s.match(/^\s*(\d+)\s*$/);
+  if (standaloneMatch) {
+    return parseInt(standaloneMatch[1], 10);
+  }
+
+  // Role-based keywords
+  if (s.includes('primary') || s.includes('console')) return 1;
+  if (s.includes('secondary') || s.includes('projector') || s.includes('audience')) return 2;
+  if (s.includes('stage') || s.includes('confidence') || s.includes('foldback')) return 3;
+
+  return null;
 }
 
 /**
@@ -33,7 +73,7 @@ export function cleanDisplayString(str: string): string {
  *    - Resolves both references to their physical display hardware records.
  *    - If both resolve to physical displays, they MATCH if and only if they are the SAME display!
  *    - If they resolve to DIFFERENT physical displays, they DEFINITIVELY DO NOT MATCH (no bleed).
- * 3. Never uses fuzzy substring or partial numeric matching to prevent routes from leaking onto other monitors.
+ * 3. Canonical monitor index resolution (Monitor 1, Monitor 2, Monitor 3...).
  */
 export function isSamePhysicalDisplay(a: string, b: string, cachedDisplays?: any[]): boolean {
   if (!a || !b) return false;
@@ -52,8 +92,9 @@ export function isSamePhysicalDisplay(a: string, b: string, cachedDisplays?: any
     const findMatchingDisplay = (query: string) => {
       const qLower = query.toLowerCase().trim();
       const qClean = cleanDisplayString(query);
+      const qNum = extractCanonicalMonitorNumber(query);
 
-      return displays.find((d: any) => {
+      return displays.find((d: any, idx: number) => {
         if (!d) return false;
         // Direct string match on ID, displayId, name, or label
         if (d.id && String(d.id).toLowerCase() === qLower) return true;
@@ -66,6 +107,14 @@ export function isSamePhysicalDisplay(a: string, b: string, cachedDisplays?: any
           if (d.name && cleanDisplayString(d.name) === qClean) return true;
           if (d.label && cleanDisplayString(d.label) === qClean) return true;
           if (d.id && cleanDisplayString(d.id) === qClean) return true;
+        }
+        // Match by canonical monitor number
+        if (qNum !== null) {
+          const dNum = extractCanonicalMonitorNumber(d.id) || 
+                       extractCanonicalMonitorNumber(d.label) || 
+                       extractCanonicalMonitorNumber(d.name) || 
+                       (d.isPrimary ? 1 : idx + 1);
+          if (dNum === qNum) return true;
         }
         return false;
       });
@@ -101,6 +150,11 @@ export function isSamePhysicalDisplay(a: string, b: string, cachedDisplays?: any
       if (dispA.label && String(dispA.label).toLowerCase() === bLower) return true;
       if (cleanB && dispA.name && cleanDisplayString(dispA.name) === cleanB) return true;
       if (cleanB && dispA.label && cleanDisplayString(dispA.label) === cleanB) return true;
+      const bNum = extractCanonicalMonitorNumber(strB);
+      if (bNum !== null) {
+        const aNum = extractCanonicalMonitorNumber(dispA.id) || extractCanonicalMonitorNumber(dispA.label) || extractCanonicalMonitorNumber(dispA.name);
+        if (aNum === bNum) return true;
+      }
       return false;
     }
 
@@ -114,8 +168,20 @@ export function isSamePhysicalDisplay(a: string, b: string, cachedDisplays?: any
       if (dispB.label && String(dispB.label).toLowerCase() === aLower) return true;
       if (cleanA && dispB.name && cleanDisplayString(dispB.name) === cleanA) return true;
       if (cleanA && dispB.label && cleanDisplayString(dispB.label) === cleanA) return true;
+      const aNum = extractCanonicalMonitorNumber(strA);
+      if (aNum !== null) {
+        const bNum = extractCanonicalMonitorNumber(dispB.id) || extractCanonicalMonitorNumber(dispB.label) || extractCanonicalMonitorNumber(dispB.name);
+        if (aNum === bNum) return true;
+      }
       return false;
     }
+  }
+
+  // Canonical monitor index resolution when displays list is not yet populated
+  const numA = extractCanonicalMonitorNumber(strA);
+  const numB = extractCanonicalMonitorNumber(strB);
+  if (numA !== null && numB !== null) {
+    return numA === numB;
   }
 
   // Fallback: exact clean string match only
@@ -252,11 +318,12 @@ export function resolveDisplayAssignments(
     });
 
     const winningGroupId = stackedGroupIds[0] || null;
+    const sortedLiveLayerIds = [...stackedGroupIds].reverse();
 
     result.set(displayId, {
       displayId,
       assignedGroupId: winningGroupId,
-      liveGroupIds,
+      liveGroupIds: sortedLiveLayerIds,
       candidateGroupIds,
       stackedGroupIds,
     });

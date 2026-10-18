@@ -181,7 +181,7 @@ export const LiveSlideCard: React.FC<LiveSlideCardProps> = React.memo(({
 
           {/* Staged & Live Badges */}
           {isPublicLive && (
-            <span className="shrink-0 text-[9px] font-mono font-black px-1.5 py-0.5 rounded bg-red-600 text-white border border-red-400 uppercase tracking-widest flex items-center gap-1 shadow-[0_0_8px_rgba(239,68,68,0.6)] animate-pulse">
+            <span className="shrink-0 text-[9px] font-mono font-black px-1.5 py-0.5 rounded bg-red-600 text-white uppercase tracking-widest flex items-center gap-1 shadow-sm">
               ● LIVE
             </span>
           )}

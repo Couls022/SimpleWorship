@@ -14,6 +14,7 @@ import {
 import { useStore } from '../store/useStore';
 import { useScreens } from '../hooks/useScreens';
 import { DisplayManager } from '../core/DisplayManager';
+import { isSamePhysicalDisplay } from '../core/DisplayRouter';
 
 interface TargetMonitorLockProps {
   groupId: string;
@@ -72,7 +73,12 @@ export default function TargetMonitorLock({ groupId, onOpenConfig, compact = fal
     if (!isLocked) return 'Unassigned (Standby)';
     if (selectedDisplayIds.length === 1) {
       const dispId = selectedDisplayIds[0];
-      const match = availableDisplays.find(s => s.id === dispId || s.label === dispId);
+      const match = availableDisplays.find(s => 
+        s.id === dispId || 
+        s.label === dispId || 
+        isSamePhysicalDisplay(s.id, dispId, availableDisplays) || 
+        isSamePhysicalDisplay(s.label, dispId, availableDisplays)
+      );
       if (match) {
         // Clean short name
         return match.label?.replace(/\(Primary\)/i, '').replace(/\(Projector\)/i, '').trim() || match.label;
@@ -85,7 +91,12 @@ export default function TargetMonitorLock({ groupId, onOpenConfig, compact = fal
   // Multi-route sharing & overlay status on this route's target monitor
   const sharingGroups = outputGroups.filter(g => 
     g.id !== groupId && 
-    selectedDisplayIds.some(dId => (g.displayIds?.includes(dId) || g.targetDisplayId === dId))
+    selectedDisplayIds.some(dId => {
+      const otherTargets = (g.displayIds && g.displayIds.length > 0)
+        ? g.displayIds
+        : (g.targetDisplayId ? [g.targetDisplayId] : []);
+      return otherTargets.some(otherId => isSamePhysicalDisplay(dId, otherId, availableDisplays));
+    })
   );
 
   const hasSharingRoutes = sharingGroups.length > 0;
@@ -120,8 +131,11 @@ export default function TargetMonitorLock({ groupId, onOpenConfig, compact = fal
 
   const handleToggleDisplay = (dispId: string) => {
     let next: string[];
-    if (selectedDisplayIds.includes(dispId)) {
-      next = selectedDisplayIds.filter(id => id !== dispId);
+    const isCurrentlySelected = selectedDisplayIds.some(selId => 
+      selId === dispId || isSamePhysicalDisplay(selId, dispId, availableDisplays)
+    );
+    if (isCurrentlySelected) {
+      next = selectedDisplayIds.filter(id => id !== dispId && !isSamePhysicalDisplay(id, dispId, availableDisplays));
     } else {
       next = [...selectedDisplayIds, dispId];
     }
@@ -220,12 +234,21 @@ export default function TargetMonitorLock({ groupId, onOpenConfig, compact = fal
           <div className="p-1 space-y-1 max-h-56 overflow-y-auto min-h-0 custom-scrollbar">
             {availableDisplays.map((disp, i) => {
               const dispId = disp.id;
-              const isSelected = selectedDisplayIds.includes(dispId) || selectedDisplayIds.includes(disp.label);
+              const isSelected = selectedDisplayIds.some(selId => 
+                selId === dispId || 
+                selId === disp.label || 
+                isSamePhysicalDisplay(selId, dispId, availableDisplays) ||
+                (disp.label && isSamePhysicalDisplay(selId, disp.label, availableDisplays))
+              );
               
               // Other routes sharing this monitor
-              const otherSharing = outputGroups.filter(
-                (g) => g.id !== groupId && (g.displayIds?.includes(dispId) || g.displayIds?.includes(disp.label) || g.targetDisplayId === dispId)
-              );
+              const otherSharing = outputGroups.filter((g) => {
+                if (g.id === groupId) return false;
+                const gTargets = (g.displayIds && g.displayIds.length > 0)
+                  ? g.displayIds
+                  : (g.targetDisplayId ? [g.targetDisplayId] : []);
+                return gTargets.some(tId => isSamePhysicalDisplay(tId, dispId, availableDisplays));
+              });
 
               return (
                 <div

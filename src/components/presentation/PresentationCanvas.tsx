@@ -79,8 +79,43 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
         className={cardStyle.className}
         style={cardStyle.style}
       >
-        {/* Header */}
-        {hasHeader && (
+        {/* Header / Song Title above Verses */}
+        {isSong && (frame.hasSongTitle || hasHeader) && (
+          <div className="mb-4 flex flex-col items-center justify-center text-center max-w-full z-20">
+            {frame.hasSongTitle && frame.songTitleText && (
+              <h1
+                className="font-black tracking-wide drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)] max-w-full leading-tight"
+                style={{
+                  ...frame.songTitleStyles,
+                  fontFamily: frame.songTitleStyles?.fontFamily || resolvedStyles.fontFamily,
+                }}
+              >
+                {frame.songTitleText}
+              </h1>
+            )}
+            {hasHeader && (
+              <h2
+                className={`text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full ${
+                  frame.hasSongTitle ? 'mt-1 text-sm tracking-widest uppercase bg-black/40 px-3 py-0.5 rounded-full border border-white/10' : ''
+                }`}
+                style={{
+                  ...(labelThemeStyles ? labelCss : {}),
+                  ...(frame.headerStyles || {}),
+                  fontSize: frame.hasSongTitle
+                    ? undefined
+                    : (labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '32px'),
+                  fontFamily: labelThemeStyles?.fontFamily || resolvedStyles.fontFamily,
+                  textAlign: resolvedStyles.textAlign || 'center',
+                }}
+              >
+                {formatSongLabel(headerText)}
+              </h2>
+            )}
+          </div>
+        )}
+
+        {/* Header for non-song items (Scripture / other) */}
+        {!isSong && hasHeader && (
           <h2 
             className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full"
             style={{
@@ -97,7 +132,7 @@ export const PresentationCanvas: React.FC<PresentationCanvasProps> = ({ frame, s
                 : (resolvedStyles.textAlign || 'center'),
             }}
           >
-            {isSong ? formatSongLabel(headerText) : headerText}
+            {headerText}
           </h2>
         )}
 

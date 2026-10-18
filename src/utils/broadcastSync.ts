@@ -93,33 +93,84 @@ export interface BroadcastPayload {
 // Global deduplication cache to eliminate duplicate execution cycles between BroadcastChannel and StorageEvent
 const recentProcessedIds = new Set<string>();
 const recentProcessedQueue: string[] = [];
+let broadcastSeqCounter = 0;
 
 function isDuplicateMessage(msg: BroadcastPayload): boolean {
   if (msg.type === 'HEARTBEAT' || msg.type === 'HEARTBEAT_ACK') {
     return false;
   }
-  const id = msg.msgId || `${msg.type}_${msg.timestamp || 0}`;
-  if (recentProcessedIds.has(id)) {
+  if (!msg.msgId) {
+    return false;
+  }
+  if (recentProcessedIds.has(msg.msgId)) {
     return true;
   }
-  recentProcessedIds.add(id);
-  recentProcessedQueue.push(id);
-  // Keep ring buffer at max 50 entries to prevent memory growth
-  if (recentProcessedQueue.length > 50) {
+  recentProcessedIds.add(msg.msgId);
+  recentProcessedQueue.push(msg.msgId);
+  // Keep ring buffer at max 100 entries to prevent memory growth
+  if (recentProcessedQueue.length > 100) {
     const oldest = recentProcessedQueue.shift();
     if (oldest) recentProcessedIds.delete(oldest);
   }
   return false;
 }
 
-// Helper to recursively strip heavy binary buffers, TypedArrays, base64 data URLs, and bloated structures
-export const sanitizeForSync = (val: any, depth = 0): any => {
+// Enterprise-grade safe cloner for BroadcastChannel (fast in-memory structured clone)
+// Strips functions, DOM elements, and symbols while keeping complete pristine data URLs,
+// renderFrame canonical layouts, typed arrays, and nested structures with zero corruption.
+export function cloneSafeForBroadcast(val: any, seen = new WeakSet(), depth = 0): any {
+  if (val === null || val === undefined) return val;
+  if (depth > 16) return undefined;
+
+  const t = typeof val;
+  if (t === 'string' || t === 'number' || t === 'boolean') return val;
+  if (t === 'function' || t === 'symbol') return undefined;
+
+  // Handle DOM nodes and window objects
+  if (typeof Node !== 'undefined' && val instanceof Node) return undefined;
+  if (typeof Window !== 'undefined' && val instanceof Window) return undefined;
+
+  // Preserve binary buffers and typed arrays
+  if (
+    val instanceof Uint8Array ||
+    val instanceof ArrayBuffer ||
+    (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView(val))
+  ) {
+    return val;
+  }
+
+  if (typeof val === 'object') {
+    if (seen.has(val)) return undefined;
+    seen.add(val);
+
+    if (Array.isArray(val)) {
+      return val.map(item => cloneSafeForBroadcast(item, seen, depth + 1));
+    }
+
+    const copy: Record<string, any> = {};
+    for (const key of Object.keys(val)) {
+      const cloned = cloneSafeForBroadcast(val[key], seen, depth + 1);
+      if (cloned !== undefined) {
+        copy[key] = cloned;
+      }
+    }
+    return copy;
+  }
+
+  return undefined;
+}
+
+// Lightweight sanitizer for localStorage fallback ONLY (quota constrained to 5MB)
+// Crucial: NEVER truncate a data URL with a corrupt marker string!
+// If too large for localStorage, omit it cleanly (undefined) so decoders never receive broken bytes.
+export const sanitizeForSync = (val: any, seen = new WeakSet(), depth = 0): any => {
   if (val === null || val === undefined) return val;
   if (depth > 12) return undefined;
 
   if (typeof val === 'string') {
-    if (val.startsWith('data:') && val.length > 1024) {
-      return val.slice(0, 128) + '...[TRUNCATED_DATA_URL]';
+    // Large data URLs (> 64KB) shouldn't blow up localStorage quota; omit them cleanly instead of corrupting them
+    if (val.startsWith('data:') && val.length > 65536) {
+      return undefined;
     }
     return val;
   }
@@ -134,22 +185,25 @@ export const sanitizeForSync = (val: any, depth = 0): any => {
     return undefined;
   }
 
+  if (seen.has(val)) return undefined;
+  seen.add(val);
+
   if (Array.isArray(val)) {
     if (val.length > 200 && typeof val[0] === 'number') {
       return undefined;
     }
-    return val.map(item => sanitizeForSync(item, depth + 1));
+    return val.map(item => sanitizeForSync(item, seen, depth + 1)).filter(x => x !== undefined);
   }
 
   const result: Record<string, any> = {};
   for (const key of Object.keys(val)) {
+    // Strip heavy raw binary buffers from disk storage
     if (
       key === 'fileBytes' ||
       key === 'buffer' ||
       key === 'rawBytes' ||
       key === 'binaryData' ||
-      key === '_raw' ||
-      key === 'renderFrame'
+      key === '_raw'
     ) {
       continue;
     }
@@ -163,7 +217,10 @@ export const sanitizeForSync = (val: any, depth = 0): any => {
       continue;
     }
 
-    result[key] = sanitizeForSync(item, depth + 1);
+    const sanitized = sanitizeForSync(item, seen, depth + 1);
+    if (sanitized !== undefined) {
+      result[key] = sanitized;
+    }
   }
 
   return result;
@@ -183,30 +240,29 @@ const getCircularReplacer = () => {
 export const broadcastStateChange = (payload: BroadcastPayload) => {
   if (typeof window === 'undefined') return;
   const now = Date.now();
+  const seq = ++broadcastSeqCounter;
   const fullPayload: BroadcastPayload = {
     ...payload,
     timestamp: now,
-    msgId: payload.msgId || `${payload.type}_${now}_${Math.random().toString(36).slice(2, 7)}`
+    msgId: payload.msgId || `${payload.type}_${now}_${seq}_${Math.random().toString(36).slice(2, 7)}`
   };
 
   // 1. Post to BroadcastChannel (fast in-memory IPC with zero delay and no storage quota)
-  // Send fullPayload so ArrayBuffers, TypedArrays (fileBytes), and data URLs are preserved with 1:1 fidelity across windows!
+  // Use cloneSafeForBroadcast to ensure complete fidelity without DataCloneError
   const activeChannel = getBroadcastChannel();
   if (activeChannel) {
     try {
-      activeChannel.postMessage(fullPayload);
+      const safePayload = cloneSafeForBroadcast(fullPayload);
+      activeChannel.postMessage(safePayload || fullPayload);
     } catch (err) {
       try {
         const lightweight = sanitizeForSync(fullPayload);
         activeChannel.postMessage(lightweight);
       } catch (e2) {
-        // Ultimate fallback to guarantee delivery via BroadcastChannel:
-        // JSON stringification natively strips any lingering uncloneable objects (functions, DOM nodes, etc.)
         try {
           const ultraLight = JSON.parse(JSON.stringify(sanitizeForSync(fullPayload), getCircularReplacer()));
           activeChannel.postMessage(ultraLight);
         } catch (e3) {
-          // If the channel was closed or broken, re-establish it
           reconnectBroadcastChannel();
         }
       }

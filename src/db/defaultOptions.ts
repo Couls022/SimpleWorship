@@ -1,4 +1,5 @@
 import { SystemOptions, FontStyleOptions } from '../types';
+import { PERMANENT_BACKUP_ASSET_URL } from './assets';
 
 export const defaultBaseFont: FontStyleOptions = {
   family: 'Tahoma',
@@ -39,8 +40,12 @@ export const defaultSystemOptions: SystemOptions = {
     },
     song: {
       songFont: { ...defaultBaseFont, maxSize: 90, alignHorizontal: 'center', bold: false },
+      showSongTitle: true,
+      songTitleFont: { ...defaultBaseFont, maxSize: 46, color: '#FDE047', bold: true, alignHorizontal: 'center' },
+      songTitleLocation: 'Above Verses',
+      songTitleCasing: 'as_is',
       showVerseChorusLabel: true,
-      labelFont: { ...defaultBaseFont, maxSize: 42, color: '#67E8F9', bold: true, alignHorizontal: 'left' },
+      labelFont: { ...defaultBaseFont, maxSize: 38, color: '#67E8F9', bold: true, alignHorizontal: 'center' },
       labelLocation: 'Header',
       labelStyle: 'uppercase',
       labelPrefix: '',
@@ -152,6 +157,11 @@ export const defaultSystemOptions: SystemOptions = {
     intervalType: 'Pre-Service Countdown',
     showOnMainDisplay: false,
     backgroundAssetId: '',
+    fontFamily: 'Segoe UI, sans-serif',
+    fontColor: '#ffffff',
+    fontSize: 440,
+    independentStageSize: false,
+    stageTimerSize: 16,
   },
   slideLabels: [
     { id: '1', name: 'CHORUS', bgColor: '#58243A', textColor: '#FFFFFF', shortcut: 'C' },

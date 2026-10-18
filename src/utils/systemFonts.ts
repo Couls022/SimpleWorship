@@ -122,45 +122,48 @@ function isFontAvailableOnMachine(fontFamily: string): boolean {
   return false;
 }
 
+import {
+  LocalSystemFontScannerService,
+  localSystemFontsMap,
+  COMPREHENSIVE_SYSTEM_FONTS,
+} from '../services/localSystemFontScannerService';
+
 /**
- * Query Local Fonts via Native Web API (`window.queryLocalFonts`)
+ * Query Local Fonts via Native Web API or Comprehensive Probe and register in IndexedDB
  */
 export async function queryNativeSystemFonts(): Promise<string[]> {
   if (typeof window === 'undefined') return [];
 
-  // Check if Native API is available
-  if ('queryLocalFonts' in window && typeof (window as any).queryLocalFonts === 'function') {
+  const scanResult = await LocalSystemFontScannerService.scanAndRegisterLocalSystemFonts();
+  if (scanResult.allLocalFonts.length > 0) {
     try {
-      const fontDataList = await (window as any).queryLocalFonts();
-      const uniqueFamilies = new Set<string>();
-
-      for (const font of fontDataList) {
-        if (font.family && typeof font.family === 'string') {
-          uniqueFamilies.add(font.family.trim());
-        }
-      }
-
-      const list = Array.from(uniqueFamilies).sort((a, b) => a.localeCompare(b));
-      if (list.length > 0) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-        notifyFontsUpdated();
-        return list;
-      }
-    } catch (err) {
-      console.warn('[SystemFonts] User cancelled or native local font query not permitted:', err);
-    }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(scanResult.allLocalFonts));
+    } catch {}
+    notifyFontsUpdated();
+    return scanResult.allLocalFonts;
   }
 
-  // Fallback: Scan installed fonts via canvas baseline test
+  // Fallback: Scan installed fonts via canvas baseline test across comprehensive catalog
   const detected: string[] = [];
-  for (const item of POPULAR_PRESENTATION_FONTS) {
-    if (isFontAvailableOnMachine(item.family)) {
-      detected.push(item.family);
+  const allToTest = [
+    ...POPULAR_PRESENTATION_FONTS.map(f => f.family),
+    ...COMPREHENSIVE_SYSTEM_FONTS.map(f => f.family),
+  ];
+  const seen = new Set<string>();
+
+  for (const family of allToTest) {
+    const lower = family.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    if (isFontAvailableOnMachine(family) || LocalSystemFontScannerService.isLocalFontAvailable(family)) {
+      detected.push(family);
     }
   }
 
   if (detected.length > 0) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(detected));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(detected));
+    } catch {}
     notifyFontsUpdated();
   }
 
@@ -168,58 +171,104 @@ export async function queryNativeSystemFonts(): Promise<string[]> {
 }
 
 /**
- * Get all available fonts combining detected system fonts, curated presets, and user custom additions
+ * Get all available fonts combining detected Windows/OS system fonts, comprehensive Microsoft/Windows catalog, and user custom additions
  */
 export function getAvailableSystemFonts(): SystemFontEntry[] {
   const result: SystemFontEntry[] = [];
   const addedFamilies = new Set<string>();
 
-  // 1. Load cached system scanned fonts
-  try {
-    const rawCached = localStorage.getItem(STORAGE_KEY);
-    if (rawCached) {
-      const cachedList: string[] = JSON.parse(rawCached);
-      for (const family of cachedList) {
-        if (!addedFamilies.has(family.toLowerCase())) {
-          addedFamilies.add(family.toLowerCase());
-          result.push({
-            family,
-            category: 'system',
-            installed: true,
-          });
-        }
-      }
-    }
-  } catch (e) {
-    console.error('Failed to parse cached system fonts', e);
-  }
+  const addFont = (family: string, category: SystemFontEntry['category'], installed?: boolean) => {
+    const clean = family.trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (addedFamilies.has(key)) return;
+    addedFamilies.add(key);
+    result.push({ family: clean, category, installed });
+  };
 
-  // 2. Load custom user fonts
+  // 1. Custom user-registered fonts first
   try {
     const rawCustom = localStorage.getItem(CUSTOM_FONTS_KEY);
     if (rawCustom) {
       const customList: string[] = JSON.parse(rawCustom);
       for (const family of customList) {
-        if (!addedFamilies.has(family.toLowerCase())) {
-          addedFamilies.add(family.toLowerCase());
-          result.push({
-            family,
-            category: 'custom',
-            installed: true,
-          });
-        }
+        addFont(family, 'custom', true);
       }
     }
   } catch (e) {
     console.error('Failed to parse custom user fonts', e);
   }
 
-  // 3. Add core curated fonts
-  for (const preset of POPULAR_PRESENTATION_FONTS) {
-    if (!addedFamilies.has(preset.family.toLowerCase())) {
-      addedFamilies.add(preset.family.toLowerCase());
-      result.push(preset);
+  // 2. Load registered local system fonts from LocalSystemFontScannerService (window.queryLocalFonts + canvas probe)
+  for (const [, record] of localSystemFontsMap.entries()) {
+    const mappedCat: SystemFontEntry['category'] =
+      record.category === 'windows' || record.category === 'office'
+        ? 'windows'
+        : record.category === 'worship'
+        ? 'google'
+        : 'system';
+    addFont(record.family, mappedCat, true);
+  }
+
+  // 3. Load cached system scanned fonts from LocalStorage
+  try {
+    const rawCached = localStorage.getItem(STORAGE_KEY);
+    if (rawCached) {
+      const cachedList: string[] = JSON.parse(rawCached);
+      for (const family of cachedList) {
+        addFont(family, 'windows', true);
+      }
     }
+  } catch (e) {
+    console.error('Failed to parse cached system fonts', e);
+  }
+
+  // 4. Add Core Windows & System Timer/Display Defaults
+  const coreSystemDefaults: SystemFontEntry[] = [
+    { family: 'Segoe UI', category: 'windows', installed: true },
+    { family: 'Segoe UI Black', category: 'windows', installed: true },
+    { family: 'Aptos', category: 'windows', installed: true },
+    { family: 'Aptos Display', category: 'windows', installed: true },
+    { family: 'Calibri', category: 'windows', installed: true },
+    { family: 'Arial', category: 'windows', installed: true },
+    { family: 'Arial Black', category: 'windows', installed: true },
+    { family: 'Impact', category: 'windows', installed: true },
+    { family: 'Bahnschrift', category: 'windows', installed: true },
+    { family: 'Consolas', category: 'windows', installed: true },
+    { family: 'Cascadia Mono', category: 'windows', installed: true },
+    { family: 'Cascadia Code', category: 'windows', installed: true },
+    { family: 'Century Gothic', category: 'windows', installed: true },
+    { family: 'Franklin Gothic Medium', category: 'windows', installed: true },
+    { family: 'Tahoma', category: 'windows', installed: true },
+    { family: 'Trebuchet MS', category: 'windows', installed: true },
+    { family: 'Verdana', category: 'windows', installed: true },
+    { family: 'Georgia', category: 'windows', installed: true },
+    { family: 'Times New Roman', category: 'windows', installed: true },
+    { family: 'Courier New', category: 'windows', installed: true },
+    { family: 'monospace', category: 'system', installed: true },
+    { family: 'sans-serif', category: 'system', installed: true },
+    { family: 'serif', category: 'system', installed: true },
+    { family: 'system-ui', category: 'system', installed: true },
+  ];
+
+  for (const item of coreSystemDefaults) {
+    addFont(item.family, item.category, item.installed);
+  }
+
+  // 5. Add Comprehensive Windows, Office, macOS & Worship Catalog (200+ fonts)
+  for (const item of COMPREHENSIVE_SYSTEM_FONTS) {
+    const cat: SystemFontEntry['category'] =
+      item.category === 'windows' || item.category === 'office'
+        ? 'windows'
+        : item.category === 'worship'
+        ? 'google'
+        : 'system';
+    addFont(item.family, cat, true);
+  }
+
+  // 6. Add Popular Presentation Fonts
+  for (const preset of POPULAR_PRESENTATION_FONTS) {
+    addFont(preset.family, preset.category, preset.installed);
   }
 
   return result;

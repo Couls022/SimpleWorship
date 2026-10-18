@@ -2,6 +2,7 @@ import { Song, Theme, OutputGroup, Schedule, ScriptureVerse, Asset } from '../ty
 import { BAPTIST_HYMNAL } from '../data/baptistHymnal';
 import { HYMNS_OF_PRAISES } from '../data/hymnsOfPraises';
 import { SPECIAL_NUMBERS } from '../data/specialNumbers';
+import { PERMANENT_BACKUP_ASSET_ID, PERMANENT_BACKUP_ASSET_URL } from './assets';
 
 
 export const defaultThemes: Theme[] = [
@@ -356,6 +357,8 @@ export const defaultSongs: Song[] = [
   ...HYMNS_OF_PRAISES,
   ...SPECIAL_NUMBERS
 ];
+
+export const BAPTIST_HYMNAL_SONGS = defaultSongs;
 
 export const defaultScriptures: ScriptureVerse[] = [];
 

@@ -535,4 +535,54 @@ describe('DisplayRouter & Route Panel Stability Isolation Tests', () => {
     // Mon 4: Shows Route 2
     expect(sharedAssignments.get('mon-4')?.assignedGroupId).toBe('group-r2');
   });
+
+  it('11. Unbreakable Target Monitor Locking: Matches across display IDs, monitor numbers, and hardware labels without dropping lock', () => {
+    const screens = [
+      { id: 'monitor-1', label: 'Monitor 1 (Primary / Console)', isPrimary: true },
+      { id: 'monitor-2', label: 'Monitor 2 (Projector / Main Display)', isPrimary: false },
+      { id: 'monitor-3', label: 'Monitor 3 (Foldback / Stage Monitor)', isPrimary: false }
+    ];
+
+    // Same monitor across different formats:
+    expect(isSamePhysicalDisplay('display-2', 'monitor-2', screens)).toBe(true);
+    expect(isSamePhysicalDisplay('display-2', 'Monitor 2', screens)).toBe(true);
+    expect(isSamePhysicalDisplay('display-2', '2', screens)).toBe(true);
+    expect(isSamePhysicalDisplay('display-1', 'Monitor 1 (Primary / Console)', screens)).toBe(true);
+    expect(isSamePhysicalDisplay('display-3', 'stage', screens)).toBe(true);
+
+    // Distinct monitors NEVER match (strict isolation):
+    expect(isSamePhysicalDisplay('display-2', 'display-1', screens)).toBe(false);
+    expect(isSamePhysicalDisplay('display-2', 'monitor-3', screens)).toBe(false);
+    expect(isSamePhysicalDisplay('display-2', 'Monitor 1 (Primary / Console)', screens)).toBe(false);
+  });
+
+  it('12. routeTargetsDisplay strictly locks to target monitor and rejects other monitors', () => {
+    const routeLockedToMon2: OutputGroup = {
+      id: 'group-r2',
+      name: 'Route 2',
+      role: 'broadcast',
+      displayIds: ['display-2'],
+      targetDisplayId: 'display-2',
+      isBlack: false,
+      isClear: false,
+      showLogo: false
+    };
+
+    const screens = [
+      { id: 'monitor-1', label: 'Monitor 1 (Primary / Console)', isPrimary: true },
+      { id: 'monitor-2', label: 'Monitor 2 (Projector / Main Display)', isPrimary: false },
+      { id: 'monitor-3', label: 'Monitor 3 (Foldback / Stage Monitor)', isPrimary: false }
+    ];
+
+    // Must match monitor 2 under all references
+    expect(routeTargetsDisplay(routeLockedToMon2, 'display-2', screens)).toBe(true);
+    expect(routeTargetsDisplay(routeLockedToMon2, 'monitor-2', screens)).toBe(true);
+    expect(routeTargetsDisplay(routeLockedToMon2, '2', screens)).toBe(true);
+
+    // Must strictly reject monitor 1 and monitor 3
+    expect(routeTargetsDisplay(routeLockedToMon2, 'display-1', screens)).toBe(false);
+    expect(routeTargetsDisplay(routeLockedToMon2, 'monitor-1', screens)).toBe(false);
+    expect(routeTargetsDisplay(routeLockedToMon2, 'display-3', screens)).toBe(false);
+    expect(routeTargetsDisplay(routeLockedToMon2, 'monitor-3', screens)).toBe(false);
+  });
 });

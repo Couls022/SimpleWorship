@@ -20,7 +20,7 @@ import {
   LaserPointerState
 } from '../types';
 import { dbApi, registerAsset } from '../db';
-import { isMediaLibraryAsset } from '../db/assets';
+import { isMediaLibraryAsset, isProtectedSystemAsset, PERMANENT_BACKUP_ASSET_ID, PERMANENT_BACKUP_ASSET_URL } from '../db/assets';
 import { PptxRenderCacheManager } from '../utils/pptxBackend/cacheManager';
 import { defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultAssets, defaultScriptures } from '../db/seedData';
 import { defaultSystemOptions } from '../db/defaultOptions';
@@ -238,6 +238,7 @@ interface AppState {
   startServiceTimer: (duration?: string, label?: string) => void;
   pauseServiceTimer: () => void;
   resetServiceTimer: (newDuration?: string) => void;
+  completeServiceTimerToLogo: () => void;
   setServiceIntervalConfig: (config: Partial<SystemOptions['serviceIntervals']>) => void;
 
   // Router Panels
@@ -578,11 +579,16 @@ export const useStore = create<AppState>((set, get) => ({
 
       const targetTimestamp = Date.now() + secsToCount * 1000;
 
+      const shouldRestoreMainDisplay = Boolean((current as any).autoHiddenByCompletion);
+      const nextShowOnMainDisplay = shouldRestoreMainDisplay ? true : Boolean(current.showOnMainDisplay);
+
       const updatedIntervals = {
         ...current,
         countdownEnabled: current.countdownEnabled ?? true,
         countdownTime: finalDuration,
         intervalType: finalLabel,
+        showOnMainDisplay: nextShowOnMainDisplay,
+        autoHiddenByCompletion: false,
         isRunning: true,
         targetTimestamp,
         pausedRemainingSecs: null,
@@ -605,6 +611,18 @@ export const useStore = create<AppState>((set, get) => ({
 
       return { systemOptions: nextOptions };
     });
+
+    // Clear Logo splash on the active route only if timer is shown on Main Display
+    const afterState = get();
+    if (afterState.systemOptions?.serviceIntervals?.showOnMainDisplay) {
+      const targetGroupId = afterState.activeControlGroupId || afterState.outputGroups[0]?.id || 'group-congregation';
+      if (targetGroupId !== 'group-stage') {
+        if (afterState.stagedGroupStates[targetGroupId]?.showLogo || afterState.groupStates[targetGroupId]?.showLogo) {
+          get().setStagedGroupState(targetGroupId, { showLogo: false });
+          get().setGroupState(targetGroupId, { showLogo: false });
+        }
+      }
+    }
   },
 
   pauseServiceTimer: () => {
@@ -679,6 +697,62 @@ export const useStore = create<AppState>((set, get) => ({
 
       return { systemOptions: nextOptions };
     });
+  },
+
+  completeServiceTimerToLogo: () => {
+    const state = get();
+    const current = state.systemOptions?.serviceIntervals;
+    if (!current || !current.isRunning) return;
+
+    const wasShowingOnMain = Boolean(current.showOnMainDisplay);
+
+    // 1. Auto-turn off the timer when it reaches 00:00
+    const updatedIntervals = {
+      ...current,
+      isRunning: false,
+      showOnMainDisplay: false,
+      autoHiddenByCompletion: wasShowingOnMain,
+      targetTimestamp: null,
+      pausedRemainingSecs: null,
+    };
+
+    const nextOptions: SystemOptions = {
+      ...state.systemOptions,
+      serviceIntervals: updatedIntervals,
+    };
+
+    try {
+      localStorage.setItem('simpleworship_system_options_v1', JSON.stringify(nextOptions));
+      dbApi.saveSystemOptions(nextOptions).catch(() => {});
+    } catch (e) {}
+
+    set({ systemOptions: nextOptions });
+
+    broadcastStateChange({
+      type: 'SYSTEM_UPDATE',
+      data: { systemOptions: nextOptions }
+    });
+
+    // 2. Strictly isolated to the active route group (just like toggleLogo), never touching other router panels
+    const targetGroupId = state.activeControlGroupId || state.outputGroups[0]?.id || 'group-congregation';
+    if (targetGroupId && targetGroupId !== 'group-stage') {
+      const logoUpdates: Partial<PresentationState> = {
+        showLogo: true,
+        isBlack: false,
+        isClear: false,
+        isVideoPlaying: true,
+      };
+      get().setStagedGroupState(targetGroupId, logoUpdates);
+      get().setGroupState(targetGroupId, logoUpdates);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('simpleworship:notify', {
+          detail: 'Timer finished (00:00) — Timer auto-off & Logo Display activated'
+        })
+      );
+    }
   },
 
   setServiceIntervalConfig: (config: Partial<SystemOptions['serviceIntervals']>) => {
@@ -916,11 +990,9 @@ export const useStore = create<AppState>((set, get) => ({
 
     const targetGroupId = panelToRemove.targetOutputGroupId;
 
-    // Protection: Built-in permanent routes (R1 and R2) can NEVER be removed
-    const isProtected = id === 'router-1' || id === 'router-2' || 
-      targetGroupId === 'group-congregation' || targetGroupId === 'group-r2';
-    if (isProtected) {
-      console.warn(`[useStore] Refusing to remove permanent built-in router panel: ${id}`);
+    // Protection: Do not remove if only 1 router panel remains
+    if (state.routerPanels.length <= 1) {
+      console.warn(`[useStore] Refusing to remove last remaining router panel: ${id}`);
       return state;
     }
 
@@ -1178,6 +1250,12 @@ export const useStore = create<AppState>((set, get) => ({
       newGroups[groupIndex] = updatedGroup;
       dbApi.saveOutputGroup(updatedGroup);
 
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('simpleworship_output_groups_v1', JSON.stringify(newGroups));
+        }
+      } catch (e) {}
+
       let updatedPanels = state.routerPanels;
       if (updates.name) {
         updatedPanels = state.routerPanels.map(p => p.targetOutputGroupId === id ? { ...p, name: updates.name! } : p);
@@ -1216,6 +1294,12 @@ export const useStore = create<AppState>((set, get) => ({
       const newGroups = [...state.outputGroups];
       newGroups[groupIndex] = updatedGroup;
       dbApi.saveOutputGroup(updatedGroup);
+
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          localStorage.setItem('simpleworship_output_groups_v1', JSON.stringify(newGroups));
+        }
+      } catch (e) {}
 
       broadcastStateChange({
         type: 'SYNC_STATE',
@@ -1335,9 +1419,9 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   
   groupStates: {
-    'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-congregation': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
     'group-r2': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
-    'group-stage': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-stage': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setGroupState: (groupId, newState) => {
     set((state) => {
@@ -1405,9 +1489,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   stagedGroupStates: {
-    'group-congregation': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-congregation': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
     'group-r2': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
-    'group-stage': { ...defaultState, activeItemId: 'song-1', activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
+    'group-stage': { ...defaultState, activeItemId: null, activeSlideIndex: 0, timestamp: Date.now(), isLiveEnabled: false },
   },
   setStagedGroupState: (groupId, newState) => {
     set((state) => {
@@ -1575,7 +1659,7 @@ export const useStore = create<AppState>((set, get) => ({
 
     broadcastStateChange({
       type: 'GROUP_STATES_UPDATE',
-      data: { groupStates: updatedStates }
+      data: { groupStates: updatedStates, routeActivationStack: nextStack }
     });
 
     // Immediately sync physical projector output with activation stack
@@ -2119,6 +2203,7 @@ export const useStore = create<AppState>((set, get) => ({
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
     const nextBlack = !currentState.isBlack;
     get().setStagedGroupState(targetGroupId, { isBlack: nextBlack, showLogo: false });
+    get().setGroupState(targetGroupId, { isBlack: nextBlack, showLogo: false });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextBlack ? 'Blackout Enabled (F6 / B)' : 'Blackout Disabled' 
@@ -2132,6 +2217,7 @@ export const useStore = create<AppState>((set, get) => ({
     const currentState = stagedGroupStates[targetGroupId] || groupStates[targetGroupId] || defaultState;
     const nextClear = !currentState.isClear;
     get().setStagedGroupState(targetGroupId, { isClear: nextClear });
+    get().setGroupState(targetGroupId, { isClear: nextClear });
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextClear ? 'Clear Text Enabled (F7 / C)' : 'Text Restored' 
@@ -2147,6 +2233,7 @@ export const useStore = create<AppState>((set, get) => ({
     const updates: any = { showLogo: nextLogo, isBlack: false };
     if (nextLogo) updates.isVideoPlaying = true;
     get().setStagedGroupState(targetGroupId, updates);
+    get().setGroupState(targetGroupId, updates);
     window.dispatchEvent(
       new CustomEvent('simpleworship:notify', { 
         detail: nextLogo ? 'Logo Display Enabled (F8 / L)' : 'Logo Display Disabled' 
@@ -2184,35 +2271,15 @@ export const useStore = create<AppState>((set, get) => ({
         // Turning LIVE ON:
         // Mirror the staged content from the Live Display Canvas to the projector screen
         const staged = stagedGroupStates[targetGroupId] || currentState;
-        let effectiveActiveItemId = staged.activeItemId || currentState.activeItemId;
-        let effectiveDirectLiveItem = staged.directLiveItem || currentState.directLiveItem;
-
-        // If activeItemId is still not set, default to first item in schedule or song list
-        if (!effectiveActiveItemId && !effectiveDirectLiveItem) {
-          if (activeSchedule?.items && activeSchedule.items.length > 0) {
-            effectiveActiveItemId = activeSchedule.items[0].id;
-            effectiveDirectLiveItem = activeSchedule.items[0];
-          } else if (songsList.length > 0) {
-            effectiveActiveItemId = songsList[0].id;
-            const s = songsList[0];
-            effectiveDirectLiveItem = {
-              id: s.id,
-              type: 'song',
-              name: s.title,
-              contentId: s.id,
-              notes: s.author || '',
-              isExpanded: false,
-              customBackgroundUrl: undefined,
-            };
-          }
-        }
+        const effectiveActiveItemId = staged.activeItemId ?? currentState.activeItemId ?? null;
+        const effectiveDirectLiveItem = staged.directLiveItem ?? currentState.directLiveItem ?? null;
 
         const combined = {
           ...staged,
           activeScheduleId: staged.activeScheduleId || activeSchedule?.id || null,
           activeItemId: effectiveActiveItemId,
           activeSlideIndex: staged.activeSlideIndex ?? 0,
-          directLiveItem: effectiveDirectLiveItem || null,
+          directLiveItem: effectiveDirectLiveItem,
           isVideoPlaying: staged.isVideoPlaying,
           isVideoMuted: staged.isVideoMuted,
           isVideoLooping: staged.isVideoLooping,
@@ -2774,8 +2841,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Ensure all default themes (including theme-logo, song, bible, etc.) exist and are sanitized
     let mergedThemes = themes.map(t => {
-      // Clear old default unsplash image URLs from theme styles
-      if (t.styles?.backgroundImageUrl && t.styles.backgroundImageUrl.includes('unsplash.com')) {
+      // Clear old default unsplash or legacy backup image URLs from theme styles
+      if (
+        (t.styles?.backgroundImageUrl && (t.styles.backgroundImageUrl.includes('unsplash.com') || t.styles.backgroundImageUrl.includes('emerald-gold-worship-bg'))) ||
+        (t.styles?.backgroundVideoUrl && t.styles.backgroundVideoUrl.includes('emerald-gold-worship-bg'))
+      ) {
         return {
           ...t,
           styles: {
@@ -2807,8 +2877,8 @@ export const useStore = create<AppState>((set, get) => ({
 
     let hydratedAssets = assets;
     if (assets.length > 0) {
-      // Filter out cache artifacts and presentation documents from assetsList
-      const mediaOnlyAssets = assets.filter(isMediaLibraryAsset);
+      // Filter out cache artifacts, presentation documents, and any legacy backup asset from assetsList
+      const mediaOnlyAssets = assets.filter(a => isMediaLibraryAsset(a) && a.id !== 'asset-bg-emerald-gold-backup' && !a.url?.includes('emerald-gold-worship-bg'));
 
       // Cross-check default themes / systemOptions to populate isDefaultScope if not already set
       const logoUrl = storedOptions?.general?.defaultLogoUrl || storedOptions?.mainOutput?.general?.defaultLogoUrl || mergedThemes.find(t => t.type === 'logo' || t.id === 'theme-logo')?.styles?.logoUrl;
@@ -2885,16 +2955,29 @@ export const useStore = create<AppState>((set, get) => ({
         }
       }
     }
-    const isFoldbackActive = (typeof window !== 'undefined' && localStorage.getItem('simpleworship_foldback_explicit_v1') === 'true') && 
-      Boolean(get().systemOptions?.foldback?.enabled);
-    if (!isFoldbackActive) {
-      finalOutputGroups = finalOutputGroups.map(g => {
-        if (g.id === 'group-stage') {
-          return { ...g, displayIds: [], targetDisplayId: '' };
+
+    // Merge solid persistent target monitor locks from localStorage if available
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const cachedOG = localStorage.getItem('simpleworship_output_groups_v1');
+        if (cachedOG) {
+          const parsedOG = JSON.parse(cachedOG);
+          if (Array.isArray(parsedOG) && parsedOG.length > 0) {
+            finalOutputGroups = finalOutputGroups.map(g => {
+              const cachedG = parsedOG.find((p: any) => p.id === g.id);
+              if (cachedG) {
+                return {
+                  ...g,
+                  targetDisplayId: g.targetDisplayId || cachedG.targetDisplayId || '',
+                  displayIds: (g.displayIds && g.displayIds.length > 0) ? g.displayIds : (cachedG.displayIds || [])
+                };
+              }
+              return g;
+            });
+          }
         }
-        return g;
-      });
-    }
+      }
+    } catch (e) {}
 
     // Sanitize any legacy verbose default names from DB (e.g. "Main Presentation Display (R1)", "(Overlay R2)")
     finalOutputGroups = finalOutputGroups.map(g => {
@@ -2910,8 +2993,6 @@ export const useStore = create<AppState>((set, get) => ({
       return { ...g, name: cleanName };
     });
 
-    set({ outputGroups: finalOutputGroups });
-
     const isProjectorEnv = typeof window !== 'undefined' && (
       window.location.hash.includes('projector') || 
       window.location.hash.includes('stage') || 
@@ -2922,9 +3003,18 @@ export const useStore = create<AppState>((set, get) => ({
 
     if (isProjectorEnv) {
       // The projector/remote only needs to load core DB data (assets, songs, themes).
-      // It MUST NOT reset the global route state or command Electron to close physical displays.
+      // If outputGroups in memory is already populated with live target locks from BroadcastChannel or initial props,
+      // preserve them and do NOT overwrite with un-synchronized DB records!
+      const currentMemoryGroups = get().outputGroups;
+      if (currentMemoryGroups && currentMemoryGroups.length > 0 && currentMemoryGroups.some(g => g.targetDisplayId || (g.displayIds && g.displayIds.length > 0))) {
+        // Keep current memory groups with target locks
+      } else {
+        set({ outputGroups: finalOutputGroups });
+      }
       return;
     }
+
+    set({ outputGroups: finalOutputGroups });
 
     // 2. Build Route Panels from all non-stage broadcast output groups (Route 1, Route 2, Route 3, etc.)
     // Ensure deterministic ordering: group-congregation (R1) first, group-r2 (R2) second, followed by others

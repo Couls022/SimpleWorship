@@ -133,15 +133,25 @@ export class ThemeEngine {
       }
     }
 
-    if (systemFontOverride && systemFontOverride.fontFamily) {
-      const itemFont = effectiveItemTheme?.fontFamily;
+    if (systemFontOverride) {
       const elemFont = elementOverride?.fontFamily;
+      const itemFont = effectiveItemTheme?.fontFamily;
 
-      const itemHasExplicit = effectiveItemTheme?.isExplicitFont || (itemFont && !isLegacyFont(itemFont));
-      const elemHasExplicit = elementOverride?.isExplicitFont || (elemFont && !isLegacyFont(elemFont));
+      const elemHasExplicit = Boolean(elementOverride?.isExplicitFont);
+      const itemHasExplicit = Boolean(effectiveItemTheme?.isExplicitFont);
 
+      // If neither item nor element has an explicit intentional font override, apply system font options
       if (!elemHasExplicit && !itemHasExplicit) {
-        resolved.fontFamily = systemFontOverride.fontFamily;
+        if (systemFontOverride.fontFamily) resolved.fontFamily = systemFontOverride.fontFamily;
+        if (systemFontOverride.fontColor !== undefined) resolved.fontColor = systemFontOverride.fontColor;
+        if (systemFontOverride.fontWeight !== undefined) resolved.fontWeight = systemFontOverride.fontWeight;
+        if (systemFontOverride.fontStyle !== undefined) resolved.fontStyle = systemFontOverride.fontStyle;
+        if (systemFontOverride.textDecoration !== undefined) resolved.textDecoration = systemFontOverride.textDecoration;
+        if (systemFontOverride.textTransform !== undefined) resolved.textTransform = systemFontOverride.textTransform;
+        if (systemFontOverride.lineHeight !== undefined) resolved.lineHeight = systemFontOverride.lineHeight;
+        if (systemFontOverride.textAlign !== undefined) resolved.textAlign = systemFontOverride.textAlign;
+        if (systemFontOverride.alignVertical !== undefined) resolved.alignVertical = systemFontOverride.alignVertical;
+        if (systemFontOverride.fontSize !== undefined) resolved.fontSize = systemFontOverride.fontSize;
       }
     }
 

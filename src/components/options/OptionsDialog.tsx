@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { dbApi } from '../../db';
-import { defaultSystemOptions } from '../../db/defaultOptions';
+import { defaultSystemOptions, defaultBaseFont } from '../../db/defaultOptions';
 import { SystemOptions, FontStyleOptions, SlideLabelConfig } from '../../types';
 import { applyAppearanceSettings } from '../../utils/themeManager';
 import { useScreens } from '../../hooks/useScreens';
@@ -53,6 +53,7 @@ import ScriptureLivePreview from './ScriptureLivePreview';
 import SongLivePreview from './SongLivePreview';
 import StageMonitorContent from '../workspace/StageMonitorContent';
 import FontCacheManagerPanel from './FontCacheManagerPanel';
+import { SystemFontPicker } from '../common/SystemFontPicker';
 import { PptxBackendSelector, PptxBackendCapabilities } from '../../utils/pptxBackend';
 
 interface OptionsDialogProps {
@@ -180,6 +181,55 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
   const outputTabs: OutputTab[] = ['General', 'Song', 'Scripture', 'Transitions', 'Alerts'];
 
   const { screens, refreshScreens } = useScreens();
+
+  // LED Wall Physical Screen & Aspect Ratio Detection State
+  const [ledWallWidth, setLedWallWidth] = useState<number>(localOptions?.mainOutput?.general?.ledWallSettings?.width || 12);
+  const [ledWallHeight, setLedWallHeight] = useState<number>(localOptions?.mainOutput?.general?.ledWallSettings?.height || 9);
+  const [ledWallUnit, setLedWallUnit] = useState<'ft' | 'm' | 'px'>(localOptions?.mainOutput?.general?.ledWallSettings?.unit || 'ft');
+  const [targetRouterApply, setTargetRouterApply] = useState<string>('all');
+
+  // Helper to match selected monitor label with physical screen
+  const getMatchedScreen = (targetLabel?: string) => {
+    if (!screens || screens.length === 0) return null;
+    if (!targetLabel) return screens[0];
+    const targetLower = targetLabel.toLowerCase();
+    return screens.find((s: any, idx: number) => {
+      const sLabel = (s.label || s.name || `Monitor ${idx + 1}`).toLowerCase();
+      return sLabel === targetLower ||
+        targetLower.includes(sLabel) ||
+        sLabel.includes(targetLower) ||
+        (idx === 0 && targetLower.includes('primary'));
+    }) || screens[0];
+  };
+
+  // Helper for detecting canonical Aspect Ratio and user-friendly labels
+  const detectAspectRatioInfo = (w: number, h: number) => {
+    if (!w || !h || w <= 0 || h <= 0) {
+      return { ratio: 16 / 9, label: '16:9 Widescreen', fraction: '16:9', is43: false, is169: true };
+    }
+    const r = w / h;
+    if (Math.abs(r - 4 / 3) < 0.04) {
+      return { ratio: 4 / 3, label: '4:3 Standard (12ft × 9ft LED Wall / Projector)', fraction: '4:3', is43: true, is169: false };
+    }
+    if (Math.abs(r - 16 / 9) < 0.05) {
+      return { ratio: 16 / 9, label: '16:9 Widescreen (HD / 4K)', fraction: '16:9', is43: false, is169: true };
+    }
+    if (Math.abs(r - 1.6) < 0.04) {
+      return { ratio: 1.6, label: '16:10 WUXGA', fraction: '16:10', is43: false, is169: false };
+    }
+    if (Math.abs(r - 1.25) < 0.03) {
+      return { ratio: 1.25, label: '5:4 Standard', fraction: '5:4', is43: false, is169: false };
+    }
+    if (Math.abs(r - 1) < 0.05) {
+      return { ratio: 1, label: '1:1 Square LED Cube', fraction: '1:1', is43: false, is169: false };
+    }
+    const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
+    const g = gcd(Math.round(w), Math.round(h));
+    const simW = Math.round(w) / g;
+    const simH = Math.round(h) / g;
+    const frac = (simW < 50 && simH < 50) ? `${simW}:${simH}` : `${r.toFixed(2)}:1`;
+    return { ratio: r, label: `Custom (${frac})`, fraction: frac, is43: false, is169: false };
+  };
 
   React.useEffect(() => {
     if (screens.length > 0) {
@@ -381,12 +431,26 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
           ? (currentDisplayIds.includes(targetMon) ? currentDisplayIds : [targetMon, ...currentDisplayIds])
           : currentDisplayIds;
 
+        const currentScaleMode = localOptions.mainOutput?.general?.scaleMode || 'fill';
         useStore.getState().updateOutputGroup(primaryGroup.id, {
           aspectRatio: `${pos.width}x${pos.height}`,
           customResolution: { width: pos.width, height: pos.height },
+          scaleMode: currentScaleMode,
           displayIds: effectiveDisplayIds,
           targetDisplayId: targetMon || primaryGroup.targetDisplayId || effectiveDisplayIds[0] || ''
         });
+
+        if (targetRouterApply === 'all') {
+          currentGroups.forEach(g => {
+            if (g.id !== primaryGroup.id && g.id !== 'group-stage') {
+              useStore.getState().updateOutputGroup(g.id, {
+                aspectRatio: `${pos.width}x${pos.height}`,
+                customResolution: { width: pos.width, height: pos.height },
+                scaleMode: currentScaleMode
+              });
+            }
+          });
+        }
       }
     }
 
@@ -687,14 +751,20 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                         value={
                           localOptions.mainOutput.general.position.width === 1920 && localOptions.mainOutput.general.position.height === 1080
                             ? '1920x1080'
+                            : localOptions.mainOutput.general.position.width === 1440 && localOptions.mainOutput.general.position.height === 1080
+                            ? '1440x1080'
                             : localOptions.mainOutput.general.position.width === 1366 && localOptions.mainOutput.general.position.height === 768
                             ? '1366x768'
+                            : localOptions.mainOutput.general.position.width === 1280 && localOptions.mainOutput.general.position.height === 960
+                            ? '1280x960'
                             : localOptions.mainOutput.general.position.width === 1280 && localOptions.mainOutput.general.position.height === 720
                             ? '1280x720'
-                            : localOptions.mainOutput.general.position.width === 1920 && localOptions.mainOutput.general.position.height === 1200
-                            ? '1920x1200'
                             : localOptions.mainOutput.general.position.width === 1024 && localOptions.mainOutput.general.position.height === 768
                             ? '1024x768'
+                            : localOptions.mainOutput.general.position.width === 1600 && localOptions.mainOutput.general.position.height === 1200
+                            ? '1600x1200'
+                            : localOptions.mainOutput.general.position.width === 1920 && localOptions.mainOutput.general.position.height === 1200
+                            ? '1920x1200'
                             : localOptions.mainOutput.general.position.width === 3840 && localOptions.mainOutput.general.position.height === 2160
                             ? '3840x2160'
                             : 'custom'
@@ -702,105 +772,493 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === '1920x1080') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1920, height: 1080 } });
+                          else if (val === '1440x1080') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1440, height: 1080 } });
                           else if (val === '1366x768') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1366, height: 768 } });
+                          else if (val === '1280x960') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1280, height: 960 } });
                           else if (val === '1280x720') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1280, height: 720 } });
-                          else if (val === '1920x1200') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1920, height: 1200 } });
                           else if (val === '1024x768') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1024, height: 768 } });
+                          else if (val === '1600x1200') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1600, height: 1200 } });
+                          else if (val === '1920x1200') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 1920, height: 1200 } });
                           else if (val === '3840x2160') updateMainGeneral({ position: { ...localOptions.mainOutput.general.position, width: 3840, height: 2160 } });
                         }}
                         className="w-full bg-[#121317] border border-[#3b404d] rounded px-2.5 py-1.5 text-xs text-white"
                       >
-                        <option value="1920x1080">1920 × 1080 (16:9 Full HD - Recommended)</option>
+                        <option value="1920x1080">1920 × 1080 (16:9 Full HD - Standard TV & Projector)</option>
+                        <option value="1440x1080">1440 × 1080 (4:3 High-Res LED Wall - Perfect for 12ft × 9ft)</option>
                         <option value="1366x768">1366 × 768 (16:9 HD Display)</option>
+                        <option value="1280x960">1280 × 960 (4:3 HD LED Wall)</option>
                         <option value="1280x720">1280 × 720 (16:9 720p HD)</option>
+                        <option value="1024x768">1024 × 768 (4:3 Standard Projector & LED Wall)</option>
+                        <option value="1600x1200">1600 × 1200 (4:3 UXGA High-Res LED Wall)</option>
                         <option value="1920x1200">1920 × 1200 (16:10 WUXGA)</option>
-                        <option value="1024x768">1024 × 768 (4:3 Standard Projector)</option>
                         <option value="3840x2160">3840 × 2160 (16:9 4K UHD)</option>
                         <option value="custom">Custom Dimensions</option>
                       </select>
                     </div>
 
-                    {/* ASPECT RATIO & RESOLUTION CUSTOMIZER */}
-                    <div className="bg-[#1b1c24] border border-[#3b4050] rounded-md p-3 space-y-2 mt-2">
-                      <div className="flex items-center justify-between text-xs font-semibold text-gray-300 border-b border-[#2d313d] pb-1">
-                        <span>Aspect Ratio & Resolution Scale Guard</span>
-                        <span className="text-[10px] text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-800/30">Fact-Check Mode</span>
+                    {/* ASPECT RATIO & RESOLUTION SCALE GUARD + LED WALL DETECTOR */}
+                    <div className="bg-[#1b1c24] border border-[#3b4050] rounded-md p-3 space-y-3 mt-2">
+                      <div className="flex items-center justify-between text-xs font-semibold text-gray-300 border-b border-[#2d313d] pb-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <Tv size={14} className="text-cyan-400" />
+                          <span>Aspect Ratio & Resolution Scale Guard</span>
+                        </span>
+                        <span className="text-[10px] text-cyan-400 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-800/30 font-semibold">
+                          LED Wall & Display Guard
+                        </span>
                       </div>
-                      <p className="text-[10px] text-gray-400 leading-relaxed font-normal">
-                        Lower your projection's aspect ratio or resolution below to match other standard devices. This prevents truncated or cropped displays on physical screens.
-                      </p>
-                      
+
                       {(() => {
                         const selectedLabel = localOptions.mainOutput.general.outputMonitor;
-                        const matchedScr = screens.find((s: any) => (s.label || s.name) === selectedLabel);
+                        const matchedScr = getMatchedScreen(selectedLabel);
                         const originalW = matchedScr?.bounds?.width || 1920;
                         const originalH = matchedScr?.bounds?.height || 1080;
                         
-                        const gcd = (a: number, b: number): number => b ? gcd(b, a % b) : a;
-                        const div = gcd(originalW, originalH);
-                        const physicalAspect = `${originalW / div}:${originalH / div}`;
+                        const physicalAspectInfo = detectAspectRatioInfo(originalW, originalH);
                         
                         const currentW = localOptions.mainOutput.general.position.width;
                         const currentH = localOptions.mainOutput.general.position.height;
+                        const currentAspectInfo = detectAspectRatioInfo(currentW, currentH);
                         const isLowered = currentW < originalW || currentH < originalH;
-                        
-                        const suggestions = [
-                          { w: 1920, h: 1080, aspect: '16:9', label: '1080p Full HD' },
-                          { w: 1366, h: 768, aspect: '16:9', label: '768p HD' },
-                          { w: 1280, h: 720, aspect: '16:9', label: '720p HD' },
-                          { w: 1024, h: 768, aspect: '4:3', label: '768p XGA' },
-                          { w: 800, h: 600, aspect: '4:3', label: '600p SVGA' },
+
+                        // Physical LED Wall calculations
+                        const ledAspect = detectAspectRatioInfo(ledWallWidth, ledWallHeight);
+                        const isLedAspectMatched = Math.abs(currentAspectInfo.ratio - ledAspect.ratio) < 0.04;
+
+                        // Equalize action for LED Wall (Immediately updates Store, Live Canvas & Projectors)
+                        const handleEqualizeToLedWall = (customW?: number, customH?: number) => {
+                          const targetAspect = (customW && customH) ? detectAspectRatioInfo(customW, customH) : ledAspect;
+                          const targetH = originalH >= 1080 ? 1080 : originalH;
+                          let targetW = Math.round(targetH * targetAspect.ratio);
+                          if (targetW % 2 !== 0) targetW += 1;
+
+                          const newPos = {
+                            ...localOptions.mainOutput.general.position,
+                            width: targetW,
+                            height: targetH,
+                          };
+
+                          const newSettings = {
+                            enabled: true,
+                            width: customW || ledWallWidth,
+                            height: customH || ledWallHeight,
+                            unit: ledWallUnit,
+                            aspectRatio: targetAspect.fraction
+                          };
+
+                          updateMainGeneral({
+                            position: newPos,
+                            scaleMode: 'fill',
+                            ledWallSettings: newSettings
+                          });
+
+                          // Update System Options immediately so all live monitors re-render in real time
+                          useStore.getState().updateSystemOptions((prev) => ({
+                            ...prev,
+                            mainOutput: {
+                              ...prev.mainOutput,
+                              general: {
+                                ...prev.mainOutput.general,
+                                position: newPos,
+                                scaleMode: 'fill',
+                                ledWallSettings: newSettings
+                              }
+                            }
+                          }));
+
+                          // Update output groups while respecting router panel isolation
+                          const currentGroups = useStore.getState().outputGroups;
+                          currentGroups.forEach(g => {
+                            if (targetRouterApply === 'all' || g.id === targetRouterApply || (targetRouterApply === 'primary' && (g.id === 'group-congregation' || g.role === 'primary'))) {
+                              useStore.getState().updateOutputGroup(g.id, {
+                                aspectRatio: `${targetW}x${targetH}`,
+                                customResolution: { width: targetW, height: targetH },
+                                scaleMode: 'fill'
+                              });
+                            }
+                          });
+
+                          window.dispatchEvent(
+                            new CustomEvent('simpleworship:notify', {
+                              detail: `✓ Equalized output to ${targetAspect.fraction} (${targetW}×${targetH}) for ${customW || ledWallWidth}×${customH || ledWallHeight} ${ledWallUnit} LED Wall! Live Canvas & Projector updated with Zero Black Bars.`
+                            })
+                          );
+                        };
+
+                        // Auto-Detect Connected Screen Hardware & Equalize
+                        const handleAutoDetectHardware = async () => {
+                          try {
+                            const displays = await DisplayManager.getDisplays(true);
+                            const selectedLabel = localOptions.mainOutput.general.outputMonitor;
+                            const matched = displays.find(d => 
+                              d.label === selectedLabel || 
+                              d.name === selectedLabel || 
+                              d.id === selectedLabel
+                            ) || displays.find(d => !d.isPrimary) || displays[0];
+
+                            if (matched && matched.bounds) {
+                              const w = matched.bounds.width;
+                              const h = matched.bounds.height;
+                              const detectedAspect = detectAspectRatioInfo(w, h);
+                              
+                              if (detectedAspect.is43) {
+                                setLedWallWidth(12);
+                                setLedWallHeight(9);
+                                setLedWallUnit('ft');
+                              } else if (Math.abs(detectedAspect.ratio - 3/4) < 0.04) {
+                                setLedWallWidth(9);
+                                setLedWallHeight(12);
+                                setLedWallUnit('ft');
+                              }
+
+                              handleEqualizeToLedWall(detectedAspect.is43 ? 12 : undefined, detectedAspect.is43 ? 9 : undefined);
+
+                              window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                                detail: `✓ Auto-detected ${matched.name || 'LED Screen'} (${w}×${h}, ${detectedAspect.fraction})! Output equalized for Zero Black Bars.`
+                              }));
+                            }
+                          } catch (err) {
+                            console.warn('Auto-detect error:', err);
+                          }
+                        };
+
+                        // Preset resolution helper with real-time sync
+                        const applyResolutionPreset = (sugW: number, sugH: number) => {
+                          const newPos = {
+                            ...localOptions.mainOutput.general.position,
+                            width: sugW,
+                            height: sugH
+                          };
+                          const aspectInfo = detectAspectRatioInfo(sugW, sugH);
+
+                          updateMainGeneral({
+                            position: newPos,
+                            scaleMode: 'fill'
+                          });
+
+                          useStore.getState().updateSystemOptions((prev) => ({
+                            ...prev,
+                            mainOutput: {
+                              ...prev.mainOutput,
+                              general: {
+                                ...prev.mainOutput.general,
+                                position: newPos,
+                                scaleMode: 'fill'
+                              }
+                            }
+                          }));
+
+                          const currentGroups = useStore.getState().outputGroups;
+                          currentGroups.forEach(g => {
+                            if (targetRouterApply === 'all' || g.id === targetRouterApply || (targetRouterApply === 'primary' && (g.id === 'group-congregation' || g.role === 'primary'))) {
+                              useStore.getState().updateOutputGroup(g.id, {
+                                aspectRatio: `${sugW}x${sugH}`,
+                                customResolution: { width: sugW, height: sugH },
+                                scaleMode: 'fill'
+                              });
+                            }
+                          });
+
+                          window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                            detail: `✓ Resolution set to ${sugW}×${sugH} (${aspectInfo.fraction})! Live Canvas & Projectors updated.`
+                          }));
+                        };
+
+                        const ledPresets = [
+                          { label: '⭐ 12ft × 9ft (4:3 Horizontal Stage LED Wall)', w: 12, h: 9, unit: 'ft', desc: 'Zero Black Bars - Most Popular' },
+                          { label: '⭐ 9ft × 12ft (3:4 Vertical Pillar LED Wall)', w: 9, h: 12, unit: 'ft', desc: 'Vertical Stage Tower' },
+                          { label: '16ft × 9ft (16:9 Widescreen LED Wall)', w: 16, h: 9, unit: 'ft', desc: 'Standard 16:9' },
+                          { label: '8ft × 6ft (4:3 Compact Stage LED Wall)', w: 8, h: 6, unit: 'ft', desc: 'Compact 4:3' },
+                          { label: '10ft × 8ft (5:4 LED Wall)', w: 10, h: 8, unit: 'ft', desc: 'Stage Wall' },
+                          { label: '20ft × 10ft (2:1 Panoramic LED Wall)', w: 20, h: 10, unit: 'ft', desc: 'Panoramic' },
+                        ];
+
+                        const scaleButtons = [
+                          { w: 1440, h: 1080, aspect: '4:3', label: '1440x1080 (4:3 LED Wall)' },
+                          { w: 1024, h: 768, aspect: '4:3', label: '1024x768 (4:3)' },
+                          { w: 1280, h: 960, aspect: '4:3', label: '1280x960 (4:3)' },
+                          { w: 800, h: 600, aspect: '4:3', label: '800x600 (4:3)' },
+                          { w: 1920, h: 1080, aspect: '16:9', label: '1920x1080 (16:9)' },
+                          { w: 1366, h: 768, aspect: '16:9', label: '1366x768 (16:9)' },
+                          { w: 1280, h: 720, aspect: '16:9', label: '1280x720 (16:9)' },
                         ].filter(s => s.w <= originalW && s.h <= originalH);
-                        
+
                         return (
-                          <div className="space-y-2 pt-1 text-[11px]">
-                            <div className="grid grid-cols-2 gap-2 text-gray-300 bg-[#121317] p-2 rounded">
+                          <div className="space-y-3 text-[11px]">
+                            {/* Device & Signal Info Bar */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-gray-300 bg-[#121317] p-2.5 rounded border border-[#272b36]">
                               <div>
-                                <div className="text-[9px] text-gray-500 uppercase tracking-wider">Device Driver Name:</div>
-                                <div className="font-semibold truncate">{matchedScr?.label || 'Generic Display'}</div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-wider font-bold">Detected Device / Processor:</div>
+                                <div className="font-semibold text-white truncate" title={matchedScr?.label || matchedScr?.name}>
+                                  {matchedScr?.label || matchedScr?.name || 'Primary Display'}
+                                </div>
                               </div>
                               <div>
-                                <div className="text-[9px] text-gray-500 uppercase tracking-wider">Original Aspect:</div>
-                                <div className="font-bold text-cyan-400 font-mono">{physicalAspect} ({originalW}x{originalH})</div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-wider font-bold">Physical Signal Aspect:</div>
+                                <div className="font-bold text-cyan-400 font-mono">
+                                  {physicalAspectInfo.fraction} ({originalW}×{originalH})
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[9px] text-gray-500 uppercase tracking-wider font-bold">Current Software Output:</div>
+                                <div className="font-bold text-amber-300 font-mono">
+                                  {currentAspectInfo.fraction} ({currentW}×{currentH})
+                                </div>
                               </div>
                             </div>
 
-                            <div className="space-y-1.5">
+                            {/* LED WALL PHYSICAL ASPECT RATIO DETECTOR & CALCULATOR */}
+                            <div className="bg-[#14161f] border border-cyan-800/40 rounded-lg p-3 space-y-2.5 shadow-inner">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#252b3d] pb-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm">🎦</span>
+                                  <div>
+                                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                                      <span>LED Wall Screen Aspect Ratio Detector & Calculator</span>
+                                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-normal">Active</span>
+                                    </h4>
+                                    <p className="text-[10px] text-gray-400">
+                                      Detects physical LED wall dimensions (e.g. 12ft × 9ft), calculates physical aspect ratio, checks for black bars, and equalizes output.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleAutoDetectHardware}
+                                    className="px-2.5 py-1 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 text-[10px] font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                                    title="Auto-detect aspect ratio from connected screen hardware"
+                                  >
+                                    <Sparkles size={11} className="text-indigo-400" />
+                                    <span>Auto-Detect Screen</span>
+                                  </button>
+
+                                  <div className="flex items-center gap-1 bg-[#1a1c26] p-0.5 rounded border border-[#303546]">
+                                    {(['ft', 'm', 'px'] as const).map(u => (
+                                      <button
+                                        key={u}
+                                        type="button"
+                                        onClick={() => setLedWallUnit(u)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-all ${
+                                          ledWallUnit === u ? 'bg-cyan-600 text-white shadow-xs' : 'text-gray-400 hover:text-gray-200'
+                                        }`}
+                                      >
+                                        {u}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Physical Dimension Inputs + Swap Button */}
+                              <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-gray-300">Width ({ledWallUnit}):</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={ledWallWidth}
+                                    onChange={(e) => setLedWallWidth(Math.max(1, Number(e.target.value) || 1))}
+                                    className="w-16 bg-[#0f1118] border border-[#373e52] rounded px-2 py-1 text-center font-bold text-white text-xs focus:border-cyan-400 outline-none"
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-gray-300">Height ({ledWallUnit}):</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={ledWallHeight}
+                                    onChange={(e) => setLedWallHeight(Math.max(1, Number(e.target.value) || 1))}
+                                    className="w-16 bg-[#0f1118] border border-[#373e52] rounded px-2 py-1 text-center font-bold text-white text-xs focus:border-cyan-400 outline-none"
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const oldW = ledWallWidth;
+                                    const oldH = ledWallHeight;
+                                    setLedWallWidth(oldH);
+                                    setLedWallHeight(oldW);
+                                  }}
+                                  className="px-2.5 py-1 rounded bg-[#25293a] hover:bg-[#32374d] text-cyan-300 border border-[#3b435b] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                                  title="Swap Width and Height (e.g. 12ft x 9ft horizontal vs 9ft x 12ft vertical)"
+                                >
+                                  <span>⇄ Swap {ledWallWidth} ↔ {ledWallHeight} {ledWallUnit}</span>
+                                </button>
+
+                                <div className="flex items-center gap-1.5 bg-[#1b1f2e] px-2.5 py-1 rounded border border-[#31394e]">
+                                  <span className="text-[10px] text-gray-400">Physical Ratio:</span>
+                                  <span className="font-extrabold text-cyan-300 font-mono text-xs">
+                                    {ledAspect.fraction} ({ledAspect.ratio.toFixed(2)}:1)
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Quick LED Wall Size Presets */}
+                              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                <span className="text-[10px] text-gray-400 font-medium">Quick LED Wall Presets:</span>
+                                {ledPresets.map((p, idx) => {
+                                  const isSelected = ledWallWidth === p.w && ledWallHeight === p.h && ledWallUnit === p.unit;
+                                  return (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() => {
+                                        setLedWallWidth(p.w);
+                                        setLedWallHeight(p.h);
+                                        setLedWallUnit(p.unit as any);
+                                        handleEqualizeToLedWall(p.w, p.h);
+                                      }}
+                                      className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-cyan-500 text-black border-cyan-300 font-bold shadow-sm'
+                                          : 'bg-[#1b1e2a] hover:bg-[#25293a] text-gray-300 border-[#32394c]'
+                                      }`}
+                                    >
+                                      {p.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Display Scale Mode Selector (Eliminate Black Bars) */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 bg-[#12141c] p-2 rounded border border-[#262c3e] mt-1">
+                                <div>
+                                  <span className="text-[10px] font-bold text-gray-200 block">Fullscreen Scaling Mode (Eliminate Black Bars):</span>
+                                  <span className="text-[9px] text-gray-400">Forces output to stretch edge-to-edge on 9ft×12ft LED wall or monitor.</span>
+                                </div>
+                                <select
+                                  value={localOptions.mainOutput.general.scaleMode || 'fill'}
+                                  onChange={(e) => {
+                                    const mode = e.target.value as 'fill' | 'fit' | 'crop';
+                                    updateMainGeneral({ scaleMode: mode });
+                                    useStore.getState().updateSystemOptions(prev => ({
+                                      ...prev,
+                                      mainOutput: {
+                                        ...prev.mainOutput,
+                                        general: { ...prev.mainOutput.general, scaleMode: mode }
+                                      }
+                                    }));
+                                    const currentGroups = useStore.getState().outputGroups;
+                                    currentGroups.forEach(g => {
+                                      if (targetRouterApply === 'all' || g.id === targetRouterApply || (targetRouterApply === 'primary' && (g.id === 'group-congregation' || g.role === 'primary'))) {
+                                        useStore.getState().updateOutputGroup(g.id, { scaleMode: mode });
+                                      }
+                                    });
+                                    window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                                      detail: mode === 'fill' 
+                                        ? '✓ 100% Fullscreen Stretch Fill enabled - Zero Black Bars!' 
+                                        : mode === 'crop' 
+                                          ? '✓ Zoom to Fill enabled - Zero Black Bars!' 
+                                          : '✓ Fit / Letterbox enabled (Original Ratio preserved)'
+                                    }));
+                                  }}
+                                  className="bg-[#0b0d13] border border-[#373e52] rounded px-2 py-1 text-xs text-cyan-300 font-bold outline-none"
+                                >
+                                  <option value="fill">100% Fullscreen Stretch / Fill (Zero Black Bars — Recommended)</option>
+                                  <option value="fit">Fit / Letterbox (Preserve Ratio with Black Bars)</option>
+                                  <option value="crop">Zoom / Crop to Fill (Zero Black Bars, Zoomed)</option>
+                                </select>
+                              </div>
+
+                              {/* Router Panel Target Selection (Maintains panel isolation) */}
+                              <div className="flex flex-wrap items-center justify-between gap-2 bg-[#12141c] p-2 rounded border border-[#262c3e]">
+                                <div>
+                                  <span className="text-[10px] font-bold text-gray-200 block">Apply Aspect Ratio To:</span>
+                                  <span className="text-[9px] text-gray-400">Target a specific router or synchronize across all output panels.</span>
+                                </div>
+                                <select
+                                  value={targetRouterApply}
+                                  onChange={(e) => setTargetRouterApply(e.target.value)}
+                                  className="bg-[#0b0d13] border border-[#373e52] rounded px-2 py-1 text-xs text-white outline-none"
+                                >
+                                  <option value="all">All Router Panels (Global Sync)</option>
+                                  <option value="primary">Router 1 / Primary Sanctuary Projector</option>
+                                  {outputGroups.map(g => (
+                                    <option key={g.id} value={g.id}>{g.name} ({g.role || 'Output'})</option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              {/* Live LED Wall Fullscreen Verification Status Banner */}
+                              {isLedAspectMatched ? (
+                                <div className="bg-emerald-950/30 border border-emerald-500/40 text-emerald-300 text-[11px] p-2.5 rounded-lg leading-relaxed flex items-start gap-2 shadow-xs">
+                                  <span className="text-base shrink-0 mt-0.5">✅</span>
+                                  <div>
+                                    <div className="font-extrabold text-white flex items-center gap-1.5">
+                                      <span>100% Fullscreen Alignment (Zero Black Bars)</span>
+                                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded uppercase tracking-wider font-bold">
+                                        Perfect Match
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-emerald-200/90 mt-0.5">
+                                      Output aspect ratio <strong>{currentAspectInfo.fraction}</strong> ({currentW}×{currentH}) perfectly matches your <strong>{ledWallWidth}×{ledWallHeight} {ledWallUnit} ({ledAspect.fraction})</strong> LED Wall screen. Presentation content, lyrics, and media will fill 100% of the display area with <strong>NO black bars</strong> at the top, bottom, or sides!
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="bg-amber-950/30 border border-amber-500/40 text-amber-200 text-[11px] p-2.5 rounded-lg leading-relaxed space-y-2 shadow-xs">
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-base shrink-0 mt-0.5">⚠️</span>
+                                    <div>
+                                      <div className="font-extrabold text-white flex items-center gap-1.5">
+                                        <span>Black Bars Detected on Physical Screen (Letterboxing / Blank Spaces)</span>
+                                        <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded uppercase tracking-wider font-bold">
+                                          Mismatch
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-amber-200/90 mt-0.5">
+                                        Your physical LED Wall is <strong>{ledAspect.fraction}</strong> ({ledWallWidth}×{ledWallHeight} {ledWallUnit}), but your software output is set to <strong>{currentAspectInfo.fraction}</strong> ({currentW}×{currentH}). This will produce black bars on the top and bottom of your physical LED wall!
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-1 flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEqualizeToLedWall()}
+                                      className="px-3.5 py-1.5 rounded-lg text-xs font-black bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ring-1 ring-emerald-400/40"
+                                    >
+                                      <span>⚡</span>
+                                      <span>Auto-Equalize Output to {ledAspect.fraction} LED Wall (Eliminate Black Bars)</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Quick Scale Down & Equalize Aspect Buttons */}
+                            <div className="space-y-1.5 pt-1">
                               <span className="text-gray-400 font-medium">Quick Scale Down & Equalize Aspect:</span>
                               <div className="flex flex-wrap gap-1.5">
-                                {suggestions.map((sug, i) => {
+                                {scaleButtons.map((sug, i) => {
                                   const isActive = currentW === sug.w && currentH === sug.h;
                                   return (
                                     <button
                                       key={i}
                                       type="button"
-                                      onClick={() => {
-                                        updateMainGeneral({
-                                          position: {
-                                            ...localOptions.mainOutput.general.position,
-                                            width: sug.w,
-                                            height: sug.h
-                                          }
-                                        });
-                                      }}
-                                      className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all ${
+                                      onClick={() => applyResolutionPreset(sug.w, sug.h)}
+                                      className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
                                         isActive
-                                          ? 'bg-cyan-500 text-black border-cyan-400'
+                                          ? 'bg-cyan-500 text-black border-cyan-400 font-bold shadow-xs'
                                           : 'bg-[#1e2029] hover:bg-[#282a36] text-gray-300 border-[#2d313e]'
                                       }`}
                                     >
-                                      {sug.w}x{sug.h} ({sug.aspect})
+                                      {sug.label}
                                     </button>
                                   );
                                 })}
                               </div>
                             </div>
                             
-                            {isLowered && (
+                            {isLowered && !isLedAspectMatched && (
                               <div className="bg-yellow-950/20 border border-yellow-800/30 text-yellow-300/90 text-[10px] p-2 rounded leading-normal flex items-start gap-1.5">
-                                <span className="mt-0.5">⚠️</span>
+                                <span className="mt-0.5">ℹ️</span>
                                 <span>
-                                  <strong>Output Resolution Scaled Down:</strong> Display is lowered to <strong>{currentW}x{currentH}</strong>. The output will automatically scale to fit the physical {originalW}x{originalH} screen while keeping content fully aligned!
+                                  <strong>Output Scaled:</strong> Display is set to <strong>{currentW}×{currentH}</strong>. The output automatically scales to fit the physical {originalW}×{originalH} screen while keeping content fully aligned!
                                 </span>
                               </div>
                             )}
@@ -1105,6 +1563,77 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                         <span className="text-gray-500">pt</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Song Title Setup (Above Verses on Presentation) */}
+                  <div className="bg-[#18191f] border border-[#323642] rounded-lg p-3.5 space-y-3 shadow-sm">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-100 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={localOptions.mainOutput.song.showSongTitle ?? true}
+                          onChange={(e) => updateMainSong({ showSongTitle: e.target.checked })}
+                          className="rounded accent-amber-500"
+                        />
+                        <span className="flex items-center gap-1.5 text-amber-300">
+                          <span>🎵</span>
+                          <span>Display Song Title Above Verses</span>
+                        </span>
+                      </label>
+
+                      {Boolean(localOptions.mainOutput.song.showSongTitle ?? true) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingFontTarget({
+                              title: 'Song Title Font',
+                              font: localOptions.mainOutput.song.songTitleFont || {
+                                ...defaultBaseFont,
+                                family: 'Inter, sans-serif',
+                                maxSize: 46,
+                                color: '#FDE047',
+                                bold: true,
+                                alignHorizontal: 'center',
+                              },
+                              apply: (f) => updateMainSong({ songTitleFont: f })
+                            });
+                          }}
+                          className="px-2.5 py-1 bg-[#252833] hover:bg-[#323746] text-amber-300 text-xs rounded border border-[#3e4456] flex items-center gap-1"
+                        >
+                          <span>Title Font</span>
+                          <ChevronDown size={11} />
+                        </button>
+                      )}
+                    </div>
+
+                    {Boolean(localOptions.mainOutput.song.showSongTitle ?? true) && (
+                      <div className="flex flex-wrap items-start gap-x-6 gap-y-4 pt-2.5 border-t border-[#272b36] text-xs">
+                        <div className="min-w-[150px] flex-1">
+                          <label className="text-gray-400 block mb-1">Display Mode / Slide Filter:</label>
+                          <select
+                            value={localOptions.mainOutput.song.songTitleLocation || 'Above Verses'}
+                            onChange={(e) => updateMainSong({ songTitleLocation: e.target.value as any })}
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-gray-200 focus:border-amber-500 outline-none"
+                          >
+                            <option value="Above Verses">Every Slide (Above Verses)</option>
+                            <option value="First Slide Only">First Slide Only</option>
+                            <option value="None">Disabled / None</option>
+                          </select>
+                        </div>
+
+                        <div className="min-w-[150px] flex-1">
+                          <label className="text-gray-400 block mb-1">Title Casing:</label>
+                          <select
+                            value={localOptions.mainOutput.song.songTitleCasing || 'as_is'}
+                            onChange={(e) => updateMainSong({ songTitleCasing: e.target.value as any })}
+                            className="w-full bg-[#121317] border border-[#3b404d] rounded px-2 py-1 text-gray-200 focus:border-amber-500 outline-none"
+                          >
+                            <option value="as_is">As Entered (Original)</option>
+                            <option value="uppercase">ALL UPPERCASE (AA)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 2. Verse / Chorus / Section Label Formatting */}
@@ -3160,8 +3689,8 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                       </div>
                     </div>
 
-                    {/* Main Target Monitors Live Display Overlay Configuration */}
-                    <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-3">
+                    {/* Main Target Monitors Live Display & Manual Timer Size / System Font Configuration */}
+                    <div className="bg-[#18191f] border border-[#323642] rounded-md p-3.5 space-y-4">
                       <div className="flex items-center justify-between border-b border-[#292c36] pb-2">
                         <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-200 text-sm">
                           <input
@@ -3179,55 +3708,316 @@ function OptionsDialog({ onClose, initialCategory }: OptionsDialogProps) {
                           />
                           <span>Render Countdown on Live Display Canvas (Main Target Monitors)</span>
                         </label>
-                        <span className="text-[11px] text-gray-400 font-mono">Main Sync</span>
+                        <span className="text-[11px] text-gray-400 font-mono">Main & Stage Sync</span>
                       </div>
 
-                      {localOptions.serviceIntervals.showOnMainDisplay && (
-                        <div className="grid grid-cols-2 gap-4 pt-1">
-                          <div>
-                            <label className="text-gray-400 block mb-1 text-xs">Font Family</label>
-                            <select
-                              value={localOptions.serviceIntervals.fontFamily || 'monospace'}
+                      {/* System & Windows Font + Text Color */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-b border-[#292c36] pb-4">
+                        <div>
+                          <label className="text-gray-300 font-semibold block mb-1 text-xs">
+                            System & Windows Font Family
+                          </label>
+                          <SystemFontPicker
+                            value={localOptions.serviceIntervals.fontFamily || 'Segoe UI, sans-serif'}
+                            onChange={(val) => {
+                              setLocalOptions((prev) => ({
+                                ...prev,
+                                serviceIntervals: { ...prev.serviceIntervals, fontFamily: val }
+                              }));
+                              useStore.getState().setServiceIntervalConfig({ fontFamily: val });
+                            }}
+                            previewSample={displayTime}
+                            previewColor={localOptions.serviceIntervals.fontColor || '#ffffff'}
+                            className="w-full"
+                            title="Select any installed Windows or System Font for the Timer"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-gray-300 font-semibold text-xs">Timer Text Color</label>
+                            <span className="text-[10px] text-emerald-400/90 font-medium">Consistent to 00:00 → Auto-Logo</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={/^#[0-9A-Fa-f]{6}$/.test(localOptions.serviceIntervals.fontColor || '#ffffff') ? (localOptions.serviceIntervals.fontColor || '#ffffff') : '#ffffff'}
+                              onInput={(e) => {
+                                const val = (e.target as HTMLInputElement).value;
+                                setLocalOptions((prev) => ({
+                                  ...prev,
+                                  serviceIntervals: { ...prev.serviceIntervals, fontColor: val }
+                                }));
+                                useStore.getState().setServiceIntervalConfig({ fontColor: val });
+                              }}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setLocalOptions((prev) => ({
                                   ...prev,
-                                  serviceIntervals: { ...prev.serviceIntervals, fontFamily: val }
+                                  serviceIntervals: { ...prev.serviceIntervals, fontColor: val }
                                 }));
-                                useStore.getState().setServiceIntervalConfig({ fontFamily: val });
+                                useStore.getState().setServiceIntervalConfig({ fontColor: val });
                               }}
-                              className="w-full bg-[#121317] border border-[#3b404d] rounded px-3 py-1.5 text-white text-xs focus:border-amber-500 outline-none"
+                              className="w-8 h-8 rounded border border-[#3b404d] bg-transparent cursor-pointer shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={localOptions.serviceIntervals.fontColor || '#ffffff'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setLocalOptions((prev) => ({
+                                  ...prev,
+                                  serviceIntervals: { ...prev.serviceIntervals, fontColor: val }
+                                }));
+                                if (/^#[0-9A-Fa-f]{3,6}$/.test(val.trim())) {
+                                  useStore.getState().setServiceIntervalConfig({ fontColor: val.trim() });
+                                }
+                              }}
+                              className="w-20 bg-[#121317] border border-[#3b404d] rounded px-2 py-1 font-mono text-xs text-gray-200 tabular-nums focus:border-amber-500 outline-none"
+                              placeholder="#ffffff"
+                            />
+                            <div
+                              className="ml-auto px-2.5 py-1 rounded bg-[#121317] border border-[#2a2d36] font-black tabular-nums text-xs"
+                              style={{
+                                fontFamily: localOptions.serviceIntervals.fontFamily || 'Segoe UI, sans-serif',
+                                color: localOptions.serviceIntervals.fontColor || '#ffffff'
+                              }}
                             >
-                              <option value="monospace">Monospace</option>
-                              <option value="sans-serif">Sans-serif</option>
-                              <option value="serif">Serif</option>
-                              <option value="Inter">Inter</option>
-                              <option value="Roboto">Roboto</option>
-                              <option value="Montserrat">Montserrat</option>
-                              <option value="Oswald">Oswald</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-gray-400 block mb-1 text-xs">Text Color</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={localOptions.serviceIntervals.fontColor || '#ffffff'}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setLocalOptions((prev) => ({
-                                    ...prev,
-                                    serviceIntervals: { ...prev.serviceIntervals, fontColor: val }
-                                  }));
-                                  useStore.getState().setServiceIntervalConfig({ fontColor: val });
-                                }}
-                                className="w-8 h-8 rounded border border-[#3b404d] bg-transparent cursor-pointer"
-                              />
-                              <span className="font-mono text-xs text-gray-400">{localOptions.serviceIntervals.fontColor || '#ffffff'}</span>
+                              {displayTime}
                             </div>
                           </div>
+                          {/* Quick Color Swatches */}
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            {[
+                              { hex: '#ffffff', name: 'White' },
+                              { hex: '#fbbf24', name: 'Amber Gold' },
+                              { hex: '#facc15', name: 'Yellow' },
+                              { hex: '#38bdf8', name: 'Sky Cyan' },
+                              { hex: '#34d399', name: 'Emerald' },
+                              { hex: '#fb7185', name: 'Rose' },
+                              { hex: '#f97316', name: 'Orange' },
+                              { hex: '#a78bfa', name: 'Violet' },
+                              { hex: '#60a5fa', name: 'Blue' },
+                              { hex: '#000000', name: 'Black' },
+                            ].map((swatch) => (
+                              <button
+                                key={swatch.hex}
+                                type="button"
+                                onClick={() => {
+                                  setLocalOptions((prev) => ({
+                                    ...prev,
+                                    serviceIntervals: { ...prev.serviceIntervals, fontColor: swatch.hex }
+                                  }));
+                                  useStore.getState().setServiceIntervalConfig({ fontColor: swatch.hex });
+                                }}
+                                title={`Set Timer Color: ${swatch.name} (${swatch.hex})`}
+                                className={`w-5 h-5 rounded-full border transition-transform cursor-pointer ${
+                                  (localOptions.serviceIntervals.fontColor || '#ffffff').toLowerCase() === swatch.hex.toLowerCase()
+                                    ? 'scale-115 ring-2 ring-amber-400 border-white'
+                                    : 'border-white/25 hover:scale-110'
+                                }`}
+                                style={{ backgroundColor: swatch.hex }}
+                              />
+                            ))}
+                          </div>
                         </div>
-                      )}
+                      </div>
+
+                      {/* Manual Timer Size Control Suite (Main Display) */}
+                      {(() => {
+                        const curMainSize = Math.max(60, Math.min(720, Number(localOptions.serviceIntervals.fontSize) || 440));
+                        const setMainSize = (val: number) => {
+                          const clamped = Math.max(60, Math.min(720, Math.round(val) || 440));
+                          setLocalOptions((prev) => ({
+                            ...prev,
+                            serviceIntervals: { ...prev.serviceIntervals, fontSize: clamped }
+                          }));
+                          useStore.getState().setServiceIntervalConfig({ fontSize: clamped });
+                        };
+
+                        const isIndepStage = Boolean(localOptions.serviceIntervals.independentStageSize);
+                        const curStageSize = Math.max(10, Math.min(96, Number(localOptions.serviceIntervals.stageTimerSize) || 16));
+                        const setStageSize = (val: number) => {
+                          const clamped = Math.max(10, Math.min(96, Math.round(val) || 16));
+                          setLocalOptions((prev) => ({
+                            ...prev,
+                            serviceIntervals: { ...prev.serviceIntervals, stageTimerSize: clamped }
+                          }));
+                          useStore.getState().setServiceIntervalConfig({ stageTimerSize: clamped });
+                        };
+
+                        return (
+                          <div className="space-y-4">
+                            <div className="space-y-2.5 border-b border-[#292c36] pb-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-200">Main Display Timer Size (Manual Adjust)</span>
+                                <span className="text-xs font-mono font-bold text-amber-400 tabular-nums">{curMainSize}px</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setMainSize(curMainSize - 15)}
+                                  className="px-2.5 py-1 rounded bg-[#252833] hover:bg-[#353949] border border-[#383c4b] text-gray-200 hover:text-white font-bold text-xs cursor-pointer"
+                                  title="Decrease Main Timer Size (-15px)"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="range"
+                                  min={60}
+                                  max={720}
+                                  step={5}
+                                  value={curMainSize}
+                                  onChange={(e) => setMainSize(Number(e.target.value))}
+                                  className="flex-1 accent-amber-500 cursor-pointer h-1.5 bg-[#121317] rounded-lg"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setMainSize(curMainSize + 15)}
+                                  className="px-2.5 py-1 rounded bg-[#252833] hover:bg-[#353949] border border-[#383c4b] text-gray-200 hover:text-white font-bold text-xs cursor-pointer"
+                                  title="Increase Main Timer Size (+15px)"
+                                >
+                                  +
+                                </button>
+                                <div className="flex items-center bg-[#121317] border border-[#3b404d] rounded px-2 py-1 w-20 shrink-0">
+                                  <input
+                                    type="number"
+                                    min={60}
+                                    max={720}
+                                    value={curMainSize}
+                                    onChange={(e) => setMainSize(Number(e.target.value))}
+                                    className="w-full bg-transparent text-white font-mono text-xs tabular-nums outline-none text-right"
+                                  />
+                                  <span className="text-[10px] text-gray-400 font-mono ml-0.5">px</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-gray-400">Size Presets:</span>
+                                {[
+                                  { label: 'S', value: 200 },
+                                  { label: 'M', value: 320 },
+                                  { label: 'L', value: 440 },
+                                  { label: 'XL', value: 540 },
+                                  { label: 'MAX', value: 640 },
+                                ].map((p) => (
+                                  <button
+                                    key={p.label}
+                                    type="button"
+                                    onClick={() => setMainSize(p.value)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer ${
+                                      curMainSize === p.value
+                                        ? 'bg-amber-600/30 text-amber-300 border-amber-500/60 font-bold'
+                                        : 'bg-[#252833] hover:bg-[#353949] text-gray-300 border-[#383c4b]'
+                                    }`}
+                                  >
+                                    {p.label} ({p.value}px)
+                                  </button>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => setMainSize(440)}
+                                  className="ml-auto px-2 py-0.5 rounded text-[10px] bg-[#1e222d] hover:bg-[#2c3242] text-gray-400 hover:text-white border border-[#323846] cursor-pointer"
+                                >
+                                  Reset (440px)
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Independent Stage Display Timer Size */}
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-200">
+                                  <input
+                                    type="checkbox"
+                                    checked={isIndepStage}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setLocalOptions((prev) => ({
+                                        ...prev,
+                                        serviceIntervals: { ...prev.serviceIntervals, independentStageSize: checked }
+                                      }));
+                                      useStore.getState().setServiceIntervalConfig({ independentStageSize: checked });
+                                    }}
+                                    className="rounded accent-sky-500 w-3.5 h-3.5"
+                                  />
+                                  <span>Independent Stage Display Timer Size</span>
+                                </label>
+                                <span className="text-[10px] font-mono text-sky-400 tabular-nums">
+                                  {isIndepStage
+                                    ? `Stage Manual: ${curStageSize}px`
+                                    : `Linked to Main (${Math.max(11, Math.round((curMainSize / 440) * 15))}px)`}
+                                </span>
+                              </div>
+
+                              {isIndepStage && (
+                                <div className="space-y-2 pt-1 pl-1">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setStageSize(curStageSize - 2)}
+                                      className="px-2.5 py-1 rounded bg-[#252833] hover:bg-[#353949] border border-[#383c4b] text-gray-200 hover:text-white font-bold text-xs cursor-pointer"
+                                    >
+                                      -
+                                    </button>
+                                    <input
+                                      type="range"
+                                      min={10}
+                                      max={96}
+                                      step={1}
+                                      value={curStageSize}
+                                      onChange={(e) => setStageSize(Number(e.target.value))}
+                                      className="flex-1 accent-sky-500 cursor-pointer h-1.5 bg-[#121317] rounded-lg"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setStageSize(curStageSize + 2)}
+                                      className="px-2.5 py-1 rounded bg-[#252833] hover:bg-[#353949] border border-[#383c4b] text-gray-200 hover:text-white font-bold text-xs cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                    <div className="flex items-center bg-[#121317] border border-[#3b404d] rounded px-2 py-1 w-20 shrink-0">
+                                      <input
+                                        type="number"
+                                        min={10}
+                                        max={96}
+                                        value={curStageSize}
+                                        onChange={(e) => setStageSize(Number(e.target.value))}
+                                        className="w-full bg-transparent text-white font-mono text-xs tabular-nums outline-none text-right"
+                                      />
+                                      <span className="text-[10px] text-gray-400 font-mono ml-0.5">px</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[10px] text-gray-400">Stage Presets:</span>
+                                    {[
+                                      { label: 'S', value: 14 },
+                                      { label: 'M', value: 20 },
+                                      { label: 'L', value: 28 },
+                                      { label: 'XL', value: 42 },
+                                      { label: 'MAX', value: 64 },
+                                    ].map((p) => (
+                                      <button
+                                        key={p.label}
+                                        type="button"
+                                        onClick={() => setStageSize(p.value)}
+                                        className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer ${
+                                          curStageSize === p.value
+                                            ? 'bg-sky-600/30 text-sky-300 border-sky-500/60 font-bold'
+                                            : 'bg-[#252833] hover:bg-[#353949] text-gray-300 border-[#383c4b]'
+                                        }`}
+                                      >
+                                        {p.label} ({p.value}px)
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 );

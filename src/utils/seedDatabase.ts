@@ -3,6 +3,8 @@ import { BAPTIST_HYMNAL } from '../data/baptistHymnal';
 import { HYMNS_OF_PRAISES } from '../data/hymnsOfPraises';
 import { SPECIAL_NUMBERS } from '../data/specialNumbers';
 import { loadAllAuthenticBibleVerses } from '../data/fullBibleData';
+import { defaultAssets } from '../db/seedData';
+import { isProtectedSystemAsset } from '../db/assets';
 import { Song, ScriptureVerse } from '../types';
 
 export interface SeedResult {

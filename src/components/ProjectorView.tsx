@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../store/useStore';
-import { resolveDisplayAssignments, routeTargetsDisplay } from '../core/DisplayRouter';
+import { resolveDisplayAssignments, routeTargetsDisplay, isSamePhysicalDisplay } from '../core/DisplayRouter';
 import { DisplayManager } from '../core/DisplayManager';
 import MonitorPreviewCanvas from './MonitorPreviewCanvas';
 import { ProjectorErrorBoundary } from './ProjectorErrorBoundary';
@@ -117,13 +117,20 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleVisibility);
 
-    // Hydrate from localStorage if groupStates is empty
+    // Hydrate from localStorage if groupStates or outputGroups is empty
     try {
       const cached = localStorage.getItem('simpleworship_group_states_v1');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && typeof parsed === 'object' && Object.keys(useStore.getState().groupStates || {}).length === 0) {
           useStore.setState({ groupStates: parsed });
+        }
+      }
+      const cachedOG = localStorage.getItem('simpleworship_output_groups_v1');
+      if (cachedOG) {
+        const parsedOG = JSON.parse(cachedOG);
+        if (Array.isArray(parsedOG) && parsedOG.length > 0) {
+          useStore.setState({ outputGroups: parsedOG });
         }
       }
     } catch (e) {}
@@ -135,6 +142,14 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
           const parsed = JSON.parse(e.newValue);
           if (parsed && typeof parsed === 'object') {
             useStore.setState({ groupStates: parsed });
+          }
+        } catch (err) {}
+      }
+      if (e.key === 'simpleworship_output_groups_v1' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            useStore.setState({ outputGroups: parsed });
           }
         } catch (err) {}
       }
@@ -159,14 +174,25 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       });
     }
 
-    // In-browser custom event listener for route changed
+    // In-browser custom event listener for route changed with rock-solid physical monitor verification
     const handleRouteChanged = (e: any) => {
       const targetDisplay = e?.detail?.displayId;
-      if (!displayId || !targetDisplay || targetDisplay === displayId) {
-        if (e?.detail?.groupId) {
-          setCurrentRouteGroupId(e.detail.groupId);
-          useStore.getState().bringRouteToTop(e.detail.groupId);
+      const targetGid = e?.detail?.groupId;
+      if (!targetGid) return;
+
+      if (displayId) {
+        // Only accept route changes destined for THIS physical monitor
+        if (targetDisplay && isSamePhysicalDisplay(targetDisplay, displayId, screens)) {
+          setCurrentRouteGroupId(targetGid);
+          useStore.getState().bringRouteToTop(targetGid);
         }
+      } else {
+        // Standalone window: do not let unrelated route events hijack this window if it was opened for a specific route
+        if (routedGroupId && targetGid !== routedGroupId) {
+          return;
+        }
+        setCurrentRouteGroupId(targetGid);
+        useStore.getState().bringRouteToTop(targetGid);
       }
     };
     window.addEventListener('simpleworship:projector-route-changed', handleRouteChanged);
@@ -256,6 +282,9 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   const routerPanels = useStore(state => state.routerPanels);
   const activeRouterId = useStore(state => state.activeRouterId);
 
+  // Solid candidate groups cache to prevent canvas tear / drop during route switching or async monitor updates
+  const lastValidCandidatesRef = useRef<string[]>([]);
+
   // Candidate Output Groups targeted to THIS physical display (recalculated only when display/groups topology changes)
   // STRICT TARGET LOCK ENFORCEMENT: Only displays targeted/locked by a route receive that route's display
   const candidateGroupIds = useMemo<string[]>(() => {
@@ -279,6 +308,15 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
         const directGroup = outputGroups.find(g => g.id === routedGroupId);
         if (directGroup && routeTargetsDisplay(directGroup, displayId, screens)) {
           candidateSet.add(routedGroupId);
+        }
+      }
+
+      // 3. Fallback: If no groups matched yet (e.g. initial launch or screens still enumerating), retain designated route
+      if (candidateSet.size === 0) {
+        if (routedGroupId && outputGroups.some(g => g.id === routedGroupId && g.role !== 'confidence')) {
+          candidateSet.add(routedGroupId);
+        } else if (currentRouteGroupId && outputGroups.some(g => g.id === currentRouteGroupId && g.role !== 'confidence')) {
+          candidateSet.add(currentRouteGroupId);
         }
       }
     } else {
@@ -311,26 +349,42 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
       }
     }
 
-    return Array.from(candidateSet);
+    const resolvedList = Array.from(candidateSet);
+    if (resolvedList.length > 0) {
+      lastValidCandidatesRef.current = resolvedList;
+      return resolvedList;
+    }
+    if (lastValidCandidatesRef.current.length > 0) {
+      return lastValidCandidatesRef.current;
+    }
+    return resolvedList;
   }, [isStageWindow, displayId, currentRouteGroupId, routedGroupId, outputGroups, screens]);
 
   // Determine all candidate routes currently LIVE on THIS display
   // STRICT PIPELINE ISOLATION: Only candidates assigned to this monitor are checked.
   // Never bleed or display content from unrelated routes across other screens.
+  const showTimerOverlay = Boolean(systemOptions?.serviceIntervals?.showOnMainDisplay);
+
   const liveCandidateGroupIds = useMemo(() => {
     if (isStageWindow) {
       return Boolean(groupStates['group-stage']?.isLiveEnabled) ? ['group-stage'] : [];
     }
-    return candidateGroupIds.filter(gid => Boolean(groupStates[gid]?.isLiveEnabled));
-  }, [candidateGroupIds, isStageWindow, groupStates]);
+    const activeIds = candidateGroupIds.filter(
+      gid => Boolean(groupStates[gid]?.isLiveEnabled || groupStates[gid]?.showLogo)
+    );
+    if (activeIds.length === 0 && showTimerOverlay && candidateGroupIds.length > 0) {
+      return [candidateGroupIds[0]];
+    }
+    return activeIds;
+  }, [candidateGroupIds, isStageWindow, groupStates, showTimerOverlay]);
 
-  // A display is LIVE only if at least one route belonging to THIS display is currently Live ON
+  // A display is LIVE only if at least one route belonging to THIS display is currently Live ON, showing Logo, or showing Timer
   const isLive = useMemo(() => {
     if (isStageWindow) {
       return Boolean(groupStates['group-stage']?.isLiveEnabled);
     }
-    return liveCandidateGroupIds.length > 0;
-  }, [isStageWindow, liveCandidateGroupIds]);
+    return liveCandidateGroupIds.length > 0 || showTimerOverlay;
+  }, [isStageWindow, liveCandidateGroupIds, showTimerOverlay]);
 
   // Stacking Resolution:
   // Render live layers in ascending z-index order (bottom to top).
@@ -338,7 +392,7 @@ export default function ProjectorView({ groupId: initialGroupId, displayId: prop
   // The active router panel / active control route must ALWAYS be at the top of the stack (highest z-index),
   // layered on top of all underlying routes.
   const stackedLayers = useMemo(() => {
-    const designatedDefaultId = currentRouteGroupId || routedGroupId || candidateGroupIds[0] || 'group-congregation';
+    const designatedDefaultId = activeControlGroupId || currentRouteGroupId || routedGroupId || candidateGroupIds[0] || 'group-congregation';
 
     if (liveCandidateGroupIds.length === 0) {
       return [{

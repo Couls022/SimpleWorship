@@ -80,6 +80,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const activeSchedule = useStore(state => state.activeSchedule);
   const songsList = useStore(state => state.songsList);
   const themesList = useStore(state => state.themesList);
+  const assetsList = useStore(state => state.assetsList);
   const setStagedGroupState = useStore(state => state.setStagedGroupState);
   
   const groupAlert = useStore(useCallback(state => (groupId && state.groupAlerts?.[groupId]), [groupId]));
@@ -207,7 +208,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   // Determine native canonical target resolution & aspect ratio based on Selected Output Monitor & General settings
   // The virtual presentation canvas resolution remains canonical (e.g. 1920x1080 or custom group resolution)
   // while CSS transform scales it proportionally to fit any physical projector display without layout shifts or text warping.
-  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins } = React.useMemo(
+  const { width: targetWidth, height: targetHeight, aspectRatio: groupAspectRatio, aspectLabel: groupAspectLabel, margins, scaleMode: groupScaleMode } = React.useMemo(
     () => resolveGroupResolution(group, systemOptions, DisplayManager.getCachedDisplays()),
     [group, systemOptions]
   );
@@ -216,33 +217,50 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const isPptx = activeItem?.type === 'presentation' || activeItem?.type === 'ppt';
   const aspectRatio = groupAspectRatio;
   const aspectLabel = (isPptx && currentSlide?.aspectRatioLabel) ? currentSlide.aspectRatioLabel : groupAspectLabel;
+  const effectiveScaleMode = (group?.scaleMode || systemOptions?.mainOutput?.general?.scaleMode || (isProjectorMode ? 'fill' : 'fit'));
 
   let fittedWidth = effectiveContainerW || 320;
   let fittedHeight = effectiveContainerH || 180;
+  let scaleX = 1;
+  let scaleY = 1;
 
   if (effectiveContainerW > 0 && effectiveContainerH > 0) {
     const availWidth = isProjectorMode ? effectiveContainerW : Math.max(effectiveContainerW - 4, 10);
     const availHeight = isProjectorMode ? effectiveContainerH : Math.max(effectiveContainerH - 4, 10);
     const containerAspect = availWidth / availHeight;
     
-    // In projector mode, if the physical monitor aspect matches the presentation aspect ratio, fill 100% edge-to-edge
-    if (isProjectorMode && Math.abs(containerAspect - aspectRatio) < 0.015) {
+    // In projector mode or fill mode, fill 100% edge-to-edge (Zero Black Bars)
+    if (isProjectorMode && (effectiveScaleMode === 'fill' || Math.abs(containerAspect - aspectRatio) < 0.015)) {
       fittedWidth = availWidth;
       fittedHeight = availHeight;
+      scaleX = fittedWidth / targetWidth;
+      scaleY = fittedHeight / targetHeight;
+    } else if (effectiveScaleMode === 'crop') {
+      const zoomScale = Math.max(availWidth / targetWidth, availHeight / targetHeight);
+      fittedWidth = Math.round(targetWidth * zoomScale);
+      fittedHeight = Math.round(targetHeight * zoomScale);
+      scaleX = zoomScale;
+      scaleY = zoomScale;
     } else if (containerAspect > aspectRatio) {
       // Height is the constraint
       fittedHeight = availHeight;
       fittedWidth = Math.round(fittedHeight * aspectRatio);
+      scaleX = fittedWidth / targetWidth;
+      scaleY = fittedHeight / targetHeight;
     } else {
       // Width is the constraint
       fittedWidth = availWidth;
       fittedHeight = Math.round(fittedWidth / aspectRatio);
+      scaleX = fittedWidth / targetWidth;
+      scaleY = fittedHeight / targetHeight;
     }
   } else {
     fittedHeight = Math.round(fittedWidth / aspectRatio);
+    scaleX = fittedWidth / targetWidth;
+    scaleY = fittedHeight / targetHeight;
   }
 
-  const scale = fittedWidth / targetWidth;
+  const scale = scaleX;
 
   const globalTheme = React.useMemo(() => themesList.find(t => t.type === 'global') || themesList[0], [themesList]);
   const groupTheme = React.useMemo(() => themesList.find(t => t.id === group?.themeId), [themesList, group?.themeId]);
@@ -346,16 +364,6 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   let backgroundUrl = '';
   let audioSrc = '';
 
-  if (isLogoMode) {
-    const defaultLogo = (systemOptions as any)?.general?.defaultLogoUrl || (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl || logoStyles.backgroundImageUrl || logoStyles.logoUrl || resolvedStyles.backgroundImageUrl || '';
-    if ((logoStyles.backgroundType === 'video' && logoStyles.backgroundVideoUrl) || PresentationContentResolver.isVideoUrl(defaultLogo) || (logoStyles.backgroundVideoUrl && PresentationContentResolver.isVideoUrl(logoStyles.backgroundVideoUrl))) {
-      isVideo = true;
-      videoSrc = logoStyles.backgroundVideoUrl || defaultLogo;
-    } else {
-      isVideo = false;
-      backgroundUrl = defaultLogo;
-    }
-  } else {
     const slideBgUrl = currentSlide?.backgroundUrl;
     const slideIsVideo = currentSlide?.isVideo;
 
@@ -406,7 +414,6 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
         }
       }
     }
-  }
 
   // Primary presentation group ('group-congregation' or role === 'primary') is the foundational presentation canvas
   // and must NEVER be treated as a background-less overlay. It always retains wallpaper, background video, and themes.
@@ -431,21 +438,30 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
     isVideo = false;
   }
 
+  const isCleanMediaUrl = (u?: string | null): boolean => {
+    if (!u || typeof u !== 'string') return false;
+    if (u.includes('TRUNCATED_DATA_URL') || u.includes('[TRUNCATED') || u.startsWith('[URL_STRIPPED')) return false;
+    if (u.startsWith('data:') && u.length < 50) return false;
+    return true;
+  };
+
   const resolveSyncUrl = (url: string, contentId?: string): string => {
     if (!url) return '';
-    if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/') || url.startsWith('app:')) {
-      return url;
+    if (isCleanMediaUrl(url)) {
+      if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/') || url.startsWith('app:')) {
+        return url;
+      }
     }
     const assets = useStore.getState().assetsList || [];
-    const directAsset = assets.find(a => a.url === url || (a as any)._oldUrl === url || a.id === url);
-    if (directAsset?.url) return directAsset.url;
+    const directAsset = assets.find(a => (isCleanMediaUrl(a.url) && a.url === url) || (a as any)._oldUrl === url || a.id === url);
+    if (directAsset?.url && isCleanMediaUrl(directAsset.url)) return directAsset.url;
     if (contentId) {
       const byId = assets.find(a => a.id === contentId);
-      if (byId?.url) return byId.url;
+      if (byId?.url && isCleanMediaUrl(byId.url)) return byId.url;
       const cached = dbApi.getCachedUrl(contentId);
-      if (cached) return cached;
+      if (cached && isCleanMediaUrl(cached)) return cached;
     }
-    return url;
+    return isCleanMediaUrl(url) ? url : '';
   };
 
   const syncBg = resolveSyncUrl(backgroundUrl, activeItem?.contentId);
@@ -455,7 +471,7 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const [localAudioSrc, setLocalAudioSrc] = useState<string>('');
 
   const getValidMediaSrc = (src: string | null | undefined): string | undefined => {
-    if (!src) return undefined;
+    if (!src || !isCleanMediaUrl(src)) return undefined;
     if (src.startsWith('blob:') || src.startsWith('http') || src.startsWith('data:') || src.startsWith('file:') || src.startsWith('app:')) return src;
     return undefined;
   };
@@ -463,17 +479,17 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
   const effectiveAudioSrc = localAudioSrc || getValidMediaSrc(resolveAssetUrl(audioSrc)) || getValidMediaSrc(audioSrc) || '';
   const effectiveVideoSrc = localVideoSrc || getValidMediaSrc(resolveAssetUrl(videoSrc)) || getValidMediaSrc(videoSrc) || '';
 
-  const lastValidBgRef = useRef<string>(syncBg || backgroundUrl);
-  if (localBackgroundUrl) {
+  const lastValidBgRef = useRef<string>(isCleanMediaUrl(syncBg) ? syncBg : (isCleanMediaUrl(backgroundUrl) ? backgroundUrl : ''));
+  if (localBackgroundUrl && isCleanMediaUrl(localBackgroundUrl)) {
     lastValidBgRef.current = localBackgroundUrl;
-  } else if (syncBg) {
+  } else if (syncBg && isCleanMediaUrl(syncBg)) {
     lastValidBgRef.current = syncBg;
-  } else if (backgroundUrl) {
+  } else if (backgroundUrl && isCleanMediaUrl(backgroundUrl)) {
     lastValidBgRef.current = backgroundUrl;
   }
   const effectiveBackgroundUrl = (isOverlayGroup && !hasExplicitCustomBackground)
     ? ''
-    : (localBackgroundUrl || syncBg || lastValidBgRef.current || backgroundUrl);
+    : (isCleanMediaUrl(localBackgroundUrl) ? localBackgroundUrl : (isCleanMediaUrl(syncBg) ? syncBg : (isCleanMediaUrl(lastValidBgRef.current) ? lastValidBgRef.current : (isCleanMediaUrl(backgroundUrl) ? backgroundUrl : ''))));
 
   const lastValidItemRef = useRef<PresentationItem | null>(null);
   if (activeItem) {
@@ -557,13 +573,6 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
       isMounted = false; 
     };
   }, [backgroundUrl, videoSrc, audioSrc, activeItem?.contentId, syncBg, syncVideo]);
-
-  const isExplicitVideoItem = (
-    contentType === 'video' ||
-    activeItem?.type === 'video' ||
-    (activeItem?.type === 'media' && activeItem.data?.isVideo === true) ||
-    (activeItem?.type === 'media' && (activeItem.data?.type === 'video' || activeItem.data?.type === 'motion'))
-  );
 
   useEffect(() => {
     if (!isVideo) {
@@ -783,7 +792,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
           style={{
             width: `${targetWidth}px`,
             height: `${targetHeight}px`,
-            transform: `scale(${scale})`,
+            transform: `scale(${scaleX}, ${scaleY})`,
+            transformOrigin: 'top left',
             fontFamily: resolvedStyles.fontFamily || 'Montserrat, sans-serif',
             opacity: (isOverlayGroup && presentationState.isBlack) ? 0 : 1,
             background: (isOverlayGroup && !hasExplicitCustomBackground)
@@ -1215,43 +1225,129 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
             </div>
           )}
 
-          {/* Master Logo Splash Mode or Theme Watermark */}
-          {true && (
-            presentationState.showLogo ? (
-              (!localBackgroundUrl && !videoSrc && !isGradient) ? (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-8 pointer-events-none">
-                  <div className="flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-                    <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
-                      <Sparkles className="w-10 h-10 text-cyan-300 animate-pulse" />
+          {/* Master Logo Splash Mode (Overlays on top of video, PPTX, image, or any live content) */}
+          {presentationState.showLogo && (
+            <div 
+              className="absolute inset-0 z-45 flex flex-col items-center justify-center pointer-events-none select-none overflow-hidden transition-opacity duration-300"
+              style={{
+                backgroundColor: logoStyles.backgroundColor || '#000000',
+                opacity: presentationState.isBlack ? 0 : 1,
+              }}
+            >
+              {/* Optional background image configured in logo theme */}
+              {logoStyles.backgroundType === 'image' && logoStyles.backgroundImageUrl && (
+                <div 
+                  className="absolute inset-0 w-full h-full bg-cover bg-center"
+                  style={{
+                    backgroundImage: `url(${resolveSyncUrl(logoStyles.backgroundImageUrl) || resolveAssetUrl(logoStyles.backgroundImageUrl) || logoStyles.backgroundImageUrl})`,
+                    opacity: (logoStyles as any).backgroundOpacity ?? 1,
+                  }}
+                />
+              )}
+
+              {/* Master Logo Artwork (Image or Video) or High-Contrast Splash Emblem */}
+              {(() => {
+                const defaultLogoAsset = assetsList?.find(a => a.isDefaultScope?.logo === true);
+                const rawLogoCandidate =
+                  (defaultLogoAsset ? (resolveAssetUrl(defaultLogoAsset.url) || defaultLogoAsset.url || defaultLogoAsset.id) : '') ||
+                  logoStyles.logoUrl || 
+                  logoStyles.backgroundVideoUrl ||
+                  (systemOptions as any)?.general?.defaultLogoUrl || 
+                  (systemOptions as any)?.mainOutput?.general?.defaultLogoUrl || 
+                  (systemOptions as any)?.mainOutput?.general?.logoUrl || 
+                  logoStyles.backgroundImageUrl || 
+                  resolvedStyles.logoUrl || 
+                  resolvedStyles.backgroundImageUrl || 
+                  '';
+                const masterLogoUrl = resolveSyncUrl(rawLogoCandidate) || resolveAssetUrl(rawLogoCandidate) || rawLogoCandidate;
+                const isLogoVideo = Boolean(
+                  defaultLogoAsset?.type === 'video' ||
+                  defaultLogoAsset?.type === 'motion' ||
+                  logoStyles.backgroundType === 'video' ||
+                  isVideoUrl(masterLogoUrl) ||
+                  /\.(mp4|webm|mov|mkv)(\?.*)?$/i.test(masterLogoUrl)
+                );
+
+                if (masterLogoUrl) {
+                  if (isLogoVideo) {
+                    return (
+                      <video
+                        src={masterLogoUrl}
+                        autoPlay
+                        loop
+                        muted={isThumbnail || isInactivePreview}
+                        playsInline
+                        className="relative z-10 w-full h-full object-cover"
+                      />
+                    );
+                  }
+                  return (
+                    <div className="relative z-10 flex flex-col items-center justify-center w-full h-full p-6">
+                      <img 
+                        src={masterLogoUrl} 
+                        alt="Logo" 
+                        className="object-contain drop-shadow-2xl transition-transform"
+                        style={{
+                          width: logoStyles.logoSize ? `${logoStyles.logoSize * 2}px` : '100%',
+                          height: logoStyles.logoSize ? `${logoStyles.logoSize * 2}px` : '100%',
+                          maxWidth: '100%',
+                          maxHeight: '100%',
+                          opacity: logoStyles.logoOpacity ?? 1.0,
+                        }}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector('.logo-fallback-badge');
+                          if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                        }}
+                      />
+                      <div className="logo-fallback-badge hidden flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+                        <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
+                          <Sparkles className="w-12 h-12 text-cyan-300 animate-pulse" />
+                        </div>
+                        <span className="text-2xl font-black tracking-wider uppercase text-white drop-shadow-md">
+                          {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-xl font-black tracking-wider uppercase text-white drop-shadow-md">
+                  );
+                }
+
+                return (
+                  <div className="relative z-10 flex flex-col items-center justify-center gap-4 text-cyan-400 drop-shadow-2xl animate-in fade-in zoom-in-95 duration-300 p-8">
+                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-cyan-600/30 to-cyan-400/20 border-2 border-cyan-400/50 flex items-center justify-center backdrop-blur-md shadow-2xl">
+                      <Sparkles className="w-12 h-12 text-cyan-300 animate-pulse" />
+                    </div>
+                    <span className="text-2xl font-black tracking-wider uppercase text-white drop-shadow-md">
                       {(systemOptions as any)?.general?.organizationName || 'SimpleWorship'}
                     </span>
                   </div>
-                </div>
-              ) : null
-            ) : (resolvedStyles.showLogo && resolvedStyles.logoUrl) ? (
-              <div 
-                className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg ${
-                  resolvedStyles.logoPosition === 'top-left' ? 'top-8 left-8' :
-                  resolvedStyles.logoPosition === 'top-right' ? 'top-8 right-8' :
-                  resolvedStyles.logoPosition === 'bottom-left' ? 'bottom-8 left-8' :
-                  resolvedStyles.logoPosition === 'top-center' ? 'top-8 left-1/2 -translate-x-1/2' :
-                  resolvedStyles.logoPosition === 'bottom-center' ? 'bottom-8 left-1/2 -translate-x-1/2' :
-                  'bottom-8 right-8'
-                }`}
-                style={{ opacity: resolvedStyles.logoOpacity ?? 0.85 }}
-              >
-                <img 
-                  src={resolvedStyles.logoUrl} 
-                  alt="Logo" 
-                  className="h-7 w-auto object-contain" 
-                  onError={(e) => {
-                    (e.currentTarget as HTMLElement).style.display = 'none';
-                  }}
-                />
-              </div>
-            ) : null
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Theme Watermark (Only active when Master Logo Mode is OFF and theme specifies a watermark) */}
+          {!presentationState.showLogo && resolvedStyles.showLogo && resolvedStyles.logoUrl && (
+            <div 
+              className={`absolute z-20 flex items-center gap-2 px-3.5 py-2 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 shadow-lg pointer-events-none ${
+                resolvedStyles.logoPosition === 'top-left' ? 'top-8 left-8' :
+                resolvedStyles.logoPosition === 'top-right' ? 'top-8 right-8' :
+                resolvedStyles.logoPosition === 'bottom-left' ? 'bottom-8 left-8' :
+                resolvedStyles.logoPosition === 'top-center' ? 'top-8 left-1/2 -translate-x-1/2' :
+                resolvedStyles.logoPosition === 'bottom-center' ? 'bottom-8 left-1/2 -translate-x-1/2' :
+                'bottom-8 right-8'
+              }`}
+              style={{ opacity: resolvedStyles.logoOpacity ?? 0.85 }}
+            >
+              <img 
+                src={resolvedStyles.logoUrl} 
+                alt="Logo Watermark" 
+                className="h-7 w-auto object-contain" 
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
+            </div>
           )}
 
           {/* Slide Annotation Layer (Semi-transparent vector overlay that persists across transitions) */}
@@ -1332,8 +1428,8 @@ const MonitorPreviewCanvas = React.memo(function MonitorPreviewCanvas({
 
           {/* Clear State - Text is already hidden above, keep clean display */}
 
-          {/* Service Interval Countdown Timer for Main Displays */}
-          <MainDisplayCountdownOverlay isBlack={presentationState.isBlack} />
+          {/* Service Interval Countdown Timer for Main Displays (Base canvas only, never duplicated on overlay routes) */}
+          {!isOverlayGroup && <MainDisplayCountdownOverlay isBlack={presentationState.isBlack} />}
 
           {/* Master Blackout Overlay (z-50) - Only for base canvas; overlays hide transparently */}
           <AnimatePresence>

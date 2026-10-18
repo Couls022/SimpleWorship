@@ -316,6 +316,43 @@ function SongEditorModal({
     return 'Hymns';
   });
 
+  // Dedicated Song Title Presentation Setup (Separate from lyrics editing)
+  const [showTitleAboveVerses, setShowTitleAboveVerses] = useState<boolean>(() => {
+    if (scheduleItem?.data?.showTitleAboveVerses !== undefined) return Boolean(scheduleItem.data.showTitleAboveVerses);
+    if (song?.showTitleAboveVerses !== undefined) return Boolean(song.showTitleAboveVerses);
+    return systemOptions?.mainOutput?.song?.showSongTitle ?? true;
+  });
+
+  const [titlePlacement, setTitlePlacement] = useState<'all_slides' | 'first_slide' | 'none'>(() => {
+    return scheduleItem?.data?.titlePlacement || song?.titlePlacement || (systemOptions?.mainOutput?.song?.songTitleLocation === 'First Slide Only' ? 'first_slide' : 'all_slides');
+  });
+
+  const [titleFontSize, setTitleFontSize] = useState<number>(() => {
+    return scheduleItem?.data?.titleFontSize || song?.titleFontSize || systemOptions?.mainOutput?.song?.songTitleFont?.maxSize || 44;
+  });
+
+  const [titleFontColor, setTitleFontColor] = useState<string>(() => {
+    return scheduleItem?.data?.titleFontColor || song?.titleFontColor || systemOptions?.mainOutput?.song?.songTitleFont?.color || '#FDE047';
+  });
+
+  const [titleFontFamily, setTitleFontFamily] = useState<string>(() => {
+    return scheduleItem?.data?.titleFontFamily || song?.titleFontFamily || systemOptions?.mainOutput?.song?.songTitleFont?.family || '';
+  });
+
+  const [titleBold, setTitleBold] = useState<boolean>(() => {
+    if (scheduleItem?.data?.titleBold !== undefined) return Boolean(scheduleItem.data.titleBold);
+    if (song?.titleBold !== undefined) return Boolean(song.titleBold);
+    return systemOptions?.mainOutput?.song?.songTitleFont?.bold ?? true;
+  });
+
+  const [titleUppercase, setTitleUppercase] = useState<boolean>(() => {
+    if (scheduleItem?.data?.titleUppercase !== undefined) return Boolean(scheduleItem.data.titleUppercase);
+    if (song?.titleUppercase !== undefined) return Boolean(song.titleUppercase);
+    return systemOptions?.mainOutput?.song?.songTitleCasing === 'uppercase';
+  });
+
+  const [showTitleStyleDrawer, setShowTitleStyleDrawer] = useState<boolean>(false);
+
   // Active Left Sidebar Tab ('Words' | 'Slides')
   const [activeLeftTab, setActiveLeftTab] = useState<'Words' | 'Slides'>('Words');
   const [showMetadataAccordion, setShowMetadataAccordion] = useState(false);
@@ -1073,6 +1110,13 @@ function SongEditorModal({
         data: {
           ...scheduleItem.data,
           title: title.trim(),
+          showTitleAboveVerses,
+          titlePlacement,
+          titleFontSize,
+          titleFontColor,
+          titleFontFamily,
+          titleBold,
+          titleUppercase,
           sections,
           lyrics: rawLyrics.trim(),
           text: rawLyrics.trim()
@@ -1098,7 +1142,14 @@ function SongEditorModal({
           lyrics: rawLyrics.trim(),
           sections,
           defaultBackgroundUrl: backgroundUrl,
-          themeOverride
+          themeOverride,
+          showTitleAboveVerses,
+          titlePlacement,
+          titleFontSize,
+          titleFontColor,
+          titleFontFamily,
+          titleBold,
+          titleUppercase,
         };
         await useStore.getState().addSong(updatedMaster);
       }
@@ -1107,8 +1158,7 @@ function SongEditorModal({
         new CustomEvent('simpleworship:notify', { 
           detail: `Schedule item "${title.trim()}" updated successfully!` 
         })
-        
-  );
+      );
 
       if (andClose) onClose();
       return;
@@ -1127,7 +1177,14 @@ function SongEditorModal({
       lyrics: rawLyrics.trim(),
       sections,
       defaultBackgroundUrl: backgroundUrl,
-      themeOverride
+      themeOverride,
+      showTitleAboveVerses,
+      titlePlacement,
+      titleFontSize,
+      titleFontColor,
+      titleFontFamily,
+      titleBold,
+      titleUppercase,
     };
 
     await useStore.getState().addSong(updatedSong);
@@ -1257,7 +1314,7 @@ function SongEditorModal({
         fontFamily: previewThemeStyles.fontFamily || 'Tahoma, sans-serif',
         fontWeight: previewThemeStyles.fontWeight || (songOpts?.songFont?.bold ? '700' : '400'),
         fontStyle: previewThemeStyles.fontStyle || (songOpts?.songFont?.italic ? 'italic' : 'normal'),
-        hasHeader,
+        hasHeader: Boolean(hasHeader || (isSong && showTitleAboveVerses && title.trim())),
         hasFooter: Boolean(isSong && songOpts?.displayCopyrightInfo),
         scale: 1,
         minFontSize: isSong ? (songOpts?.minFontSize || 24) : (scriptureOpts?.minFontSize || 24),
@@ -1384,65 +1441,154 @@ function SongEditorModal({
       </div>
 
       {/* 2. Top Title Input & Toolbar Ribbon */}
-        <div className="bg-[#242731] border-b border-[#181a20] px-3 py-2 shrink-0 flex flex-wrap items-center justify-between gap-2">
-          {/* Left Title & Category */}
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Title:</span>
+        <div className="bg-[#1f222b] border-b border-[#14161c] px-3 py-2 shrink-0 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* Dedicated Song Title Setup Card */}
+            <div className="flex items-center gap-2.5 flex-wrap flex-1 min-w-[320px]">
+              <div className="flex items-center gap-1.5 bg-[#14161d] px-2.5 py-1.5 rounded-lg border border-[#303545] shadow-inner">
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                  <span>🎵</span>
+                  <span>Title:</span>
+                </span>
                 <input
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Title / Reference..."
-                  className="w-56 md:w-64 bg-[#16171c] border border-[#3b3f4f] rounded px-2 py-0.5 text-xs text-gray-100 font-semibold focus:outline-none focus:border-indigo-500"
+                  placeholder="Song Title / Reference..."
+                  className="w-48 sm:w-60 md:w-72 bg-transparent border-0 text-xs text-white font-bold focus:outline-none placeholder:text-gray-500"
                 />
+              </div>
 
-                {/* Category Selector */}
-                <div className="flex items-center gap-1.5 ml-1 bg-[#16181f] px-2 py-0.5 rounded border border-[#373c4d]">
-                  <FolderOpen size={12} className="text-cyan-400" />
-                  <span className="text-[10px] font-bold text-gray-400 uppercase">Category:</span>
+              {/* Show Title Above Verses Toggle */}
+              <label 
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border cursor-pointer select-none transition-all ${
+                  showTitleAboveVerses 
+                    ? 'bg-amber-950/40 border-amber-500/50 text-amber-300 shadow-sm' 
+                    : 'bg-[#14161d] border-[#303545] text-gray-400 hover:text-gray-200'
+                }`}
+                title="Display Song Title above verses on presentation slides"
+              >
+                <input
+                  type="checkbox"
+                  checked={showTitleAboveVerses}
+                  onChange={(e) => setShowTitleAboveVerses(e.target.checked)}
+                  className="rounded text-amber-500 bg-[#161820] border-gray-600 focus:ring-0 w-3.5 h-3.5"
+                />
+                <span className="text-[11px] font-bold">Title Above Verses</span>
+              </label>
+
+              {/* Quick Title Formatting when Title Above Verses is Enabled */}
+              {showTitleAboveVerses && (
+                <div className="flex items-center gap-1.5 bg-[#161822] px-2 py-1 rounded-lg border border-[#313647]">
+                  {/* Title Scope: All Slides vs First Slide */}
                   <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
-                    className="bg-transparent text-cyan-300 font-bold text-xs focus:outline-none cursor-pointer"
+                    value={titlePlacement}
+                    onChange={(e) => setTitlePlacement(e.target.value as any)}
+                    className="bg-[#212532] text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded border border-[#3f465c] outline-none cursor-pointer"
+                    title="Slide placement for Song Title"
                   >
-                    <option value="Hymns" className="bg-[#1f2229] text-gray-200">Hymns</option>
-                    <option value="Special Number" className="bg-[#1f2229] text-gray-200">Special Number</option>
-                    <option value="Presentation" className="bg-[#1f2229] text-gray-200">Presentation</option>
+                    <option value="all_slides">Every Slide</option>
+                    <option value="first_slide">1st Slide Only</option>
                   </select>
+
+                  {/* Title Font Size */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] text-gray-400 uppercase font-mono">Size:</span>
+                    <input
+                      type="number"
+                      min="16"
+                      max="100"
+                      value={titleFontSize}
+                      onChange={(e) => setTitleFontSize(Math.max(16, Math.min(100, Number(e.target.value) || 36)))}
+                      className="w-11 bg-[#212532] border border-[#3f465c] text-center text-white text-[11px] font-bold rounded py-0.5 outline-none"
+                    />
+                  </div>
+
+                  {/* Title Color Picker & Swatches */}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="color"
+                      value={titleFontColor}
+                      onChange={(e) => setTitleFontColor(e.target.value)}
+                      className="w-4 h-4 rounded cursor-pointer border-0 bg-transparent p-0"
+                      title="Custom Title Color"
+                    />
+                    <div className="flex items-center gap-0.5">
+                      {['#FDE047', '#FFFFFF', '#67E8F9', '#FCD34D'].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setTitleFontColor(c)}
+                          className="w-3.5 h-3.5 rounded-full border border-gray-600 hover:scale-110 transition-transform"
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Uppercase Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setTitleUppercase(!titleUppercase)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                      titleUppercase ? 'bg-amber-600 border-amber-400 text-white' : 'bg-[#212532] border-[#3f465c] text-gray-400'
+                    }`}
+                    title={titleUppercase ? "Uppercase enabled (AA)" : "Natural casing (Aa)"}
+                  >
+                    AA
+                  </button>
+
+                  {/* More Title Style Settings */}
+                  <button
+                    type="button"
+                    onClick={() => setShowTitleStyleDrawer(!showTitleStyleDrawer)}
+                    className={`p-1 rounded text-gray-400 hover:text-white transition-colors ${
+                      showTitleStyleDrawer ? 'bg-amber-700/50 text-amber-300' : 'hover:bg-[#282d3d]'
+                    }`}
+                    title="More Title Typography Options"
+                  >
+                    <SlidersHorizontal size={12} />
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Sub-tools beneath title */}
-              <div className="flex items-center space-x-2 text-gray-400 mt-0.5">
-                <button 
-                  onClick={() => setShowMetadataAccordion(!showMetadataAccordion)} 
-                  className="px-1.5 py-0.5 bg-[#1a1c22] hover:bg-[#343845] hover:text-emerald-400 rounded transition-colors flex items-center gap-1 text-[10px] border border-[#323644]"
-                  title="Author, Key, CCLI & Copyright info"
+              {/* Category Selector */}
+              <div className="flex items-center gap-1 bg-[#14161d] px-2 py-1 rounded-lg border border-[#303545]">
+                <FolderOpen size={11} className="text-cyan-400" />
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as any)}
+                  className="bg-transparent text-cyan-300 font-bold text-[11px] focus:outline-none cursor-pointer"
                 >
-                  <TagIcon size={11} className="text-emerald-400" />
-                  <span>Metadata & CCLI</span>
-                </button>
-                <span className="text-[10px] text-gray-500 font-mono">
-                  {author ? `By ${author}` : ''} {musicalKey ? `• Key of ${musicalKey}` : ''}
-                </span>
+                  <option value="Hymns" className="bg-[#1f2229] text-gray-200">Hymns</option>
+                  <option value="Special Number" className="bg-[#1f2229] text-gray-200">Special Number</option>
+                  <option value="Presentation" className="bg-[#1f2229] text-gray-200">Presentation</option>
+                </select>
               </div>
-            </div>
-          </div>
 
-          {/* Right Ribbon Toolbar Tabs */}
-          <div className="flex items-center gap-1 bg-[#1a1c23] p-1 rounded border border-[#333744]">
-            <button
-              onClick={() => setActiveRibbonTool(activeRibbonTool === 'format' ? null : 'format')}
-              className={`flex flex-col items-center justify-center px-3 py-1 rounded transition-colors ${
-                activeRibbonTool === 'format' ? 'bg-[#373c4d] text-cyan-300 font-bold' : 'hover:bg-[#2c303c] text-gray-300 hover:text-white'
-              }`}
-              title="Font, Text Alignment & Colors"
-            >
-              <Sliders size={15} className="text-emerald-400 mb-0.5" />
-              <span className="text-[10px]">Format Text</span>
-            </button>
+              {/* Metadata & CCLI button */}
+              <button 
+                onClick={() => setShowMetadataAccordion(!showMetadataAccordion)} 
+                className="px-2 py-1 bg-[#14161d] hover:bg-[#2b3040] hover:text-emerald-400 rounded-lg transition-colors flex items-center gap-1 text-[11px] border border-[#303545] text-gray-300"
+                title="Author, Key, CCLI & Copyright info"
+              >
+                <TagIcon size={11} className="text-emerald-400" />
+                <span>Info / CCLI</span>
+              </button>
+            </div>
+
+            {/* Right Ribbon Toolbar Tabs */}
+            <div className="flex items-center gap-1 bg-[#161822] p-1 rounded-lg border border-[#2e3344] shrink-0">
+              <button
+                onClick={() => setActiveRibbonTool(activeRibbonTool === 'format' ? null : 'format')}
+                className={`flex flex-col items-center justify-center px-3 py-1 rounded transition-colors ${
+                  activeRibbonTool === 'format' ? 'bg-[#373c4d] text-cyan-300 font-bold' : 'hover:bg-[#2c303c] text-gray-300 hover:text-white'
+                }`}
+                title="Font, Text Alignment & Colors"
+              >
+                <Sliders size={15} className="text-emerald-400 mb-0.5" />
+                <span className="text-[10px]">Format Text</span>
+              </button>
 
             <button
               onClick={() => setActiveRibbonTool(activeRibbonTool === 'template' ? null : 'template')}
@@ -1489,6 +1635,7 @@ function SongEditorModal({
             </button>
           </div>
         </div>
+      </div>
 
         {/* 2b. Ribbon Popups / Sub-Panels */}
         {/* FORMAT TEXT PANEL */}
@@ -1767,6 +1914,105 @@ function SongEditorModal({
           </div>
         )}
 
+        {/* Dedicated Song Title Style & Header Drawer */}
+        {showTitleStyleDrawer && (
+          <div className="bg-[#1a1a24] border-b border-amber-500/30 px-4 py-3 flex flex-wrap items-center gap-4 text-xs animate-in slide-in-from-top-2 duration-100 shadow-xl">
+            <div className="flex items-center gap-1.5 font-bold text-amber-400 text-[11px] border-r border-[#34384a] pr-3 shrink-0">
+              <span>👑 Presentation Title Setup:</span>
+            </div>
+
+            {/* Title Font Family */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-400 text-[11px]">Font:</span>
+              <SystemFontPicker
+                value={titleFontFamily || previewThemeStyles.fontFamily || 'Tahoma, sans-serif'}
+                onChange={(family) => setTitleFontFamily(family)}
+                buttonClassName="bg-[#242732] border-[#3b3f4f] text-xs py-0.5 px-2 text-amber-300 font-semibold"
+              />
+            </div>
+
+            {/* Title Size */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-400 text-[11px]">Size:</span>
+              <input
+                type="number"
+                min="16"
+                max="100"
+                value={titleFontSize}
+                onChange={(e) => setTitleFontSize(Math.max(16, Math.min(100, Number(e.target.value) || 36)))}
+                className="w-14 bg-[#242732] border border-[#3b3f4f] rounded px-1.5 py-0.5 text-xs text-amber-300 text-center font-bold"
+              />
+              <span className="text-gray-500 text-[10px]">pt</span>
+            </div>
+
+            {/* Title Color */}
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 text-[11px]">Color:</span>
+              <input
+                type="color"
+                value={titleFontColor}
+                onChange={(e) => setTitleFontColor(e.target.value)}
+                className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent"
+              />
+              <div className="flex items-center gap-1">
+                {['#FDE047', '#FFFFFF', '#67E8F9', '#FEF3C7', '#F472B6'].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setTitleFontColor(c)}
+                    className="w-4 h-4 rounded-full border border-gray-600 hover:scale-110 transition-transform"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Title Bold & Casing */}
+            <div className="flex items-center gap-2 border-l border-[#34384a] pl-3">
+              <label className="flex items-center gap-1 cursor-pointer text-gray-300 select-none">
+                <input
+                  type="checkbox"
+                  checked={titleBold}
+                  onChange={(e) => setTitleBold(e.target.checked)}
+                  className="rounded text-amber-500 bg-[#242732] border-gray-600"
+                />
+                <span className="text-[11px] font-bold">Bold</span>
+              </label>
+
+              <label className="flex items-center gap-1 cursor-pointer text-gray-300 select-none ml-2">
+                <input
+                  type="checkbox"
+                  checked={titleUppercase}
+                  onChange={(e) => setTitleUppercase(e.target.checked)}
+                  className="rounded text-amber-500 bg-[#242732] border-gray-600"
+                />
+                <span className="text-[11px] font-bold">UPPERCASE</span>
+              </label>
+            </div>
+
+            {/* Display Placement */}
+            <div className="flex items-center gap-1.5 border-l border-[#34384a] pl-3">
+              <span className="text-gray-400 text-[11px]">Show on:</span>
+              <select
+                value={titlePlacement}
+                onChange={(e) => setTitlePlacement(e.target.value as any)}
+                className="bg-[#242732] border border-[#3b3f4f] rounded px-2 py-0.5 text-xs text-amber-300 font-bold"
+              >
+                <option value="all_slides">Every Slide (Above Verses)</option>
+                <option value="first_slide">First Slide Only</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTitleStyleDrawer(false)}
+              className="ml-auto text-gray-400 hover:text-white px-2 py-0.5 rounded bg-[#242732] hover:bg-[#323648] text-[11px]"
+            >
+              Done
+            </button>
+          </div>
+        )}
+
         {/* 3. Main Body: Left Editor Sidebar & Right Stage Canvas */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Column: Words vs Slides Tabs (Resizable width) */}
@@ -1814,13 +2060,7 @@ function SongEditorModal({
                       onFocus={updateCursorState}
                       wrap="soft"
                       onChange={(e) => {
-                        let val = e.target.value;
-                        const titleMatch = val.match(/^\s*(?:Title\s*:|Title)\s*\n?([^\n]+)(?:\n\s*\n|\n|$)/i);
-                        if (titleMatch) {
-                          setTitle(titleMatch[1].trim());
-                          val = val.replace(titleMatch[0], '').trimStart();
-                        }
-                        setRawLyrics(val);
+                        setRawLyrics(e.target.value);
                         updateCursorState();
                       }}
                       className="w-full h-full flex-1 bg-transparent p-3 text-sm text-gray-100 font-sans leading-relaxed resize-none custom-scrollbar focus:outline-none whitespace-pre-wrap break-words"
@@ -1965,21 +2205,50 @@ function SongEditorModal({
                       } ${isDragging ? 'cursor-grabbing ring-2 ring-amber-400 scale-[1.01]' : 'cursor-grab'}`}
                       style={cardStyle.style}
                     >
-                      {/* Top Slide Header Label if Header location */}
-                      {hasHeader && activeSlide.label && (
-                        <h2 
-                          className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full text-center"
-                          style={{
-                            ...labelCss,
-                            fontSize: labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '36px',
-                            fontFamily: labelThemeStyles?.fontFamily || previewThemeStyles.fontFamily,
-                            textAlign: (labelThemeStyles?.textAlign || previewThemeStyles.textAlign || 'center') as any,
-                            color: labelThemeStyles?.fontColor || '#67E8F9',
-                          }}
-                        >
-                          {activeSlide.label.replace(/:(.*)/, '') || activeSlide.label}
-                        </h2>
-                      )}
+                      {/* Song Title and Header above Verses on Presentation Stage */}
+                      {(() => {
+                        const shouldShowTitleOnThisSlide = isSong && showTitleAboveVerses && Boolean(title.trim()) && (titlePlacement === 'all_slides' || activeSlideIndex === 0);
+                        if (!shouldShowTitleOnThisSlide && !hasHeader) return null;
+
+                        return (
+                          <div className="mb-4 flex flex-col items-center justify-center text-center max-w-full z-20">
+                            {shouldShowTitleOnThisSlide && (
+                              <h1 
+                                className="font-bold tracking-wider opacity-95 drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)] max-w-full leading-tight"
+                                style={{
+                                  color: titleFontColor,
+                                  fontSize: `${titleFontSize}px`,
+                                  fontFamily: titleFontFamily || previewThemeStyles.fontFamily,
+                                  fontWeight: titleBold ? '700' : '500',
+                                  textAlign: (previewThemeStyles.textAlign || 'center') as any,
+                                  textShadow: '0 2px 14px rgba(0,0,0,0.95)',
+                                }}
+                              >
+                                {titleUppercase ? title.toUpperCase() : title}
+                              </h1>
+                            )}
+
+                            {hasHeader && activeSlide.label && (
+                              <div 
+                                className={`font-bold opacity-90 drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)] ${
+                                  shouldShowTitleOnThisSlide 
+                                    ? 'mt-1.5 text-cyan-300 text-sm tracking-widest uppercase bg-black/45 px-3.5 py-0.5 rounded-full border border-cyan-500/30' 
+                                    : 'text-cyan-300 text-2xl tracking-wider'
+                                }`}
+                                style={{
+                                  ...labelCss,
+                                  fontSize: shouldShowTitleOnThisSlide ? undefined : (labelThemeStyles?.fontSize ? `${labelThemeStyles.fontSize}px` : '36px'),
+                                  fontFamily: labelThemeStyles?.fontFamily || previewThemeStyles.fontFamily,
+                                  textAlign: (labelThemeStyles?.textAlign || previewThemeStyles.textAlign || 'center') as any,
+                                  color: labelThemeStyles?.fontColor || '#67E8F9',
+                                }}
+                              >
+                                {activeSlide.label.replace(/:(.*)/, '') || activeSlide.label}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Top Hold & Drag Move Handle Ribbon */}
                       <div className="absolute -top-3 left-3 bg-cyan-950/90 border border-cyan-400/60 text-cyan-200 text-[10px] font-bold px-2 py-0.5 rounded shadow-lg flex items-center gap-1 cursor-grab active:cursor-grabbing opacity-90 group-hover:opacity-100 transition-opacity z-30">

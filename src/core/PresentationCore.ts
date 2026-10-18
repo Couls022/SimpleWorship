@@ -313,18 +313,22 @@ export class PresentationCore {
         }
       }
 
-      // Add a title slide automatically if it doesn't exist
-      const hasTitleSlide = generated.length > 0 && generated[0].title === 'Title';
-      if (!hasTitleSlide) {
-        const songTitle = matchedSong?.title || item.name || 'Song';
-        const titleSlide = PresentationCore.splitSongSection(
-          'Title',
-          `${songTitle}`,
-          'title-slide',
-          effectiveSongBg,
-          songOpts
-        )[0];
-        generated = [titleSlide, ...generated];
+      // Add a title slide if explicitly configured in song options or item data
+      if (songOpts?.includeTitleSlide || item.data?.includeTitleSlide) {
+        const hasTitleSlide = generated.length > 0 && generated[0].title === 'Title';
+        if (!hasTitleSlide) {
+          const songTitle = matchedSong?.title || item.name || 'Song';
+          const titleSlide = PresentationCore.splitSongSection(
+            'Title',
+            `${songTitle}`,
+            'title-slide',
+            effectiveSongBg,
+            songOpts
+          )[0];
+          if (titleSlide) {
+            generated = [titleSlide, ...generated];
+          }
+        }
       }
     } else if (item.type === 'bible') {
       const verses: ScriptureVerse[] = (item.data && Array.isArray(item.data.verses)) ? item.data.verses : [];

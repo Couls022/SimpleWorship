@@ -4,6 +4,7 @@ import { X, Monitor, MonitorUp, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight
 import { useStore, safeStorage } from '../store/useStore';
 import { useScreens } from '../hooks/useScreens';
 import { DisplayManager } from '../core/DisplayManager';
+import { isSamePhysicalDisplay } from '../core/DisplayRouter';
 import { OutputGroup } from '../types';
 
 interface RouteConfigModalProps {
@@ -57,12 +58,22 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
     const dispLabel = dispObj.label || dispObj.name || '';
     
     setSelectedDisplayIds(prev => {
-      // Check if this display is currently in the selection under either its ID or its label
-      const isCurrentlySelected = prev.some(id => id === dispId || (dispLabel && id === dispLabel));
+      // Check if this display is currently in the selection under its ID, label, or canonical physical matching
+      const isCurrentlySelected = prev.some(id => 
+        id === dispId || 
+        (dispLabel && id === dispLabel) ||
+        isSamePhysicalDisplay(id, dispId, availableDisplays) ||
+        (dispLabel && isSamePhysicalDisplay(id, dispLabel, availableDisplays))
+      );
 
       if (isCurrentlySelected) {
-        // UNCHECK: Remove all references to this display (both ID and label)
-        return prev.filter(id => id !== dispId && id !== dispLabel);
+        // UNCHECK: Remove all references to this display
+        return prev.filter(id => 
+          id !== dispId && 
+          id !== dispLabel &&
+          !isSamePhysicalDisplay(id, dispId, availableDisplays) &&
+          (!dispLabel || !isSamePhysicalDisplay(id, dispLabel, availableDisplays))
+        );
       } else {
         // CHECK: Add the canonical display ID to the selection
         return [...prev, dispId];
@@ -235,15 +246,24 @@ export default function RouteConfigModal({ groupId, onClose }: RouteConfigModalP
                 const h = disp.height || disp.bounds?.height;
                 const resText = w && h ? `${w}×${h}` : '';
                 
-                // For backwards compatibility, check if the label is selected (old behavior) OR the ID is selected (new behavior)
-                const isSelected = selectedDisplayIds.includes(dispId) || selectedDisplayIds.includes(label);
+                // Robust physical monitor selection check
+                const isSelected = selectedDisplayIds.some(selId => 
+                  selId === dispId || 
+                  selId === label || 
+                  isSamePhysicalDisplay(selId, dispId, availableDisplays) ||
+                  (label && isSamePhysicalDisplay(selId, label, availableDisplays))
+                );
                 
                 const isOperatorScreen = !!disp.isPrimary;
 
                 // Check other route panels targeting this monitor
-                const otherSharingGroups = outputGroups.filter(
-                  (g) => g.id !== groupId && (g.displayIds?.includes(dispId) || g.displayIds?.includes(label) || g.targetDisplayId === dispId || g.targetDisplayId === label)
-                );
+                const otherSharingGroups = outputGroups.filter((g) => {
+                  if (g.id === groupId) return false;
+                  const gTargets = (g.displayIds && g.displayIds.length > 0)
+                    ? g.displayIds
+                    : (g.targetDisplayId ? [g.targetDisplayId] : []);
+                  return gTargets.some(tId => isSamePhysicalDisplay(tId, dispId, availableDisplays));
+                });
 
                 return (
                   <div

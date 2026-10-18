@@ -73,6 +73,13 @@ export async function attemptStageReconnect(isManual = false): Promise<boolean> 
         }));
       }
     }
+    const cachedOG = localStorage.getItem('simpleworship_output_groups_v1');
+    if (cachedOG) {
+      const parsedOG = JSON.parse(cachedOG);
+      if (Array.isArray(parsedOG) && parsedOG.length > 0) {
+        useStore.setState({ outputGroups: parsedOG });
+      }
+    }
   } catch (e) {}
 
   // 4. Query Express backend sync REST endpoint as fallback
@@ -445,6 +452,11 @@ export function initSync(isProjector: boolean = false) {
           ...(data.themesList ? { themesList: data.themesList } : {}),
           ...(data.systemOptions ? { systemOptions: data.systemOptions } : {})
         });
+        if (data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0) {
+          try {
+            localStorage.setItem('simpleworship_output_groups_v1', JSON.stringify(data.outputGroups));
+          } catch (e) {}
+        }
       } else if (payload.type === 'GROUP_STATES_UPDATE' || payload.type === 'PREVIEW_UPDATE') {
         const currentGroupStates = useStore.getState().groupStates || {};
         if (data.groupStates && typeof data.groupStates === 'object' && Object.keys(data.groupStates).length > 0) {
@@ -457,6 +469,11 @@ export function initSync(isProjector: boolean = false) {
             ...(data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0 ? { outputGroups: data.outputGroups } : {}),
             ...(data.routerPanels && Array.isArray(data.routerPanels) && data.routerPanels.length > 0 ? { routerPanels: data.routerPanels } : {}),
           });
+          if (data.outputGroups && Array.isArray(data.outputGroups) && data.outputGroups.length > 0) {
+            try {
+              localStorage.setItem('simpleworship_output_groups_v1', JSON.stringify(data.outputGroups));
+            } catch (e) {}
+          }
         } else if (data.groupId && (data.isLiveEnabled !== undefined || data.activeItemId !== undefined)) {
           const currentGroupStates = useStore.getState().groupStates || {};
           let nextStack = useStore.getState().routeActivationStack || [];

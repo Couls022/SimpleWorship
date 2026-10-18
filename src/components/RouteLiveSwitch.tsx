@@ -1,6 +1,7 @@
 import React from 'react';
 import { Radio, Power, Sparkles, Layers } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { isSamePhysicalDisplay } from '../core/DisplayRouter';
 
 interface RouteLiveSwitchProps {
   groupId: string;
@@ -30,7 +31,12 @@ export default function RouteLiveSwitch({ groupId, className = '', compact = fal
 
   const sharingGroups = outputGroups.filter(g => 
     g.id !== groupId && 
-    selectedDisplayIds.some(dId => (g.displayIds?.includes(dId) || g.targetDisplayId === dId))
+    selectedDisplayIds.some(dId => {
+      const otherTargets = (g.displayIds && g.displayIds.length > 0)
+        ? g.displayIds
+        : (g.targetDisplayId ? [g.targetDisplayId] : []);
+      return otherTargets.some(otherId => isSamePhysicalDisplay(dId, otherId));
+    })
   );
   const hasSharingRoutes = sharingGroups.length > 0;
   const stackRank = routeActivationStack.indexOf(groupId);
@@ -57,7 +63,7 @@ export default function RouteLiveSwitch({ groupId, className = '', compact = fal
       onClick={handleToggle}
       className={`relative inline-flex items-center gap-1.5 rounded transition-all cursor-pointer font-bold select-none border shadow-xs ${
         isLive
-          ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.5)] ring-1 ring-red-400/40'
+          ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white border-transparent shadow-md'
           : 'bg-[#1e222e] hover:bg-[#282d3d] text-gray-300 hover:text-white border-[#32384a]'
       } ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'} ${className}`}
       title={

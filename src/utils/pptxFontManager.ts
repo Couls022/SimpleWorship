@@ -14,6 +14,10 @@
 import JSZip from 'jszip';
 import { inMemoryInstalledFonts, fetchAndInstallGoogleFont, initFontStorage } from './fontStorage';
 import { FontValidationService } from '../services/fontValidationService';
+import { LocalSystemFontScannerService } from '../services/localSystemFontScannerService';
+import { SYSTEM_UNIVERSAL_FONTS } from './universalFontList';
+
+export { SYSTEM_UNIVERSAL_FONTS };
 
 export type FontArchetype = 
   | 'condensed' 
@@ -34,45 +38,6 @@ export interface NormalizedFontInfo {
   fontStack: string;
   isGoogleFont: boolean;
 }
-
-// Built-in operating system fonts that are universally available on Windows/Mac and don't need downloading
-export const SYSTEM_UNIVERSAL_FONTS = new Set([
-  'arial',
-  'arial black',
-  'calibri',
-  'cambria',
-  'candara',
-  'comic sans ms',
-  'consolas',
-  'constantia',
-  'corbel',
-  'courier new',
-  'franklin gothic medium',
-  'gabriola',
-  'georgia',
-  'impact',
-  'lucida console',
-  'lucida sans',
-  'lucida sans unicode',
-  'microsoft sans serif',
-  'palatino linotype',
-  'segoe ui',
-  'segoe script',
-  'segoe print',
-  'symbol',
-  'tahoma',
-  'times new roman',
-  'trebuchet ms',
-  'verdana',
-  'wingdings',
-  'aptos',
-  'aptos display',
-  'sans-serif',
-  'serif',
-  'monospace',
-  'cursive',
-  'fantasy',
-]);
 
 // Curated dictionary of popular Canva, Google Slides, and presentation fonts mapped to archetypes and Google Fonts availability
 export const CANVA_FONT_ARCHETYPES: Record<string, { base: string; archetype: FontArchetype; isGoogle: boolean; defaultWeight?: string }> = {
@@ -1751,7 +1716,7 @@ export function probePhysicalLocalFont(testFamily: string): boolean {
   const lower = cleanFamily.toLowerCase();
 
   // 1. Check system universal list (pre-installed by default on Windows/Mac)
-  if (SYSTEM_UNIVERSAL_FONTS.has(lower)) {
+  if (SYSTEM_UNIVERSAL_FONTS.has(lower) || SYSTEM_UNIVERSAL_FONTS.has(testFamily.toLowerCase())) {
     return true;
   }
 
@@ -1761,9 +1726,23 @@ export function probePhysicalLocalFont(testFamily: string): boolean {
   }
 
   // 3. Check in-memory registered font store
-  if (inMemoryInstalledFonts.has(lower)) {
+  if (inMemoryInstalledFonts.has(lower) || inMemoryInstalledFonts.has(testFamily.toLowerCase())) {
     probedPhysicalCache.set(lower, true);
     return true;
+  }
+
+  // 4. Native browser document.fonts check API
+  if (typeof document !== 'undefined' && document.fonts && typeof document.fonts.check === 'function') {
+    try {
+      if (
+        document.fonts.check(`16px "${cleanFamily}"`) ||
+        document.fonts.check(`700 16px "${cleanFamily}"`) ||
+        document.fonts.check(`16px "${testFamily}"`)
+      ) {
+        probedPhysicalCache.set(lower, true);
+        return true;
+      }
+    } catch {}
   }
 
   // 4. High-precision canvas baseline probe against monospace, sans-serif, and serif
@@ -1855,6 +1834,16 @@ export function isFontInstalledLocally(fontFamily: string): boolean {
 
   // Universal check on both raw name and normalized family
   if (SYSTEM_UNIVERSAL_FONTS.has(lowerFamily) || SYSTEM_UNIVERSAL_FONTS.has(rawLower)) {
+    return true;
+  }
+
+  // Check if registered in local system font IndexedDB registry
+  if (
+    LocalSystemFontScannerService.isLocalFontAvailable(testFamily) || 
+    LocalSystemFontScannerService.isLocalFontAvailable(rawClean) ||
+    LocalSystemFontScannerService.isLocalFontAvailable(lowerFamily)
+  ) {
+    addDebugLog('probe-local', testFamily, `Font "${testFamily}" detected from local IndexedDB system registry`);
     return true;
   }
 
@@ -2068,7 +2057,12 @@ export async function ensurePptxFontsLoaded(fonts: string[]): Promise<{ loaded: 
     const info = normalizeFontName(rawFont);
     if (!info.baseFamily) return;
 
-    if (SYSTEM_UNIVERSAL_FONTS.has(info.baseFamily.toLowerCase())) {
+    if (
+      SYSTEM_UNIVERSAL_FONTS.has(info.baseFamily.toLowerCase()) || 
+      SYSTEM_UNIVERSAL_FONTS.has(rawFont.toLowerCase()) ||
+      isFontInstalledLocally(info.baseFamily) ||
+      isFontInstalledLocally(rawFont)
+    ) {
       loaded.push(info.baseFamily);
       return;
     }

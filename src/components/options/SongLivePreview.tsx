@@ -509,6 +509,12 @@ export default function SongLivePreview({
               const rawLyrics = currentSlide.lines.join('\n');
               const baseFontSize = ThemeEngine.normalizeFontSize(songThemeStyles.fontSize || songOptions?.songFont?.maxSize);
               const shouldAutoAdjust = songOptions?.autoAdjust ?? true;
+              const showTitle = songOptions?.showSongTitle ?? true;
+              const titleLoc = songOptions?.songTitleLocation || 'Above Verses';
+              const isTitleVisible = showTitle && (titleLoc === 'Above Verses' || (titleLoc === 'First Slide Only' && validSlideIndex === 0));
+              const titleText = (songOptions?.songTitleCasing === 'uppercase') ? selectedSong.title.toUpperCase() : selectedSong.title;
+              const titleFont = songOptions?.songTitleFont;
+
               const hasHeader = showLabel && labelLoc === 'Header' && Boolean(formattedLabel);
 
               const autoFitSize = shouldAutoAdjust 
@@ -518,7 +524,7 @@ export default function SongLivePreview({
                     fontFamily: songThemeStyles.fontFamily,
                     fontWeight: songThemeStyles.fontWeight,
                     fontStyle: songThemeStyles.fontStyle,
-                    hasHeader,
+                    hasHeader: hasHeader || isTitleVisible,
                     hasFooter: isCopyrightVisible,
                     scale: 1,
                     minFontSize: songOptions?.minFontSize || 24,
@@ -544,17 +550,37 @@ export default function SongLivePreview({
                     className={cardStyle.className}
                     style={cardStyle.style}
                   >
-                    {hasHeader && (
-                      <h2
-                        className="mb-4 text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full text-center"
-                        style={{
-                          ...ThemeEngine.getTextStyle(labelThemeStyles, 1),
-                          fontSize: labelThemeStyles.fontSize ? `${labelThemeStyles.fontSize}px` : '36px',
-                          color: labelThemeStyles.fontColor || '#67E8F9',
-                        }}
-                      >
-                        {formattedLabel}
-                      </h2>
+                    {(isTitleVisible || hasHeader) && (
+                      <div className="mb-4 flex flex-col items-center justify-center text-center max-w-full z-20">
+                        {isTitleVisible && (
+                          <h1
+                            className="font-bold tracking-wider drop-shadow-[0_2px_14px_rgba(0,0,0,0.95)] max-w-full leading-tight"
+                            style={{
+                              fontSize: titleFont?.maxSize ? `${titleFont.maxSize}px` : '46px',
+                              color: titleFont?.color || '#FDE047',
+                              fontFamily: titleFont?.family || songThemeStyles.fontFamily,
+                              fontWeight: titleFont?.bold ? 700 : 500,
+                              textAlign: (titleFont?.alignHorizontal || 'center') as any,
+                            }}
+                          >
+                            {titleText}
+                          </h1>
+                        )}
+                        {hasHeader && (
+                          <h2
+                            className={`text-cyan-300 font-bold tracking-wider opacity-90 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)] max-w-full text-center ${
+                              isTitleVisible ? 'mt-1 text-sm tracking-widest uppercase bg-black/40 px-3 py-0.5 rounded-full border border-white/10' : ''
+                            }`}
+                            style={{
+                              ...ThemeEngine.getTextStyle(labelThemeStyles, 1),
+                              fontSize: isTitleVisible ? undefined : (labelThemeStyles.fontSize ? `${labelThemeStyles.fontSize}px` : '36px'),
+                              color: labelThemeStyles.fontColor || '#67E8F9',
+                            }}
+                          >
+                            {formattedLabel}
+                          </h2>
+                        )}
+                      </div>
                     )}
                     <div
                       className="font-bold leading-snug max-w-full drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] whitespace-pre-line break-words [overflow-wrap:break-word] [word-break:normal]"

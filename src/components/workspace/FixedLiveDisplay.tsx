@@ -192,6 +192,54 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
             {isBlack ? '• BLACKOUT' : isClear ? '• CLEARED' : isLogo ? '• LOGO' : isLive ? '• MIRRORING CANVAS' : '• STANDBY'}
           </span>
         </div>
+
+        {/* Right: Quick 1-Click Aspect Ratio Toggle (16:9 ↔ 4:3 12ft×9ft LED) */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              const isCurrently43 = Math.abs(resInfo.aspectRatio - 4/3) < 0.05;
+              const nextW = isCurrently43 ? 1920 : 1440;
+              const nextH = 1080;
+              const nextRatio = isCurrently43 ? '16:9' : '4:3';
+
+              useStore.getState().updateSystemOptions((prev) => ({
+                ...prev,
+                mainOutput: {
+                  ...prev.mainOutput,
+                  general: {
+                    ...prev.mainOutput.general,
+                    position: { ...prev.mainOutput.general.position, width: nextW, height: nextH },
+                    scaleMode: 'fill',
+                    ledWallSettings: {
+                      enabled: !isCurrently43,
+                      width: !isCurrently43 ? 12 : 16,
+                      height: 9,
+                      unit: 'ft',
+                      aspectRatio: nextRatio
+                    }
+                  }
+                }
+              }));
+
+              if (activeGroup) {
+                useStore.getState().updateOutputGroup(activeGroup.id, {
+                  aspectRatio: nextRatio,
+                  customResolution: { width: nextW, height: nextH },
+                  scaleMode: 'fill'
+                });
+              }
+
+              window.dispatchEvent(new CustomEvent('simpleworship:notify', {
+                detail: `✓ Aspect ratio switched to ${nextRatio} (${nextW}×${nextH}) for ${activeGroup?.name || 'Output'}! Live Display & Projectors updated (Zero Black Bars).`
+              }));
+            }}
+            className="text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/50 transition-all cursor-pointer shadow-xs active:scale-95"
+            title="1-Click Toggle between 16:9 and 4:3 (12ft × 9ft LED Wall)"
+          >
+            {Math.abs(resInfo.aspectRatio - 4/3) < 0.05 ? '⇄ Switch to 16:9' : '⇄ Set 4:3 (12×9 LED)'}
+          </button>
+        </div>
       </div>
 
       {/* Main Screen Canvas Frame */}
@@ -297,11 +345,13 @@ export default function FixedLiveDisplay({ forcedGroupId }: FixedLiveDisplayProp
           )}
 
           {/* Mute Overlays for clear operator feedback */}
-          {(!stagedControlState?.activeItemId && !isLogo) && (
-            <div className="absolute inset-0 bg-[#0a0b0e] flex flex-col items-center justify-center pointer-events-none z-30">
+          {(!stagedControlState?.activeItemId && !stagedControlState?.directLiveItem && !isLogo) && (
+            <div className="absolute inset-0 bg-[#0a0b0e] flex flex-col items-center justify-center pointer-events-none z-30 select-none">
               <Tv size={36} className="mb-2 text-gray-700" />
               <span className="text-sm font-black tracking-widest uppercase text-gray-500">STANDBY DISPLAY</span>
-              <span className="text-[10px] text-gray-600 mt-1">Ready for Content</span>
+              <span className="text-[10px] text-gray-600 mt-1">
+                {publicControlState?.isLiveEnabled ? 'Live Output Standby • Ready for Content' : 'Ready for Content'}
+              </span>
             </div>
           )}
 

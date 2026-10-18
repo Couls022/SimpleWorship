@@ -27,7 +27,8 @@ import {
   Clock,
   Zap,
   Pencil,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
 import ResizeHandle from './ResizeHandle';
@@ -394,6 +395,13 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const handlePrevSlide = () => {
     if (slides.length === 0) return;
     useStore.getState().bringRouteToTop(groupId);
+    if (isPresentation) {
+      useStore.getState().setStagedGroupState(groupId, {
+        pptxAction: 'prev',
+        pptxActionTimestamp: Date.now()
+      });
+      return;
+    }
     const current = activeControlState?.activeSlideIndex || 0;
     const prev = Math.max(0, current - 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: prev, pptxAction: null });
@@ -402,6 +410,13 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
   const handleNextSlide = () => {
     if (slides.length === 0) return;
     useStore.getState().bringRouteToTop(groupId);
+    if (isPresentation) {
+      useStore.getState().setStagedGroupState(groupId, {
+        pptxAction: 'next',
+        pptxActionTimestamp: Date.now()
+      });
+      return;
+    }
     const current = activeControlState?.activeSlideIndex || 0;
     const next = Math.min(slides.length - 1, current + 1);
     useStore.getState().setStagedGroupState(groupId, { activeSlideIndex: next, pptxAction: null });
@@ -657,6 +672,21 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 <div className="text-[10px] text-gray-400 flex items-center gap-1.5 flex-wrap">
                   <span className="font-mono text-amber-400 font-bold">Slide {currentSlideIndex + 1}</span> of {slides.length}
                   
+                  {/* Animation Step Indicator for Presenter View */}
+                  {Boolean((currentSlide?.animations && currentSlide.animations.length > 0) || (currentSlide?.nativeAnimations && currentSlide.nativeAnimations.length > 0)) && (
+                    <span className="px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-mono text-[9px] flex items-center gap-1">
+                      <Sparkles size={9} className="text-indigo-400" />
+                      <span>Build Step {(activeControlState?.pptxAnimationGroupIndex || 0) + 1}</span>
+                    </span>
+                  )}
+
+                  {/* Next Slide Preview Badge */}
+                  {currentSlideIndex < slides.length - 1 && (
+                    <span className="px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 font-mono text-[9px] truncate max-w-[150px]" title={`Next: Slide ${currentSlideIndex + 2} - ${slides[currentSlideIndex + 1]?.title || 'Next Slide'}`}>
+                      Next: Slide {currentSlideIndex + 2}
+                    </span>
+                  )}
+
                   {/* Synced Slide Transition Info */}
                   {currentSlide?.transition && currentSlide.transition.type !== 'none' && (
                     <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono text-[9px] flex items-center gap-1">
@@ -689,7 +719,7 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 onClick={handlePrevSlide}
                 disabled={currentSlideIndex <= 0}
                 className="px-2.5 py-1 bg-[#222530] hover:bg-[#2c3040] disabled:opacity-30 disabled:cursor-not-allowed rounded text-xs font-medium text-gray-200 flex items-center gap-1 border border-[#303546] transition-colors"
-                title="Previous Slide"
+                title="Previous Slide / Step (Left Arrow / Page Up)"
               >
                 <ChevronLeft size={13} />
                 <span>Prev</span>
@@ -697,9 +727,9 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
 
               <button
                 onClick={handleNextSlide}
-                disabled={currentSlideIndex >= slides.length - 1}
+                disabled={currentSlideIndex >= slides.length - 1 && (!currentSlide?.animations || currentSlide.animations.length === 0)}
                 className="px-2.5 py-1 bg-amber-600/30 hover:bg-amber-600/50 disabled:opacity-30 disabled:cursor-not-allowed rounded text-xs font-medium text-amber-300 flex items-center gap-1 border border-amber-500/40 transition-colors"
-                title="Next Slide"
+                title="Next Step / Slide (Space / Right Arrow / Enter / Page Down)"
               >
                 <span>Next</span>
                 <ChevronRight size={13} />
@@ -821,6 +851,17 @@ export default function LivePanel({ groupId, routerId, showPreviewDisplay = true
                 {/* The Live Output Monitor Screen Box */}
                 <div className="flex-1 w-full min-h-0 bg-[#08090b] rounded-lg border border-[#222530] overflow-hidden relative flex items-center justify-center shadow-inner">
                   <MonitorPreviewCanvas groupId={groupId} showResolutionTag={false} />
+                  
+                  {/* Standby Display Overlay when router panel has no active content */}
+                  {(!activeControlState?.activeItemId && !activeControlState?.directLiveItem && !activeControlState?.showLogo) && (
+                    <div className="absolute inset-0 bg-[#0a0b0e] flex flex-col items-center justify-center pointer-events-none z-30 select-none">
+                      <Tv size={32} className="mb-2 text-gray-700" />
+                      <span className="text-xs font-black tracking-widest uppercase text-gray-500">STANDBY DISPLAY</span>
+                      <span className="text-[10px] text-gray-600 mt-1">
+                        {activeControlState?.isLiveEnabled ? 'Live Output Standby • Ready for Content' : 'Ready for Content'}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Speaker Notes & Metadata Section */}

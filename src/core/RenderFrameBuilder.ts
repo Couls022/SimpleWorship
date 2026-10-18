@@ -8,14 +8,32 @@ export function resolveGroupResolution(
   systemOptions: SystemOptions | undefined,
   availableDisplays?: any[],
   overrideRes?: { width: number; height: number }
-): { width: number; height: number; aspectRatio: number; aspectLabel: string; margins: { left: number; top: number; right: number; bottom: number } } {
+): { 
+  width: number; 
+  height: number; 
+  aspectRatio: number; 
+  aspectLabel: string; 
+  margins: { left: number; top: number; right: number; bottom: number };
+  scaleMode: 'fit' | 'fill' | 'crop';
+} {
   const defaultMargins = { left: 0, top: 0, right: 0, bottom: 0 };
+  const effectiveScaleMode: 'fit' | 'fill' | 'crop' = 
+    group?.scaleMode || systemOptions?.mainOutput?.general?.scaleMode || 'fill';
   
+  // Helper to format ratio label
+  const formatRatioLabel = (w: number, h: number): { ratio: number; label: string } => {
+    const r = w / h;
+    if (Math.abs(r - 4 / 3) < 0.04) return { ratio: 4 / 3, label: '4:3 (12ft×9ft LED Wall / Standard)' };
+    if (Math.abs(r - 3 / 4) < 0.04) return { ratio: 3 / 4, label: '3:4 (9ft×12ft Vertical LED Wall)' };
+    if (Math.abs(r - 16 / 9) < 0.05) return { ratio: 16 / 9, label: '16:9 Widescreen' };
+    if (Math.abs(r - 16 / 10) < 0.04) return { ratio: 1.6, label: '16:10 WUXGA' };
+    if (Math.abs(r - 1) < 0.04) return { ratio: 1, label: '1:1 Square LED Cube' };
+    if (Math.abs(r - 21 / 9) < 0.05) return { ratio: 21 / 9, label: '21:9 Ultrawide' };
+    return { ratio: r, label: `${w}×${h}` };
+  };
+
   if (overrideRes && overrideRes.width > 0 && overrideRes.height > 0) {
-    const ratio = overrideRes.width / overrideRes.height;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${overrideRes.width}×${overrideRes.height}`;
-    
-    // Determine base margins for the override
+    const { ratio, label } = formatRatioLabel(overrideRes.width, overrideRes.height);
     let baseMargins = { left: 0, top: 0, right: 0, bottom: 0 };
     if (systemOptions) {
       if (group?.id === 'group-alternate' || group?.role === 'lobby') {
@@ -26,18 +44,45 @@ export function resolveGroupResolution(
         if (systemOptions.mainOutput?.general?.margins) baseMargins = { ...systemOptions.mainOutput.general.margins };
       }
     }
-    return { width: overrideRes.width, height: overrideRes.height, aspectRatio: ratio, aspectLabel: label, margins: baseMargins };
+    return { width: overrideRes.width, height: overrideRes.height, aspectRatio: ratio, aspectLabel: label, margins: baseMargins, scaleMode: effectiveScaleMode };
   }
 
+  // 1. Group custom resolution
   if (group?.customResolution && group.customResolution.width > 0 && group.customResolution.height > 0) {
     const w = group.customResolution.width;
     const h = group.customResolution.height;
-    const ratio = w / h;
-    const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${w}×${h}`;
-    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins };
+    const { ratio, label } = formatRatioLabel(w, h);
+    return { width: w, height: h, aspectRatio: ratio, aspectLabel: label, margins: defaultMargins, scaleMode: effectiveScaleMode };
   }
 
-  const defaultRes = { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins };
+  // 2. Group explicit aspect ratio string (e.g. "4:3", "1440x1080", "12ftx9ft", "16:9")
+  if (group?.aspectRatio) {
+    const cleanAspect = group.aspectRatio.trim().toLowerCase();
+    if (cleanAspect.includes('x')) {
+      const parts = cleanAspect.split('x').map(n => parseInt(n.trim(), 10));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+        const { ratio, label } = formatRatioLabel(parts[0], parts[1]);
+        return { width: parts[0], height: parts[1], aspectRatio: ratio, aspectLabel: label, margins: defaultMargins, scaleMode: effectiveScaleMode };
+      }
+    }
+    if (cleanAspect === '4:3' || cleanAspect.includes('12:9') || cleanAspect.includes('12x9')) {
+      return { width: 1440, height: 1080, aspectRatio: 4 / 3, aspectLabel: '4:3 (12ft×9ft LED Wall)', margins: defaultMargins, scaleMode: effectiveScaleMode };
+    }
+    if (cleanAspect === '3:4' || cleanAspect.includes('9:12') || cleanAspect.includes('9x12')) {
+      return { width: 1080, height: 1440, aspectRatio: 3 / 4, aspectLabel: '3:4 (9ft×12ft Vertical LED Wall)', margins: defaultMargins, scaleMode: effectiveScaleMode };
+    }
+    if (cleanAspect === '16:10') {
+      return { width: 1920, height: 1200, aspectRatio: 1.6, aspectLabel: '16:10', margins: defaultMargins, scaleMode: effectiveScaleMode };
+    }
+    if (cleanAspect === '1:1') {
+      return { width: 1080, height: 1080, aspectRatio: 1.0, aspectLabel: '1:1 Square', margins: defaultMargins, scaleMode: effectiveScaleMode };
+    }
+    if (cleanAspect === '16:9') {
+      return { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9 Widescreen', margins: defaultMargins, scaleMode: effectiveScaleMode };
+    }
+  }
+
+  const defaultRes = { width: 1920, height: 1080, aspectRatio: 16 / 9, aspectLabel: '16:9', margins: defaultMargins, scaleMode: effectiveScaleMode };
   if (!systemOptions) return defaultRes;
 
   let physicalWidth = systemOptions?.mainOutput?.general?.position?.width || 1920;
@@ -67,18 +112,19 @@ export function resolveGroupResolution(
     }
   }
 
-  if (availableDisplays && availableDisplays.length > 0 && group?.targetDisplayId && group.targetDisplayId !== 'window') {
+  // Only if no custom resolution was explicitly chosen, fallback to hardware screen bounds
+  const isDefault1080p = physicalWidth === 1920 && physicalHeight === 1080;
+  if (isDefault1080p && availableDisplays && availableDisplays.length > 0 && group?.targetDisplayId && group.targetDisplayId !== 'window') {
     const d = availableDisplays.find(x => x.id?.toString() === group.targetDisplayId || x.label === group.targetDisplayId || x.name === group.targetDisplayId);
-    if (d?.bounds) {
+    if (d?.bounds && d.bounds.width > 0 && d.bounds.height > 0) {
       physicalWidth = d.bounds.width;
       physicalHeight = d.bounds.height;
     }
   }
 
-  const ratio = physicalWidth / physicalHeight;
-  const label = Math.abs(ratio - 16 / 9) < 0.05 ? '16:9' : Math.abs(ratio - 4 / 3) < 0.05 ? '4:3' : `${physicalWidth}×${physicalHeight}`;
+  const { ratio, label } = formatRatioLabel(physicalWidth, physicalHeight);
 
-  return { width: physicalWidth, height: physicalHeight, aspectRatio: ratio, aspectLabel: label, margins: baseMargins };
+  return { width: physicalWidth, height: physicalHeight, aspectRatio: ratio, aspectLabel: label, margins: baseMargins, scaleMode: effectiveScaleMode };
 }
 
 const frameCache = new Map<string, { key: string; frame: RenderFrame }>();
@@ -221,6 +267,37 @@ export function buildRenderFrame(
     }
   }
 
+  let hasSongTitle = false;
+  let songTitleText = '';
+  let songTitleStyles: React.CSSProperties = {};
+
+  if (activeItem.type === 'song') {
+    const rawSongTitle = activeItem.data?.title || activeItem.name || '';
+    const isTitleEnabled = activeItem.data?.showTitleAboveVerses ?? (activeItem as any).showTitleAboveVerses ?? songOpts?.showSongTitle ?? true;
+    const placement = activeItem.data?.titlePlacement ?? (activeItem as any).titlePlacement ?? (songOpts?.songTitleLocation === 'First Slide Only' ? 'first_slide' : (songOpts?.songTitleLocation === 'None' ? 'none' : 'all_slides'));
+    
+    const shouldShowOnSlide = placement === 'none' ? false : (placement === 'first_slide' ? currentSlideIndex === 0 : true);
+
+    if (isTitleEnabled && shouldShowOnSlide && rawSongTitle.trim()) {
+      hasSongTitle = true;
+      const isUppercase = activeItem.data?.titleUppercase ?? (songOpts?.songTitleCasing === 'uppercase');
+      songTitleText = isUppercase ? rawSongTitle.toUpperCase() : rawSongTitle;
+      
+      const titleSize = activeItem.data?.titleFontSize ?? songOpts?.songTitleFont?.maxSize ?? 42;
+      const titleColor = activeItem.data?.titleFontColor ?? songOpts?.songTitleFont?.color ?? '#FDE047';
+      const titleFontFamily = activeItem.data?.titleFontFamily ?? songOpts?.songTitleFont?.family ?? resolvedStyles.fontFamily;
+      const titleBold = activeItem.data?.titleBold ?? songOpts?.songTitleFont?.bold ?? true;
+
+      songTitleStyles = {
+        fontSize: `${titleSize}px`,
+        color: titleColor,
+        fontFamily: titleFontFamily,
+        fontWeight: titleBold ? 700 : 500,
+        textAlign: (songOpts?.songTitleFont?.alignHorizontal || 'center') as any,
+      };
+    }
+  }
+
   const hasFooter = Boolean(
     (activeItem.type === 'song' && songOpts?.displayCopyrightInfo && currentSlideIndex === slides.length - 1) ||
     (activeItem.type === 'song' && showVerseChorusLabel && (songLabelLoc === 'Bottom Left' || songLabelLoc === 'Bottom Right')) ||
@@ -249,7 +326,7 @@ export function buildRenderFrame(
         fontFamily: resolvedStyles.fontFamily,
         fontWeight: resolvedStyles.fontWeight,
         fontStyle: resolvedStyles.fontStyle,
-        hasHeader,
+        hasHeader: hasHeader || hasSongTitle,
         hasFooter,
         scale: 1,
         minFontSize: activeItem.type === 'song' ? (songOpts?.minFontSize ?? 24) : (activeItem.type === 'bible' ? (scriptureOpts?.minFontSize ?? 24) : 24),
@@ -269,6 +346,7 @@ export function buildRenderFrame(
     targetHeight: res.height,
     aspectRatio: res.aspectRatio,
     aspectLabel: res.aspectLabel,
+    scaleMode: res.scaleMode,
     margins: effectiveMargins,
     activeItem,
     activeSlide: currentSlide,
@@ -277,6 +355,9 @@ export function buildRenderFrame(
     baseFontSize: baseSize,
     hasHeader,
     headerText,
+    hasSongTitle,
+    songTitleText,
+    songTitleStyles,
     headerStyles: (() => {
       const matched = matchSlideLabel(currentSlide?.title, systemOptions?.slideLabels);
       if (matched && matched.textColor) {

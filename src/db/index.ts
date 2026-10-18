@@ -1,7 +1,9 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Asset, Theme, Song, Schedule, OutputGroup, ScriptureVerse, SystemOptions } from '../types';
-import { defaultAssets, defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultScriptures } from './seedData';
+import { defaultAssets, defaultOutputGroups, defaultSchedule, defaultSongs, defaultThemes, defaultScriptures, BAPTIST_HYMNAL_SONGS } from './seedData';
+export { BAPTIST_HYMNAL_SONGS };
 import { runDatabaseSeeder } from '../utils/seedDatabase';
+import { isProtectedSystemAsset } from './assets';
 
 const objectUrlCache = new Map<string, string>();
 const assetUrlMap = new Map<string, string>();
@@ -115,6 +117,17 @@ export function getDB() {
         for (const sc of defaultScriptures) await tx.objectStore('scriptures').put(sc);
         await tx.objectStore('schedules').put(defaultSchedule);
         await tx.done;
+      } else {
+        // Clean up legacy emerald gold backup asset from IndexedDB if present
+        try {
+          const assetTx = db.transaction('assets', 'readwrite');
+          const assetStore = assetTx.objectStore('assets');
+          const legacyBackup = await assetStore.get('asset-bg-emerald-gold-backup');
+          if (legacyBackup) {
+            await assetStore.delete('asset-bg-emerald-gold-backup');
+          }
+          await assetTx.done;
+        } catch (_) {}
       }
 
       // Run full Bible and Baptist Hymnal data seeder asynchronously
@@ -230,7 +243,11 @@ export const dbApi = {
       
       cursor = await cursor.continue();
     }
-    return assets;
+
+    // Filter out any legacy backup asset
+    const cleanedAssets = assets.filter(a => a.id !== 'asset-bg-emerald-gold-backup');
+
+    return cleanedAssets;
   },
   async deleteAsset(id: string) {
     if (objectUrlCache.has(id)) {
